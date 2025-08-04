@@ -2,7 +2,7 @@
 
 # RankLens Project Instructions
 
-This is a SvelteKit project with the following technology stack:
+The goal of this website, is to allow customers to check how their product or service or company ranks in the different LLMs. Essentially, as a user I should be able to define up to 5 queries, like best restaurant in town, best traditional restaurant in town, recommend a restaurant for a date in town etc. For each, we will call the API of all the main LLMs 5 times, asking to return only a ranked list. We the compute the average rank for the customer's business, as well as the surces which recommended the business and those that ranked the businesses ranked higher than the one of the customer.
 
 ## Tech Stack
 - **Framework**: SvelteKit with TypeScript
@@ -16,6 +16,7 @@ This is a SvelteKit project with the following technology stack:
 - Use Svelte 5's runes syntax ($state, $derived, etc.)
 - Keep components small and focused
 - Use semantic HTML elements
+- Use svelte components for reusable UI elements
 
 ## Project Structure
 - `/src/lib/` - Reusable components and utilities

@@ -1,4 +1,4 @@
-import type { LLMProvider } from './types'
+import type { LLMProvider } from '../types'
 
 export interface LLMResponse {
   rankedBusinesses: string[]

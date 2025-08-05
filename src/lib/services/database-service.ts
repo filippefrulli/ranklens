@@ -1,4 +1,4 @@
-import { supabase } from './supabase'
+import { supabase } from '../supabase'
 import type { 
   Project, 
   Query, 
@@ -6,7 +6,7 @@ import type {
   RankingResult, 
   RankingAnalytics,
   DashboardData 
-} from './types'
+} from '../types'
 
 export class DatabaseService {
   // Project operations

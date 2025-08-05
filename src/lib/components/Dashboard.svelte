@@ -1,9 +1,9 @@
 <script lang="ts">
   import { onMount } from 'svelte'
-  import { DatabaseService } from './services/database-service'
-  import { LLMService } from './services/llm-service'
-  import { AuthService, user } from '../lib/auth'
-  import type { Project, Query, DashboardData } from '../lib/types'
+  import { DatabaseService } from '../services/database-service'
+  import { LLMService } from '../services/llm-service'
+  import { AuthService, user } from '../auth'
+  import type { Project, Query, DashboardData } from '../types'
 
   let projects = $state<Project[]>([])
   let selectedProject = $state<Project | null>(null)

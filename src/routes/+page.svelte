@@ -1,12 +1,16 @@
 <script lang="ts">
-  import Dashboard from './lib/Dashboard.svelte'
-  import { supabase } from './lib/supabase'
   import { onMount } from 'svelte'
+  import { goto } from '$app/navigation'
+  import { user } from '../lib/auth'
+  import { supabase } from '../lib/supabase'
+  import LoginForm from '../lib/LoginForm.svelte'
+  import Dashboard from '../lib/Dashboard.svelte'
 
   let connectionStatus = $state('Testing connection...')
   let showDemo = $state(true)
 
   onMount(async () => {
+    // Test Supabase connection
     try {
       const { data, error } = await supabase.from('_metadata').select('*').limit(1)
       if (error && error.message.includes('relation "_metadata" does not exist')) {
@@ -20,22 +24,32 @@
       connectionStatus = 'Please configure your Supabase environment variables'
     }
   })
+
+  // Reactive navigation based on auth state
+  $effect(() => {
+    if ($user && showDemo) {
+      // If user is authenticated and we're showing demo, redirect to dashboard
+      showDemo = false
+    }
+  })
 </script>
 
-{#if showDemo}
-  <!-- Landing Page -->
+{#if !$user && showDemo}
+  <!-- Landing Page for Unauthenticated Users -->
   <main class="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100">
     <!-- Header -->
     <header class="bg-white shadow-sm">
       <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div class="flex justify-between items-center h-16">
           <h1 class="text-2xl font-bold text-gray-900">RankLens</h1>
-          <button 
-            onclick={() => showDemo = false}
-            class="bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 px-4 rounded-lg transition-colors"
-          >
-            Launch App
-          </button>
+          <div class="space-x-2">
+            <button 
+              onclick={() => showDemo = false}
+              class="bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 px-4 rounded-lg transition-colors"
+            >
+              Sign In
+            </button>
+          </div>
         </div>
       </div>
     </header>
@@ -143,7 +157,12 @@
       </div>
     </div>
   </main>
+
+{:else if !$user}
+  <!-- Login Form for Unauthenticated Users -->
+  <LoginForm />
+
 {:else}
-  <!-- Dashboard Application -->
+  <!-- Dashboard Application for Authenticated Users -->
   <Dashboard />
 {/if}

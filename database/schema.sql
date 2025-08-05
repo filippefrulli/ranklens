@@ -51,7 +51,6 @@ INSERT INTO llm_providers (name, api_endpoint, is_active) VALUES
 ('OpenAI GPT-4', 'https://api.openai.com/v1/chat/completions', true),
 ('Anthropic Claude', 'https://api.anthropic.com/v1/messages', true),
 ('Google Gemini', 'https://generativelanguage.googleapis.com/v1/models', true),
-('Cohere Command', 'https://api.cohere.ai/v1/generate', true),
 ('Perplexity AI', 'https://api.perplexity.ai/chat/completions', true);
 
 -- Enable Row Level Security

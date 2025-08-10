@@ -3,21 +3,22 @@
   import { DatabaseService } from './services/database-service'
   import { LLMService } from './services/llm-service'
   import { AuthService, user } from '../lib/auth'
-  import type { Project, Query, DashboardData } from '../lib/types'
+  import type { Business, Query, DashboardData } from '../lib/types'
 
-  let projects = $state<Project[]>([])
-  let selectedProject = $state<Project | null>(null)
+  let business = $state<Business | null>(null)
   let dashboardData = $state<DashboardData | null>(null)
   let loading = $state(false)
   let error = $state<string | null>(null)
 
-  // New project form
-  let showCreateProject = $state(false)
-  let newProject = $state({
+  // New business registration form
+  let showCreateBusiness = $state(false)
+  let newBusiness = $state({
     name: '',
-    business_name: '',
-    industry: '',
-    location: ''
+    google_place_id: '',
+    city: '',
+    google_primary_type: '',
+    google_primary_type_display: '',
+    google_types: []
   })
 
   // New query form
@@ -27,78 +28,102 @@
 
   onMount(async () => {
     if ($user) {
-      await loadProjects()
+      await loadBusiness()
     }
   })
 
-  async function loadProjects() {
+  async function loadBusiness() {
     if (!$user) return
     
     try {
       loading = true
       error = null
-      projects = await DatabaseService.getProjects($user.id)
+      business = await DatabaseService.getBusiness($user.id)
     } catch (err) {
-      error = err instanceof Error ? err.message : 'Failed to load projects'
+      error = err instanceof Error ? err.message : 'Failed to load business'
     } finally {
       loading = false
     }
   }
 
-  async function createProject() {
+  async function createBusiness() {
     if (!$user) return
 
     try {
       loading = true
       error = null
       
-      const project = await DatabaseService.createProject({
-        ...newProject,
+      const createdBusiness = await DatabaseService.createBusiness({
+        ...newBusiness,
         user_id: $user.id
       })
       
-      projects = [project, ...projects]
-      showCreateProject = false
-      newProject = { name: '', business_name: '', industry: '', location: '' }
+      business = createdBusiness
+      showCreateBusiness = false
+      newBusiness = { 
+        name: '', 
+        google_place_id: '', 
+        city: '', 
+        google_primary_type: '', 
+        google_primary_type_display: '', 
+        google_types: [] 
+      }
       
-      // Auto-select the new project
-      await selectProject(project)
+      // Load dashboard data for the new business
+      await loadDashboardData()
     } catch (err) {
-      error = err instanceof Error ? err.message : 'Failed to create project'
+      error = err instanceof Error ? err.message : 'Failed to create business'
     } finally {
       loading = false
     }
   }
 
-  async function selectProject(project: Project) {
+  async function loadDashboardData() {
+    if (!$user) return
+    
     try {
       loading = true
       error = null
-      selectedProject = project
-      dashboardData = await DatabaseService.getDashboardData(project.id)
+      dashboardData = await DatabaseService.getDashboardData($user.id)
+      
+      // Set the business from dashboard data
+      if (dashboardData?.business) {
+        business = dashboardData.business
+      }
     } catch (err) {
-      error = err instanceof Error ? err.message : 'Failed to load project data'
+      error = err instanceof Error ? err.message : 'Failed to load business data'
     } finally {
       loading = false
     }
   }
 
   async function addQuery() {
-    if (!selectedProject || !newQuery.trim()) return
+    if (!$user || !newQuery.trim()) return
 
     try {
       loading = true
       error = null
       
+      // Get business ID from dashboard data or load business
+      let businessId = dashboardData?.business?.id
+      if (!businessId) {
+        const business = await DatabaseService.getBusiness($user.id)
+        if (!business) {
+          error = 'Please register your business first'
+          return
+        }
+        businessId = business.id
+      }
+      
       const existingQueries = dashboardData?.queries || []
       const query = await DatabaseService.createQuery({
-        project_id: selectedProject.id,
+        business_id: businessId,
         text: newQuery.trim(),
         order_index: existingQueries.length
       })
       
       // Refresh dashboard data
-      await selectProject(selectedProject)
+      await loadDashboardData()
       
       showAddQuery = false
       newQuery = ''
@@ -110,7 +135,7 @@
   }
 
   async function runAnalysis() {
-    if (!selectedProject || !dashboardData?.queries.length) return
+    if (!dashboardData?.business || !dashboardData?.queries.length) return
 
     try {
       runningAnalysis = true
@@ -122,7 +147,7 @@
         const results = await LLMService.runRankingAnalysis(
           providers,
           query.text,
-          selectedProject.business_name,
+          dashboardData.business.name,
           5
         )
 
@@ -136,7 +161,7 @@
           responses.forEach((response, index) => {
             if (response.success) {
               const targetRank = response.rankedBusinesses.findIndex(
-                business => business.toLowerCase().includes(selectedProject!.business_name.toLowerCase())
+                businessName => businessName.toLowerCase().includes(dashboardData!.business.name.toLowerCase())
               )
 
               rankingResults.push({
@@ -157,7 +182,7 @@
       }
 
       // Refresh dashboard data
-      await selectProject(selectedProject)
+      await loadDashboardData()
       
     } catch (err) {
       error = err instanceof Error ? err.message : 'Failed to run analysis'
@@ -178,9 +203,9 @@
       <div class="flex justify-between items-center h-16">
         <div class="flex items-center">
           <h1 class="text-2xl font-bold text-gray-900">RankLens</h1>
-          {#if selectedProject}
+          {#if business}
             <span class="ml-4 text-gray-500">→</span>
-            <span class="ml-2 text-lg text-gray-700">{selectedProject.name}</span>
+            <span class="ml-2 text-lg text-gray-700">{business.name}</span>
           {/if}
         </div>
         
@@ -207,38 +232,18 @@
         <p class="text-sm text-gray-500 mt-2">Configure your Supabase authentication to get started</p>
       </div>
     
-    {:else if !selectedProject}
-      <!-- Project selection -->
+    {:else if !business}
+      <!-- Business registration -->
       <div class="text-center py-12">
-        <h2 class="text-2xl font-bold text-gray-900 mb-8">Your Projects</h2>
+        <h2 class="text-2xl font-bold text-gray-900 mb-8">Register Your Business</h2>
         
-        {#if projects.length === 0}
-          <div class="mb-8">
-            <p class="text-gray-600 mb-4">No projects yet. Create your first project to get started!</p>
-          </div>
-        {:else}
-          <div class="grid md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
-            {#each projects as project}
-              <button 
-                type="button"
-                class="bg-white rounded-lg shadow-md p-6 cursor-pointer hover:shadow-lg transition-shadow text-left w-full"
-                onclick={() => selectProject(project)}
-              >
-                <h3 class="text-lg font-semibold text-gray-900 mb-2">{project.name}</h3>
-                <p class="text-sm text-gray-600 mb-1">Business: {project.business_name}</p>
-                {#if project.industry}
-                  <p class="text-sm text-gray-500">Industry: {project.industry}</p>
-                {/if}
-                {#if project.location}
-                  <p class="text-sm text-gray-500">Location: {project.location}</p>
-                {/if}
-              </button>
-            {/each}
-          </div>
-        {/if}
+        <div class="mb-8">
+          <p class="text-gray-600 mb-4">To get started, you need to register your business with Google Maps.</p>
+          <p class="text-sm text-gray-500">This ensures accurate data and prevents fake business registrations.</p>
+        </div>
 
         <button 
-          onclick={() => showCreateProject = true}
+          onclick={() => showCreateBusiness = true}
           class="bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 px-6 rounded-lg shadow-md transition-colors"
         >
           Create New Project
@@ -353,7 +358,7 @@
         <!-- Back to projects -->
         <div class="text-center">
           <button 
-            onclick={() => { selectedProject = null; dashboardData = null }}
+            onclick={() => { business = null; dashboardData = null }}
             class="text-blue-600 hover:text-blue-800 text-sm font-medium"
           >
             ← Back to Projects
@@ -363,28 +368,25 @@
     {/if}
   </div>
 
-  <!-- Create Project Modal -->
-  {#if showCreateProject}
+  <!-- Create Business Modal -->
+  {#if showCreateBusiness}
     <div class="fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center p-4 z-50">
       <div class="bg-white rounded-lg shadow-xl max-w-md w-full p-6">
-        <h3 class="text-lg font-semibold text-gray-900 mb-4">Create New Project</h3>
+        <h3 class="text-lg font-semibold text-gray-900 mb-4">Register Your Business</h3>
         
-        <form onsubmit={e => { e.preventDefault(); createProject(); }} class="space-y-4">
+        <div class="mb-4 p-4 bg-blue-50 rounded-md">
+          <p class="text-sm text-blue-800">
+            <strong>Coming Soon:</strong> Google Maps integration for business verification. 
+            For now, please enter your business details manually.
+          </p>
+        </div>
+        
+        <form onsubmit={e => { e.preventDefault(); createBusiness(); }} class="space-y-4">
           <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">Project Name</label>
+            <label for="business-name" class="block text-sm font-medium text-gray-700 mb-1">Business Name</label>
             <input 
-              bind:value={newProject.name}
-              type="text" 
-              required
-              class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-              placeholder="My Restaurant Analysis"
-            />
-          </div>
-          
-          <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">Business Name</label>
-            <input 
-              bind:value={newProject.business_name}
+              id="business-name"
+              bind:value={newBusiness.name}
               type="text" 
               required
               class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
@@ -393,29 +395,33 @@
           </div>
           
           <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">Industry (Optional)</label>
+            <label for="google-place-id" class="block text-sm font-medium text-gray-700 mb-1">Google Place ID</label>
             <input 
-              bind:value={newProject.industry}
-              type="text"
+              id="google-place-id"
+              bind:value={newBusiness.google_place_id}
+              type="text" 
+              required
               class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-              placeholder="Restaurant"
+              placeholder="ChIJN1t_tDeuEmsRUsoyG83frY4"
             />
+            <p class="text-xs text-gray-500 mt-1">Temporary field - will be auto-filled by Google Maps</p>
           </div>
           
           <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">Location (Optional)</label>
+            <label for="business-city" class="block text-sm font-medium text-gray-700 mb-1">City</label>
             <input 
-              bind:value={newProject.location}
+              id="business-city"
+              bind:value={newBusiness.city}
               type="text"
               class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-              placeholder="New York, NY"
+              placeholder="San Francisco"
             />
           </div>
           
           <div class="flex justify-end space-x-3 pt-4">
             <button 
               type="button"
-              onclick={() => showCreateProject = false}
+              onclick={() => showCreateBusiness = false}
               class="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-md transition-colors"
             >
               Cancel
@@ -425,7 +431,7 @@
               disabled={loading}
               class="px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 rounded-md transition-colors"
             >
-              {loading ? 'Creating...' : 'Create Project'}
+              {loading ? 'Registering...' : 'Register Business'}
             </button>
           </div>
         </form>
@@ -441,8 +447,9 @@
         
         <form onsubmit={e => { e.preventDefault(); addQuery(); }} class="space-y-4">
           <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">Query Text</label>
+            <label for="query-text" class="block text-sm font-medium text-gray-700 mb-1">Query Text</label>
             <textarea 
+              id="query-text"
               bind:value={newQuery}
               required
               rows="3"

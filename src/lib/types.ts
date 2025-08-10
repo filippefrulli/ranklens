@@ -1,5 +1,18 @@
 // Core data models for RankLens
 
+export interface Business {
+  id: string
+  user_id: string
+  name: string
+  city?: string
+  google_place_id: string
+  google_primary_type?: string
+  google_primary_type_display?: string
+  google_types?: string[]
+  created_at: string
+  updated_at: string
+}
+
 export interface Project {
   id: string
   name: string
@@ -13,7 +26,7 @@ export interface Project {
 
 export interface Query {
   id: string
-  project_id: string
+  business_id: string  // Updated to reference business instead of project
   text: string
   order_index: number
   created_at: string
@@ -57,7 +70,7 @@ export interface RankingAnalytics {
 }
 
 export interface DashboardData {
-  project: Project
+  business: Business
   queries: Query[]
   analytics: RankingAnalytics[]
   overall_stats: {

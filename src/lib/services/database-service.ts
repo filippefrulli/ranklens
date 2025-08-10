@@ -1,5 +1,6 @@
 import { supabase } from '../supabase'
 import type { 
+  Business,
   Project, 
   Query, 
   LLMProvider, 
@@ -9,7 +10,45 @@ import type {
 } from '../types'
 
 export class DatabaseService {
-  // Project operations
+  // Business operations
+  static async createBusiness(business: Omit<Business, 'id' | 'created_at' | 'updated_at'>): Promise<Business> {
+    const { data, error } = await supabase
+      .from('businesses')
+      .insert([business])
+      .select()
+      .single()
+
+    if (error) throw new Error(`Failed to create business: ${error.message}`)
+    return data
+  }
+
+  static async getBusiness(userId: string): Promise<Business | null> {
+    const { data, error } = await supabase
+      .from('businesses')
+      .select('*')
+      .eq('user_id', userId)
+      .single()
+
+    if (error) {
+      if (error.code === 'PGRST116') return null // No rows returned
+      throw new Error(`Failed to fetch business: ${error.message}`)
+    }
+    return data
+  }
+
+  static async updateBusiness(id: string, updates: Partial<Business>): Promise<Business> {
+    const { data, error } = await supabase
+      .from('businesses')
+      .update(updates)
+      .eq('id', id)
+      .select()
+      .single()
+
+    if (error) throw new Error(`Failed to update business: ${error.message}`)
+    return data
+  }
+
+  // Legacy project operations (keeping for backward compatibility if needed)
   static async createProject(project: Omit<Project, 'id' | 'created_at' | 'updated_at'>): Promise<Project> {
     const { data, error } = await supabase
       .from('projects')
@@ -84,6 +123,17 @@ export class DatabaseService {
       .from('queries')
       .select('*')
       .eq('project_id', projectId)
+      .order('order_index', { ascending: true })
+
+    if (error) throw new Error(`Failed to fetch queries: ${error.message}`)
+    return data || []
+  }
+
+  static async getQueriesForBusiness(businessId: string): Promise<Query[]> {
+    const { data, error } = await supabase
+      .from('queries')
+      .select('*')
+      .eq('business_id', businessId)
       .order('order_index', { ascending: true })
 
     if (error) throw new Error(`Failed to fetch queries: ${error.message}`)
@@ -168,6 +218,38 @@ export class DatabaseService {
     const project = await this.getProject(projectId)
     if (!project) throw new Error('Project not found')
 
+    return this.calculateRankingAnalytics(queries || [], project.business_name)
+  }
+
+  static async getRankingAnalyticsForBusiness(businessId: string): Promise<RankingAnalytics[]> {
+    // This is a complex query that aggregates ranking data
+    const { data: queries, error: queriesError } = await supabase
+      .from('queries')
+      .select(`
+        *,
+        ranking_results (
+          *,
+          llm_providers (name)
+        )
+      `)
+      .eq('business_id', businessId)
+
+    if (queriesError) throw new Error(`Failed to fetch analytics: ${queriesError.message}`)
+
+    // Get the business to know the business name
+    const { data: business, error: businessError } = await supabase
+      .from('businesses')
+      .select('name')
+      .eq('id', businessId)
+      .single()
+
+    if (businessError) throw new Error('Business not found')
+
+    return this.calculateRankingAnalytics(queries || [], business.name)
+  }
+
+  private static calculateRankingAnalytics(queries: any[], businessName: string): RankingAnalytics[] {
+
     const analytics: RankingAnalytics[] = []
 
     for (const query of queries || []) {
@@ -227,7 +309,7 @@ export class DatabaseService {
           const higherRankedBusinesses = rankedBusinesses.slice(0, targetRank - 1)
           
           for (const business of higherRankedBusinesses) {
-            if (business !== project.business_name) {
+            if (business !== businessName) {
               if (!competitorMap.has(business)) {
                 competitorMap.set(business, { ranks: [], mentions: 0 })
               }
@@ -261,12 +343,12 @@ export class DatabaseService {
     return analytics
   }
 
-  static async getDashboardData(projectId: string): Promise<DashboardData> {
-    const project = await this.getProject(projectId)
-    if (!project) throw new Error('Project not found')
+  static async getDashboardData(userId: string): Promise<DashboardData> {
+    const business = await this.getBusiness(userId)
+    if (!business) throw new Error('Business not found')
 
-    const queries = await this.getQueries(projectId)
-    const analytics = await this.getRankingAnalytics(projectId)
+    const queries = await this.getQueriesForBusiness(business.id)
+    const analytics = await this.getRankingAnalyticsForBusiness(business.id)
 
     // Calculate overall stats
     const totalQueries = queries.length
@@ -291,7 +373,7 @@ export class DatabaseService {
       : undefined
 
     return {
-      project,
+      business,
       queries,
       analytics,
       overall_stats: {

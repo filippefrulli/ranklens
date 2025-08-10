@@ -1,5 +1,5 @@
 import { writable } from 'svelte/store'
-import { supabase } from './supabase'
+import { supabase } from '../supabase'
 import type { User, Session } from '@supabase/supabase-js'
 
 // Auth state stores

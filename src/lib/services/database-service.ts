@@ -1,7 +1,6 @@
 import { supabase } from '../supabase'
 import type { 
   Business,
-  Project, 
   Query, 
   LLMProvider, 
   AnalysisRun,
@@ -49,64 +48,6 @@ export class DatabaseService {
 
     if (error) throw new Error(`Failed to update business: ${error.message}`)
     return data
-  }
-
-  // Legacy project operations (keeping for backward compatibility if needed)
-  static async createProject(project: Omit<Project, 'id' | 'created_at' | 'updated_at'>): Promise<Project> {
-    const { data, error } = await supabase
-      .from('projects')
-      .insert([project])
-      .select()
-      .single()
-
-    if (error) throw new Error(`Failed to create project: ${error.message}`)
-    return data
-  }
-
-  static async getProjects(userId: string): Promise<Project[]> {
-    const { data, error } = await supabase
-      .from('projects')
-      .select('*')
-      .eq('user_id', userId)
-      .order('created_at', { ascending: false })
-
-    if (error) throw new Error(`Failed to fetch projects: ${error.message}`)
-    return data || []
-  }
-
-  static async getProject(id: string): Promise<Project | null> {
-    const { data, error } = await supabase
-      .from('projects')
-      .select('*')
-      .eq('id', id)
-      .single()
-
-    if (error) {
-      if (error.code === 'PGRST116') return null
-      throw new Error(`Failed to fetch project: ${error.message}`)
-    }
-    return data
-  }
-
-  static async updateProject(id: string, updates: Partial<Project>): Promise<Project> {
-    const { data, error } = await supabase
-      .from('projects')
-      .update(updates)
-      .eq('id', id)
-      .select()
-      .single()
-
-    if (error) throw new Error(`Failed to update project: ${error.message}`)
-    return data
-  }
-
-  static async deleteProject(id: string): Promise<void> {
-    const { error } = await supabase
-      .from('projects')
-      .delete()
-      .eq('id', id)
-
-    if (error) throw new Error(`Failed to delete project: ${error.message}`)
   }
 
   // Query operations
@@ -297,28 +238,6 @@ export class DatabaseService {
   }
 
   // Analytics operations
-  static async getRankingAnalytics(projectId: string): Promise<RankingAnalytics[]> {
-    // This is a complex query that aggregates ranking data
-    const { data: queries, error: queriesError } = await supabase
-      .from('queries')
-      .select(`
-        *,
-        ranking_results (
-          *,
-          llm_providers (name)
-        )
-      `)
-      .eq('project_id', projectId)
-
-    if (queriesError) throw new Error(`Failed to fetch analytics: ${queriesError.message}`)
-
-    // Get the project to know the business name
-    const project = await this.getProject(projectId)
-    if (!project) throw new Error('Project not found')
-
-    return this.calculateRankingAnalytics(queries || [], project.business_name)
-  }
-
   static async getRankingAnalyticsForBusiness(businessId: string): Promise<RankingAnalytics[]> {
     // Get all queries for the business with their ranking attempts
     const { data: queries, error: queriesError } = await supabase

@@ -13,17 +13,6 @@ export interface Business {
   updated_at: string
 }
 
-export interface Project {
-  id: string
-  name: string
-  business_name: string
-  industry?: string
-  location?: string
-  user_id: string
-  created_at: string
-  updated_at: string
-}
-
 export interface Query {
   id: string
   business_id: string  // Updated to reference business instead of project

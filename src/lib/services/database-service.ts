@@ -4,6 +4,9 @@ import type {
   Project, 
   Query, 
   LLMProvider, 
+  AnalysisRun,
+  RankingAttempt,
+  RankingSource,
   RankingResult, 
   RankingAnalytics,
   DashboardData 
@@ -173,15 +176,110 @@ export class DatabaseService {
     return data || []
   }
 
-  // Ranking Results operations
-  static async saveRankingResults(results: Omit<RankingResult, 'id' | 'created_at'>[]): Promise<RankingResult[]> {
+  // Analysis Run operations
+  static async createAnalysisRun(businessId: string, totalQueries: number): Promise<AnalysisRun> {
     const { data, error } = await supabase
-      .from('ranking_results')
-      .insert(results)
+      .from('analysis_runs')
+      .insert([{
+        business_id: businessId,
+        run_date: new Date().toISOString().split('T')[0], // Today's date
+        status: 'pending',
+        total_queries: totalQueries,
+        completed_queries: 0,
+        total_llm_calls: totalQueries * 5, // 5 attempts per query per LLM
+        completed_llm_calls: 0
+      }])
+      .select()
+      .single()
+
+    if (error) throw new Error(`Failed to create analysis run: ${error.message}`)
+    return data
+  }
+
+  static async updateAnalysisRun(id: string, updates: Partial<AnalysisRun>): Promise<AnalysisRun> {
+    const { data, error } = await supabase
+      .from('analysis_runs')
+      .update(updates)
+      .eq('id', id)
+      .select()
+      .single()
+
+    if (error) throw new Error(`Failed to update analysis run: ${error.message}`)
+    return data
+  }
+
+  // Ranking Attempt operations
+  static async createRankingAttempt(attempt: Omit<RankingAttempt, 'id' | 'created_at'>): Promise<RankingAttempt> {
+    const { data, error } = await supabase
+      .from('ranking_attempts')
+      .insert([attempt])
+      .select()
+      .single()
+
+    if (error) throw new Error(`Failed to create ranking attempt: ${error.message}`)
+    return data
+  }
+
+  static async saveRankingAttempts(attempts: Omit<RankingAttempt, 'id' | 'created_at'>[]): Promise<RankingAttempt[]> {
+    const { data, error } = await supabase
+      .from('ranking_attempts')
+      .insert(attempts)
       .select()
 
-    if (error) throw new Error(`Failed to save ranking results: ${error.message}`)
+    if (error) throw new Error(`Failed to save ranking attempts: ${error.message}`)
     return data || []
+  }
+
+  // Legacy method for backward compatibility
+  static async saveRankingResults(results: Omit<RankingResult, 'id' | 'created_at'>[]): Promise<RankingResult[]> {
+    // Convert to ranking attempts format
+    // For now, we'll need to create an analysis run first
+    if (results.length === 0) return []
+    
+    // Get the business ID from the first query
+    const { data: query } = await supabase
+      .from('queries')
+      .select('business_id')
+      .eq('id', results[0].query_id)
+      .single()
+
+    if (!query) throw new Error('Query not found')
+
+    // Create an analysis run for this batch
+    const analysisRun = await this.createAnalysisRun(query.business_id, 1)
+
+    // Convert results to attempts
+    const attempts = results.map(result => ({
+      analysis_run_id: analysisRun.id,
+      query_id: result.query_id,
+      llm_provider_id: result.llm_provider_id,
+      attempt_number: result.attempt_number,
+      parsed_ranking: result.ranked_businesses,
+      target_business_rank: result.target_business_rank,
+      success: true
+    }))
+
+    const savedAttempts = await this.saveRankingAttempts(attempts)
+
+    // Update analysis run status
+    await this.updateAnalysisRun(analysisRun.id, {
+      status: 'completed',
+      completed_queries: 1,
+      completed_llm_calls: savedAttempts.length,
+      completed_at: new Date().toISOString()
+    })
+
+    // Convert back to RankingResult format for compatibility
+    return savedAttempts.map(attempt => ({
+      id: attempt.id,
+      query_id: attempt.query_id,
+      llm_provider_id: attempt.llm_provider_id,
+      attempt_number: attempt.attempt_number,
+      ranked_businesses: attempt.parsed_ranking,
+      target_business_rank: attempt.target_business_rank,
+      response_time_ms: 0,
+      created_at: attempt.created_at
+    }))
   }
 
   static async getRankingResults(queryId: string): Promise<RankingResult[]> {
@@ -222,12 +320,12 @@ export class DatabaseService {
   }
 
   static async getRankingAnalyticsForBusiness(businessId: string): Promise<RankingAnalytics[]> {
-    // This is a complex query that aggregates ranking data
+    // Get all queries for the business with their ranking attempts
     const { data: queries, error: queriesError } = await supabase
       .from('queries')
       .select(`
         *,
-        ranking_results (
+        ranking_attempts (
           *,
           llm_providers (name)
         )
@@ -249,13 +347,12 @@ export class DatabaseService {
   }
 
   private static calculateRankingAnalytics(queries: any[], businessName: string): RankingAnalytics[] {
-
     const analytics: RankingAnalytics[] = []
 
     for (const query of queries || []) {
-      const results = query.ranking_results || []
+      const attempts = query.ranking_attempts || []
       
-      // Group results by LLM provider
+      // Group attempts by LLM provider
       const providerStats = new Map<string, {
         ranks: number[]
         mentions: number
@@ -264,19 +361,19 @@ export class DatabaseService {
       const allRanks: number[] = []
       let totalMentions = 0
 
-      for (const result of results) {
-        if (result.target_business_rank) {
-          const providerName = result.llm_providers?.name || 'Unknown'
+      for (const attempt of attempts) {
+        if (attempt.target_business_rank && attempt.success) {
+          const providerName = attempt.llm_providers?.name || 'Unknown'
           
           if (!providerStats.has(providerName)) {
             providerStats.set(providerName, { ranks: [], mentions: 0 })
           }
           
           const stats = providerStats.get(providerName)!
-          stats.ranks.push(result.target_business_rank)
+          stats.ranks.push(attempt.target_business_rank)
           stats.mentions++
           
-          allRanks.push(result.target_business_rank)
+          allRanks.push(attempt.target_business_rank)
           totalMentions++
         }
       }
@@ -300,11 +397,11 @@ export class DatabaseService {
       // Find competitors ranked higher
       const competitorMap = new Map<string, { ranks: number[], mentions: number }>()
       
-      for (const result of results) {
-        const rankedBusinesses = result.ranked_businesses as string[]
-        const targetRank = result.target_business_rank
+      for (const attempt of attempts) {
+        const rankedBusinesses = attempt.parsed_ranking as string[]
+        const targetRank = attempt.target_business_rank
         
-        if (targetRank && rankedBusinesses) {
+        if (targetRank && rankedBusinesses && attempt.success) {
           // Get businesses ranked higher than target
           const higherRankedBusinesses = rankedBusinesses.slice(0, targetRank - 1)
           

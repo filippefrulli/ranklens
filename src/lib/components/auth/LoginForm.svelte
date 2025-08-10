@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { AuthService } from './auth'
+  import { AuthService } from '../../auth'
   
   let email = $state('')
   let password = $state('')

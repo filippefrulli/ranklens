@@ -1,9 +1,10 @@
 <script lang="ts">
   import { onMount } from 'svelte'
-  import { DatabaseService } from './services/database-service'
-  import { LLMService } from './services/llm-service'
-  import { AuthService, user } from '../lib/auth'
-  import type { Business, Query, DashboardData } from '../lib/types'
+  import { DatabaseService } from '../../services/database-service'
+  import { LLMService } from '../../services/llm-service'
+  import { AuthService, user } from '../../auth'
+  import type { Business, Query, DashboardData } from '../../types'
+  import GoogleBusinessSearch from '../business/GoogleBusinessSearch.svelte'
 
   let business = $state<Business | null>(null)
   let dashboardData = $state<DashboardData | null>(null)
@@ -12,6 +13,7 @@
 
   // New business registration form
   let showCreateBusiness = $state(false)
+  let showGoogleSearch = $state(false)
   let newBusiness = $state({
     name: '',
     google_place_id: '',
@@ -44,6 +46,19 @@
     } finally {
       loading = false
     }
+  }
+
+  function handleBusinessSelected(selectedBusiness: any) {
+    newBusiness = {
+      name: selectedBusiness.name,
+      google_place_id: selectedBusiness.google_place_id,
+      city: selectedBusiness.city,
+      google_primary_type: selectedBusiness.google_primary_type || '',
+      google_primary_type_display: selectedBusiness.google_primary_type_display || '',
+      google_types: selectedBusiness.google_types || []
+    }
+    showGoogleSearch = false
+    showCreateBusiness = true
   }
 
   async function createBusiness() {
@@ -238,15 +253,15 @@
         <h2 class="text-2xl font-bold text-gray-900 mb-8">Register Your Business</h2>
         
         <div class="mb-8">
-          <p class="text-gray-600 mb-4">To get started, you need to register your business with Google Maps.</p>
+          <p class="text-gray-600 mb-4">To get started, search for your business using Google Maps.</p>
           <p class="text-sm text-gray-500">This ensures accurate data and prevents fake business registrations.</p>
         </div>
 
         <button 
-          onclick={() => showCreateBusiness = true}
+          onclick={() => showGoogleSearch = true}
           class="bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 px-6 rounded-lg shadow-md transition-colors"
         >
-          Create New Project
+          Search for Business
         </button>
       </div>
 
@@ -361,25 +376,32 @@
             onclick={() => { business = null; dashboardData = null }}
             class="text-blue-600 hover:text-blue-800 text-sm font-medium"
           >
-            ← Back to Projects
+            ← Back to Business Registration
           </button>
         </div>
       </div>
     {/if}
   </div>
 
+  <!-- Google Business Search Modal -->
+  {#if showGoogleSearch}
+    <div class="fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center p-4 z-50">
+      <div class="bg-white rounded-lg shadow-xl max-w-2xl w-full p-6">
+        <h3 class="text-lg font-semibold text-gray-900 mb-4">Find Your Business</h3>
+        
+        <GoogleBusinessSearch
+          onBusinessSelected={handleBusinessSelected}
+          onCancel={() => showGoogleSearch = false}
+        />
+      </div>
+    </div>
+  {/if}
+
   <!-- Create Business Modal -->
   {#if showCreateBusiness}
     <div class="fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center p-4 z-50">
       <div class="bg-white rounded-lg shadow-xl max-w-md w-full p-6">
-        <h3 class="text-lg font-semibold text-gray-900 mb-4">Register Your Business</h3>
-        
-        <div class="mb-4 p-4 bg-blue-50 rounded-md">
-          <p class="text-sm text-blue-800">
-            <strong>Coming Soon:</strong> Google Maps integration for business verification. 
-            For now, please enter your business details manually.
-          </p>
-        </div>
+        <h3 class="text-lg font-semibold text-gray-900 mb-4">Confirm Business Details</h3>
         
         <form onsubmit={e => { e.preventDefault(); createBusiness(); }} class="space-y-4">
           <div>
@@ -389,8 +411,8 @@
               bind:value={newBusiness.name}
               type="text" 
               required
-              class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-              placeholder="Joe's Pizza"
+              readonly
+              class="w-full px-3 py-2 border border-gray-300 rounded-md bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
           </div>
           
@@ -401,10 +423,9 @@
               bind:value={newBusiness.google_place_id}
               type="text" 
               required
-              class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-              placeholder="ChIJN1t_tDeuEmsRUsoyG83frY4"
+              readonly
+              class="w-full px-3 py-2 border border-gray-300 rounded-md bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
-            <p class="text-xs text-gray-500 mt-1">Temporary field - will be auto-filled by Google Maps</p>
           </div>
           
           <div>
@@ -413,18 +434,27 @@
               id="business-city"
               bind:value={newBusiness.city}
               type="text"
-              class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-              placeholder="San Francisco"
+              readonly
+              class="w-full px-3 py-2 border border-gray-300 rounded-md bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
           </div>
+
+          {#if newBusiness.google_primary_type_display}
+            <div>
+              <span class="block text-sm font-medium text-gray-700 mb-1">Business Type</span>
+              <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-sm font-medium bg-blue-100 text-blue-800">
+                {newBusiness.google_primary_type_display}
+              </span>
+            </div>
+          {/if}
           
           <div class="flex justify-end space-x-3 pt-4">
             <button 
               type="button"
-              onclick={() => showCreateBusiness = false}
+              onclick={() => { showCreateBusiness = false; showGoogleSearch = true }}
               class="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-md transition-colors"
             >
-              Cancel
+              Back to Search
             </button>
             <button 
               type="submit"

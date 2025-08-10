@@ -3,8 +3,8 @@
   import { goto } from '$app/navigation'
   import { user } from '../lib/auth'
   import { supabase } from '../lib/supabase'
-  import LoginForm from '../lib/LoginForm.svelte'
-  import Dashboard from '../lib/Dashboard.svelte'
+  import LoginForm from '../lib/components/auth/LoginForm.svelte'
+  import Dashboard from '../lib/components/dashboard/Dashboard.svelte'
 
   let connectionStatus = $state('Testing connection...')
   let showDemo = $state(true)

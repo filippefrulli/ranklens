@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte'
   import { goto } from '$app/navigation'
-  import { user } from '../lib/auth'
+  import { user } from '../lib/services/auth-service'
   import { supabase } from '../lib/supabase'
   import LoginForm from '../lib/components/auth/LoginForm.svelte'
   import Dashboard from '../lib/components/dashboard/Dashboard.svelte'

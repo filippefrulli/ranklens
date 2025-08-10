@@ -2,7 +2,7 @@
   import { onMount } from 'svelte'
   import { DatabaseService } from '../services/database-service'
   import { LLMService } from '../services/llm-service'
-  import { AuthService, user } from '../auth'
+  import { AuthService, user } from '../services/auth-service'
   import type { Project, Query, DashboardData } from '../types'
 
   let projects = $state<Project[]>([])

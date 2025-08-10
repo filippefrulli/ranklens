@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte'
-  import { AuthService, user, loading as authLoading } from '../lib/auth'
   import '../app.css'
+  import { AuthService, user, loading as authLoading } from '../lib/services/auth-service'
 
   onMount(async () => {
     // Initialize authentication when the app loads

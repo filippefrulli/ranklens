@@ -1,5 +1,6 @@
 <script lang="ts">
-  import { AuthService } from '../auth'
+  import { onMount } from 'svelte'
+  import { AuthService } from '../services/auth-service'
   
   let email = $state('')
   let password = $state('')

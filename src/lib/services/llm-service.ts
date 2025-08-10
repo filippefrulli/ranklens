@@ -2,72 +2,162 @@ import type { LLMProvider } from '../types'
 
 export interface LLMResponse {
   rankedBusinesses: string[]
+  foundBusinessRank: number | null // null if business not found
+  foundBusinessName: string | null // the actual name found (might differ slightly)
   responseTimeMs: number
   success: boolean
   error?: string
+  totalRequested: number // how many businesses were requested
 }
 
 export class LLMService {
+  // Fuzzy matching utility to find business in results
+  private static fuzzyMatch(target: string, candidate: string): number {
+    const targetLower = target.toLowerCase().trim()
+    const candidateLower = candidate.toLowerCase().trim()
+    
+    // Exact match
+    if (targetLower === candidateLower) return 1.0
+    
+    // Contains match
+    if (candidateLower.includes(targetLower) || targetLower.includes(candidateLower)) {
+      return 0.8
+    }
+    
+    // Simple word overlap scoring
+    const targetWords = targetLower.split(/\s+/)
+    const candidateWords = candidateLower.split(/\s+/)
+    
+    let matchingWords = 0
+    for (const targetWord of targetWords) {
+      if (candidateWords.some(cw => cw.includes(targetWord) || targetWord.includes(cw))) {
+        matchingWords++
+      }
+    }
+    
+    const score = matchingWords / Math.max(targetWords.length, candidateWords.length)
+    return score >= 0.6 ? score : 0 // Only consider matches above 60%
+  }
+
+  private static findBusinessInList(businessName: string, rankedList: string[]): {
+    rank: number | null,
+    foundName: string | null
+  } {
+    let bestMatch = { score: 0, rank: -1, name: '' }
+    
+    for (let i = 0; i < rankedList.length; i++) {
+      const score = this.fuzzyMatch(businessName, rankedList[i])
+      if (score > bestMatch.score) {
+        bestMatch = { score, rank: i + 1, name: rankedList[i] }
+      }
+    }
+    
+    // Only return match if score is above threshold
+    if (bestMatch.score >= 0.6) {
+      return { rank: bestMatch.rank, foundName: bestMatch.name }
+    }
+    
+    return { rank: null, foundName: null }
+  }
+
   private static async makeRequest(
     provider: LLMProvider,
     query: string,
-    businessName: string
+    businessName: string,
+    requestCount: number = 25
   ): Promise<LLMResponse> {
     const startTime = Date.now()
     
     try {
-      const prompt = this.buildPrompt(query, businessName)
-      let response: Response
+      let rankedBusinesses: string[] = []
+      let totalRequested = requestCount
+      let foundResult = { rank: null as number | null, foundName: null as string | null }
       
-      switch (provider.name) {
-        case 'OpenAI GPT-4':
-          response = await this.callOpenAI(prompt)
-          break
-        case 'Anthropic Claude':
-          response = await this.callAnthropic(prompt)
-          break
-        case 'Google Gemini':
-          response = await this.callGemini(prompt)
-          break
-        case 'Cohere Command':
-          response = await this.callCohere(prompt)
-          break
-        case 'Perplexity AI':
-          response = await this.callPerplexity(prompt)
-          break
-        default:
-          throw new Error(`Unsupported LLM provider: ${provider.name}`)
+      // First attempt with initial count
+      const prompt = this.buildPrompt(query, requestCount)
+      const response = await this.callProvider(provider, prompt)
+      rankedBusinesses = await this.parseResponse(response, provider.name)
+      foundResult = this.findBusinessInList(businessName, rankedBusinesses)
+      
+      // If business not found and we got fewer than requested, try asking for more
+      if (!foundResult.rank && rankedBusinesses.length >= requestCount - 5) {
+        const extendedPrompt = this.buildExtendedPrompt(query, rankedBusinesses.length + 15)
+        const extendedResponse = await this.callProvider(provider, extendedPrompt)
+        const extendedList = await this.parseResponse(extendedResponse, provider.name)
+        
+        if (extendedList.length > rankedBusinesses.length) {
+          rankedBusinesses = extendedList
+          totalRequested = rankedBusinesses.length
+          foundResult = this.findBusinessInList(businessName, rankedBusinesses)
+        }
       }
-
+      
       const responseTimeMs = Date.now() - startTime
-      const rankedBusinesses = await this.parseResponse(response, provider.name)
       
       return {
         rankedBusinesses,
+        foundBusinessRank: foundResult.rank,
+        foundBusinessName: foundResult.foundName,
         responseTimeMs,
-        success: true
+        success: true,
+        totalRequested
       }
     } catch (error) {
       return {
         rankedBusinesses: [],
+        foundBusinessRank: null,
+        foundBusinessName: null,
         responseTimeMs: Date.now() - startTime,
         success: false,
-        error: error instanceof Error ? error.message : 'Unknown error'
+        error: error instanceof Error ? error.message : 'Unknown error',
+        totalRequested: requestCount
       }
     }
   }
 
-  private static buildPrompt(query: string, businessName: string): string {
-    return `Please provide a ranked list of businesses that match the following query: "${query}"
+  private static buildPrompt(query: string, count: number = 25): string {
+    return `Please provide a ranked list of the top ${count} businesses that best match this query: "${query}"
 
 Requirements:
 - Return ONLY a numbered list of business names
-- Include ${businessName} in the list if it's relevant
-- Limit to top 10 results
-- Format: "1. Business Name"
-- No additional commentary or explanation
+- List them in order of relevance/quality (best first)
+- Include ${count} businesses if possible
+- Format each as: "1. Business Name"
+- No additional commentary, explanations, or text
+- Focus on actual, real businesses
 
 Query: ${query}`
+  }
+
+  private static buildExtendedPrompt(query: string, count: number): string {
+    return `Please provide a comprehensive ranked list of the top ${count} businesses for: "${query}"
+
+Requirements:
+- Return ONLY a numbered list of business names
+- Include both well-known and lesser-known options
+- List ${count} businesses in order of relevance
+- Format: "1. Business Name"
+- No additional text or explanations
+- Focus on real, operating businesses
+
+Query: ${query}`
+  }
+
+  private static async callProvider(provider: LLMProvider, prompt: string): Promise<Response> {
+    switch (provider.name) {
+      case 'OpenAI GPT-4':
+        return this.callOpenAI(prompt)
+      case 'Anthropic Claude':
+        return this.callAnthropic(prompt)
+      case 'Google Gemini':
+        return this.callGemini(prompt)
+      case 'Cohere Command':
+        return this.callCohere(prompt)
+      case 'Perplexity AI':
+        return this.callPerplexity(prompt)
+      default:
+        throw new Error(`Unsupported LLM provider: ${provider.name}`)
+    }
   }
 
   private static async callOpenAI(prompt: string): Promise<Response> {
@@ -224,14 +314,29 @@ Query: ${query}`
       const providerResults: LLMResponse[] = []
       
       for (let i = 0; i < attempts; i++) {
-        const result = await this.makeRequest(provider, query, businessName)
+        console.log(`Running attempt ${i + 1}/${attempts} for ${provider.name}...`)
+        
+        // Start with 25 businesses, may request more if business not found
+        const result = await this.makeRequest(provider, query, businessName, 25)
         providerResults.push(result)
         
-        // Add small delay between requests to be respectful to APIs
-        await new Promise(resolve => setTimeout(resolve, 1000))
+        // Log whether business was found for debugging
+        if (result.success) {
+          if (result.foundBusinessRank) {
+            console.log(`✓ Found "${businessName}" as "${result.foundBusinessName}" at rank ${result.foundBusinessRank}/${result.totalRequested}`)
+          } else {
+            console.log(`✗ Business "${businessName}" not found in ${result.totalRequested} results`)
+          }
+        }
+        
+        // Add delay between requests to be respectful to APIs
+        await new Promise(resolve => setTimeout(resolve, 1500))
       }
 
       results.set(provider.name, providerResults)
+      
+      // Longer delay between providers
+      await new Promise(resolve => setTimeout(resolve, 2000))
     }
 
     return results

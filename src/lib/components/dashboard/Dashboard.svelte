@@ -158,6 +158,12 @@
 
       const providers = await DatabaseService.getLLMProviders()
       
+      // Create an analysis run for this session
+      const analysisRun = await DatabaseService.createAnalysisRun(
+        dashboardData.business.id, 
+        dashboardData.queries.length
+      )
+      
       for (const query of dashboardData.queries) {
         const results = await LLMService.runRankingAnalysis(
           providers,
@@ -166,35 +172,39 @@
           5
         )
 
-        // Save results to database
-        const rankingResults: any[] = []
+        // Save results to database using new structure
+        const rankingAttempts: any[] = []
         
         for (const [providerName, responses] of results.entries()) {
           const provider = providers.find(p => p.name === providerName)
           if (!provider) continue
 
           responses.forEach((response, index) => {
-            if (response.success) {
-              const targetRank = response.rankedBusinesses.findIndex(
-                businessName => businessName.toLowerCase().includes(dashboardData!.business.name.toLowerCase())
-              )
-
-              rankingResults.push({
-                query_id: query.id,
-                llm_provider_id: provider.id,
-                attempt_number: index + 1,
-                ranked_businesses: response.rankedBusinesses,
-                target_business_rank: targetRank >= 0 ? targetRank + 1 : null,
-                response_time_ms: response.responseTimeMs
-              })
-            }
+            rankingAttempts.push({
+              analysis_run_id: analysisRun.id,
+              query_id: query.id,
+              llm_provider_id: provider.id,
+              attempt_number: index + 1,
+              parsed_ranking: response.rankedBusinesses,
+              target_business_rank: response.foundBusinessRank,
+              success: response.success,
+              error_message: response.error || null
+            })
           })
         }
 
-        if (rankingResults.length > 0) {
-          await DatabaseService.saveRankingResults(rankingResults)
+        if (rankingAttempts.length > 0) {
+          await DatabaseService.saveRankingAttempts(rankingAttempts)
         }
       }
+
+      // Update analysis run status to completed
+      await DatabaseService.updateAnalysisRun(analysisRun.id, {
+        status: 'completed',
+        completed_queries: dashboardData.queries.length,
+        completed_llm_calls: dashboardData.queries.length * providers.filter(p => p.is_active).length * 5,
+        completed_at: new Date().toISOString()
+      })
 
       // Refresh dashboard data
       await loadDashboardData()

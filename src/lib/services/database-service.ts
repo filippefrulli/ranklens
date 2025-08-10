@@ -105,6 +105,307 @@ export class DatabaseService {
     if (error) throw new Error(`Failed to delete query: ${error.message}`)
   }
 
+  static async getQuery(id: string): Promise<Query | null> {
+    console.log('🔍 DatabaseService.getQuery called with ID:', id)
+    
+    const { data, error } = await supabase
+      .from('queries')
+      .select('*')
+      .eq('id', id)
+      .single()
+
+    if (error) {
+      console.log('❌ Error in getQuery:', error)
+      if (error.code === 'PGRST116') return null // No rows returned
+      throw new Error(`Failed to fetch query: ${error.message}`)
+    }
+    
+    console.log('✅ Query data retrieved:', data)
+    return data
+  }
+
+  static async getQueryRankingResults(queryId: string): Promise<RankingAttempt[]> {
+    console.log('📊 DatabaseService.getQueryRankingResults called with queryId:', queryId)
+    
+    const { data, error } = await supabase
+      .from('ranking_attempts')
+      .select(`
+        *,
+        analysis_runs!inner(
+          id,
+          created_at
+        ),
+        llm_providers!inner(
+          id,
+          name
+        )
+      `)
+      .eq('query_id', queryId)
+      .order('created_at', { ascending: false })
+
+    if (error) {
+      console.log('❌ Error in getQueryRankingResults:', error)
+      throw new Error(`Failed to fetch ranking results: ${error.message}`)
+    }
+    
+    console.log('✅ Ranking results retrieved:', data)
+    return data || []
+  }
+
+  static async getCompetitorRankings(queryId: string): Promise<any[]> {
+    console.log('🏆 DatabaseService.getCompetitorRankings called with queryId:', queryId)
+    
+    // First, let's check what ranking attempts we have for this query
+    const { data: attempts, error: attemptsError } = await supabase
+      .from('ranking_attempts')
+      .select('*')
+      .eq('query_id', queryId)
+    
+    console.log('📊 Raw ranking attempts for query:', attempts)
+    console.log('📊 Any errors getting attempts:', attemptsError)
+    
+    // For debugging, let's always use client-side processing to see what's happening
+    console.log('🔄 Using client-side processing for debugging...')
+    return await this.getCompetitorRankingsClientSide(queryId)
+    
+    /* Temporarily disable RPC for debugging
+    const { data, error } = await supabase
+      .rpc('get_competitor_rankings', { query_id: queryId })
+
+    if (error) {
+      console.log('❌ Error in getCompetitorRankings RPC:', error)
+      console.log('🔄 Falling back to client-side processing...')
+      return await this.getCompetitorRankingsClientSide(queryId)
+    }
+    
+    console.log('✅ Competitor rankings retrieved via RPC:', data)
+    return data || []
+    */
+  }
+
+  static async getCompetitorRankingsClientSide(queryId: string): Promise<any[]> {
+    try {
+      // Get all successful ranking attempts for this query
+      const { data: attempts, error: attemptsError } = await supabase
+        .from('ranking_attempts')
+        .select('*')
+        .eq('query_id', queryId)
+        .eq('success', true)
+        .not('parsed_ranking', 'is', null)
+
+      if (attemptsError) throw attemptsError
+      if (!attempts || attempts.length === 0) {
+        console.log('❌ No successful attempts with parsed rankings found')
+        return []
+      }
+
+      console.log('📊 Processing attempts client-side:', attempts)
+
+      // Get user's business name
+      const { data: query, error: queryError } = await supabase
+        .from('queries')
+        .select(`
+          *,
+          businesses!inner(
+            name
+          )
+        `)
+        .eq('id', queryId)
+        .single()
+
+      if (queryError) throw queryError
+      const userBusinessName = query.businesses.name.toLowerCase()
+      console.log('🏢 User business name:', userBusinessName)
+
+      // Process each attempt to extract competitors
+      const allCompetitors: any[] = []
+      
+      attempts.forEach(attempt => {
+        console.log(`🔍 Processing attempt ${attempt.attempt_number}:`, {
+          hasRanking: !!attempt.parsed_ranking,
+          rankingType: Array.isArray(attempt.parsed_ranking) ? 'array' : typeof attempt.parsed_ranking,
+          rankingLength: attempt.parsed_ranking?.length,
+          targetRank: attempt.target_business_rank,
+          firstFewEntries: attempt.parsed_ranking?.slice(0, 3)
+        })
+
+        if (!attempt.parsed_ranking || !Array.isArray(attempt.parsed_ranking)) {
+          console.log('⚠️ Invalid parsed_ranking for attempt:', attempt.id)
+          return
+        }
+
+        // Handle case where parsed_ranking is an array of strings (business names)
+        // In this format, the index + 1 is the rank
+        let userBusinessFoundInThisAttempt = false
+        let userBusinessRankInThisAttempt = null
+        
+        attempt.parsed_ranking.forEach((businessName: string, index: number) => {
+          const rank = index + 1
+          const businessNameLower = businessName.toLowerCase()
+          
+          // Check if this is the user's business with more detailed logging
+          const isMatch = businessNameLower.includes(userBusinessName) || 
+                         userBusinessName.includes(businessNameLower)
+          
+          if (isMatch) {
+            console.log(`🎯 MATCH FOUND! User business "${userBusinessName}" matches "${businessName}" at rank ${rank} in attempt ${attempt.attempt_number}`)
+            userBusinessFoundInThisAttempt = true
+            userBusinessRankInThisAttempt = rank
+            
+            // Update the target_business_rank if it wasn't set
+            if (attempt.target_business_rank === null) {
+              console.log(`📝 Setting target_business_rank to ${rank} for attempt ${attempt.id}`)
+              attempt.target_business_rank = rank
+            }
+          }
+        })
+        
+        console.log(`📊 Attempt ${attempt.attempt_number} summary:`, {
+          userBusinessFound: userBusinessFoundInThisAttempt,
+          userBusinessRank: userBusinessRankInThisAttempt,
+          storedTargetRank: attempt.target_business_rank
+        })
+        
+        // Now find competitors using the determined rank
+        const targetRank = attempt.target_business_rank || userBusinessRankInThisAttempt
+        if (targetRank) {
+          attempt.parsed_ranking.forEach((businessName: string, index: number) => {
+            const rank = index + 1
+            const businessNameLower = businessName.toLowerCase()
+            
+            // Add competitors (businesses that rank better than user's business)
+            if (rank < targetRank &&
+                !businessNameLower.includes(userBusinessName) && 
+                !userBusinessName.includes(businessNameLower)) {
+              
+              console.log(`🏆 Adding competitor: "${businessName}" (rank ${rank}) beats user rank ${targetRank}`)
+              allCompetitors.push({
+                name: businessName,
+                rank: rank,
+                attemptId: attempt.id,
+                attemptNumber: attempt.attempt_number
+              })
+            }
+          })
+        } else {
+          console.log(`❌ No target rank found for attempt ${attempt.attempt_number} - user business not found`)
+        }
+      })
+
+      console.log('🏆 All competitors found:', allCompetitors)
+
+      if (allCompetitors.length === 0) {
+        console.log('❌ No competitors found. Possible reasons:')
+        console.log('  - User business not found in any rankings')
+        console.log('  - No businesses rank higher than user business')
+        console.log('  - Business name matching issues')
+        
+        // Still return user's business data if available
+        const userBusinessData = this.getUserBusinessData(attempts, userBusinessName)
+        return userBusinessData ? [userBusinessData] : []
+      }
+
+      // Aggregate competitors by business name
+      const competitorMap = new Map()
+      allCompetitors.forEach(competitor => {
+        const name = competitor.name
+        if (!competitorMap.has(name)) {
+          competitorMap.set(name, {
+            business_name: name,
+            ranks: [],
+            appearances_count: 0,
+            total_attempts: attempts.length,
+            is_user_business: false
+          })
+        }
+        
+        const existing = competitorMap.get(name)
+        existing.ranks.push(competitor.rank)
+        existing.appearances_count += 1
+      })
+
+      // Add user's business data
+      const userBusinessData = this.getUserBusinessData(attempts, userBusinessName)
+      if (userBusinessData) {
+        competitorMap.set(userBusinessData.business_name, {
+          ...userBusinessData,
+          is_user_business: true
+        })
+      }
+
+      // Calculate averages and format results with weighted scoring
+      const results = Array.from(competitorMap.values()).map(competitor => {
+        const averageRank = competitor.ranks.reduce((a: number, b: number) => a + b, 0) / competitor.ranks.length
+        const appearanceRate = competitor.appearances_count / competitor.total_attempts
+        
+        // Weighted score: combines rank quality with consistency
+        // Lower score = better (lower rank + higher appearance rate)
+        // Formula: (average_rank) * (2 - appearance_rate)
+        // This means:
+        // - 100% appearance rate: multiply by 1.0 (no penalty)
+        // - 50% appearance rate: multiply by 1.5 (moderate penalty)  
+        // - 20% appearance rate: multiply by 1.8 (high penalty)
+        const weightedScore = averageRank * (2 - appearanceRate)
+        
+        return {
+          business_name: competitor.business_name,
+          average_rank: averageRank,
+          appearances_count: competitor.appearances_count,
+          total_attempts: competitor.total_attempts,
+          appearance_rate: appearanceRate,
+          weighted_score: weightedScore,
+          is_user_business: competitor.is_user_business || false
+        }
+      }).sort((a, b) => a.weighted_score - b.weighted_score) // Sort by weighted score instead of just rank
+
+      console.log('✅ Final competitor rankings (weighted by consistency):', results)
+      return results
+
+    } catch (error) {
+      console.error('💥 Error in client-side competitor rankings:', error)
+      return []
+    }
+  }
+
+  private static getUserBusinessData(attempts: any[], userBusinessName: string): any | null {
+    const userRanks: number[] = []
+    let userAppearances = 0
+    let userBusinessDisplayName = userBusinessName
+
+    attempts.forEach(attempt => {
+      if (!attempt.parsed_ranking || !Array.isArray(attempt.parsed_ranking)) return
+
+      attempt.parsed_ranking.forEach((businessName: string, index: number) => {
+        const rank = index + 1
+        const businessNameLower = businessName.toLowerCase()
+        
+        // Check if this is the user's business
+        if (businessNameLower.includes(userBusinessName) || 
+            userBusinessName.includes(businessNameLower)) {
+          userRanks.push(rank)
+          userAppearances += 1
+          userBusinessDisplayName = businessName // Use the actual name from results
+        }
+      })
+    })
+
+    if (userRanks.length === 0) return null
+
+    const averageRank = userRanks.reduce((a, b) => a + b, 0) / userRanks.length
+    const appearanceRate = userAppearances / attempts.length
+    const weightedScore = averageRank * (2 - appearanceRate)
+
+    return {
+      business_name: userBusinessDisplayName,
+      ranks: userRanks,
+      appearances_count: userAppearances,
+      total_attempts: attempts.length,
+      average_rank: averageRank,
+      appearance_rate: appearanceRate,
+      weighted_score: weightedScore
+    }
+  }
+
   // LLM Provider operations
   static async getLLMProviders(): Promise<LLMProvider[]> {
     const { data, error } = await supabase
@@ -263,6 +564,105 @@ export class DatabaseService {
     if (businessError) throw new Error('Business not found')
 
     return this.calculateRankingAnalytics(queries || [], business.name)
+  }
+
+  // Get detailed ranking results for table display
+  static async getDetailedRankingResults(businessId: string): Promise<{
+    queries: Array<{
+      id: string
+      text: string
+      attempts: Array<{
+        id: string
+        llm_provider: string
+        attempt_number: number
+        target_business_rank: number | null
+        total_businesses: number
+        success: boolean
+        created_at: string
+      }>
+      averageRank: number | null
+      mentionRate: number
+    }>
+    overallAverageRank: number | null
+    overallMentionRate: number
+  }> {
+    const { data: queries, error: queriesError } = await supabase
+      .from('queries')
+      .select(`
+        id,
+        text,
+        ranking_attempts (
+          id,
+          attempt_number,
+          target_business_rank,
+          parsed_ranking,
+          success,
+          created_at,
+          llm_provider_id,
+          llm_providers!inner (
+            name
+          )
+        )
+      `)
+      .eq('business_id', businessId)
+      .order('created_at', { ascending: true })
+
+    if (queriesError) throw new Error(`Failed to fetch ranking results: ${queriesError.message}`)
+
+    const processedQueries = (queries || []).map(query => {
+      const attempts = (query.ranking_attempts || []).map((attempt: any) => ({
+        id: attempt.id,
+        llm_provider: attempt.llm_providers?.name || 'Unknown',
+        attempt_number: attempt.attempt_number,
+        target_business_rank: attempt.target_business_rank,
+        total_businesses: Array.isArray(attempt.parsed_ranking) ? attempt.parsed_ranking.length : 0,
+        success: attempt.success,
+        created_at: attempt.created_at
+      }))
+
+      // Calculate average rank for this query (only successful attempts where business was found)
+      const successfulRanks = attempts
+        .filter(a => a.success && a.target_business_rank !== null)
+        .map(a => a.target_business_rank!)
+      
+      const averageRank = successfulRanks.length > 0 
+        ? successfulRanks.reduce((sum, rank) => sum + rank, 0) / successfulRanks.length 
+        : null
+
+      // Calculate mention rate (percentage of attempts where business was found)
+      const mentionRate = attempts.length > 0 
+        ? (successfulRanks.length / attempts.length) * 100 
+        : 0
+
+      return {
+        id: query.id,
+        text: query.text,
+        attempts,
+        averageRank,
+        mentionRate
+      }
+    })
+
+    // Calculate overall statistics
+    const allRanks = processedQueries
+      .filter(q => q.averageRank !== null)
+      .map(q => q.averageRank!)
+    
+    const overallAverageRank = allRanks.length > 0 
+      ? allRanks.reduce((sum, rank) => sum + rank, 0) / allRanks.length 
+      : null
+
+    const totalAttempts = processedQueries.reduce((sum, q) => sum + q.attempts.length, 0)
+    const totalMentions = processedQueries.reduce((sum, q) => 
+      sum + q.attempts.filter(a => a.success && a.target_business_rank !== null).length, 0)
+    
+    const overallMentionRate = totalAttempts > 0 ? (totalMentions / totalAttempts) * 100 : 0
+
+    return {
+      queries: processedQueries,
+      overallAverageRank,
+      overallMentionRate
+    }
   }
 
   private static calculateRankingAnalytics(queries: any[], businessName: string): RankingAnalytics[] {

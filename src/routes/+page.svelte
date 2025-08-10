@@ -61,7 +61,7 @@
         </h1>
         <p class="text-xl text-gray-600 mb-8 max-w-3xl mx-auto">
           Discover how your business ranks when customers ask AI assistants for recommendations. 
-          Get insights from OpenAI, Anthropic, Google, Cohere, and Perplexity with detailed analytics.
+          Get insights from OpenAI, Anthropic, Google, and Perplexity with detailed analytics.
         </p>
         
         <div class="flex justify-center space-x-4">
@@ -89,7 +89,7 @@
             </svg>
           </div>
           <h3 class="text-xl font-bold text-gray-900 mb-3">Multi-LLM Analysis</h3>
-          <p class="text-gray-600">Test your rankings across OpenAI GPT-4, Claude, Gemini, Cohere, and Perplexity with automated queries.</p>
+          <p class="text-gray-600">Test your rankings across OpenAI GPT-4, Claude, Gemini, and Perplexity with automated queries.</p>
         </div>
 
         <div class="bg-white rounded-xl shadow-lg p-8 text-center">

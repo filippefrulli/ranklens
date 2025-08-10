@@ -67,6 +67,7 @@ export class LLMService {
     requestCount: number = 25
   ): Promise<LLMResponse> {
     const startTime = Date.now()
+    console.log(`🔥 Making request to ${provider.name} for "${query}" (target: "${businessName}")`)
     
     try {
       let rankedBusinesses: string[] = []
@@ -74,21 +75,72 @@ export class LLMService {
       let foundResult = { rank: null as number | null, foundName: null as string | null }
       
       // First attempt with initial count
+      console.log(`📝 Building prompt for ${requestCount} businesses...`)
       const prompt = this.buildPrompt(query, requestCount)
+      console.log(`📤 Sending prompt to ${provider.name}:`, prompt)
+      
       const response = await this.callProvider(provider, prompt)
-      rankedBusinesses = await this.parseResponse(response, provider.name)
+      console.log(`📥 Raw response from ${provider.name}:`, response.status, response.statusText)
+      
+      const responseText = await response.text()
+      console.log(`📄 Raw response text from ${provider.name}:`, responseText)
+      
+      // Re-create response for parsing
+      const mockResponse = new Response(responseText, {
+        status: response.status,
+        statusText: response.statusText,
+        headers: response.headers
+      })
+      
+      rankedBusinesses = await this.parseResponse(mockResponse, provider.name)
+      console.log(`📋 Parsed ${rankedBusinesses.length} businesses from ${provider.name}:`)
+      rankedBusinesses.forEach((business, index) => {
+        console.log(`  ${index + 1}. ${business}`)
+      })
+      
+      console.log(`🔍 Searching for "${businessName}" in results...`)
       foundResult = this.findBusinessInList(businessName, rankedBusinesses)
+      
+      if (foundResult.rank) {
+        console.log(`✅ Found match: "${foundResult.foundName}" at rank ${foundResult.rank}`)
+      } else {
+        console.log(`❌ No match found for "${businessName}"`)
+        console.log(`🧪 Testing fuzzy matches:`)
+        rankedBusinesses.forEach((business, index) => {
+          const score = this.fuzzyMatch(businessName, business)
+          if (score > 0) {
+            console.log(`  ${index + 1}. "${business}" - score: ${score.toFixed(2)}`)
+          }
+        })
+      }
       
       // If business not found and we got fewer than requested, try asking for more
       if (!foundResult.rank && rankedBusinesses.length >= requestCount - 5) {
+        console.log(`🔄 Business not found, trying extended request...`)
         const extendedPrompt = this.buildExtendedPrompt(query, rankedBusinesses.length + 15)
+        console.log(`📤 Extended prompt:`, extendedPrompt)
+        
         const extendedResponse = await this.callProvider(provider, extendedPrompt)
-        const extendedList = await this.parseResponse(extendedResponse, provider.name)
+        const extendedResponseText = await extendedResponse.text()
+        console.log(`📄 Extended response:`, extendedResponseText)
+        
+        const mockExtendedResponse = new Response(extendedResponseText, {
+          status: extendedResponse.status,
+          statusText: extendedResponse.statusText,
+          headers: extendedResponse.headers
+        })
+        
+        const extendedList = await this.parseResponse(mockExtendedResponse, provider.name)
         
         if (extendedList.length > rankedBusinesses.length) {
+          console.log(`📈 Extended list has ${extendedList.length} businesses (was ${rankedBusinesses.length})`)
           rankedBusinesses = extendedList
           totalRequested = rankedBusinesses.length
           foundResult = this.findBusinessInList(businessName, rankedBusinesses)
+          
+          if (foundResult.rank) {
+            console.log(`✅ Found in extended results: "${foundResult.foundName}" at rank ${foundResult.rank}`)
+          }
         }
       }
       
@@ -151,8 +203,6 @@ Query: ${query}`
         return this.callAnthropic(prompt)
       case 'Google Gemini':
         return this.callGemini(prompt)
-      case 'Cohere Command':
-        return this.callCohere(prompt)
       case 'Perplexity AI':
         return this.callPerplexity(prompt)
       default:
@@ -217,25 +267,6 @@ Query: ${query}`
     })
   }
 
-  private static async callCohere(prompt: string): Promise<Response> {
-    const apiKey = import.meta.env.VITE_COHERE_API_KEY
-    if (!apiKey) throw new Error('Cohere API key not configured')
-
-    return fetch('https://api.cohere.ai/v1/generate', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${apiKey}`,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        model: 'command',
-        prompt,
-        max_tokens: 500,
-        temperature: 0.3
-      })
-    })
-  }
-
   private static async callPerplexity(prompt: string): Promise<Response> {
     const apiKey = import.meta.env.VITE_PERPLEXITY_API_KEY
     if (!apiKey) throw new Error('Perplexity API key not configured')
@@ -256,25 +287,26 @@ Query: ${query}`
   }
 
   private static async parseResponse(response: Response, providerName: string): Promise<string[]> {
+    
     if (!response.ok) {
+      console.error(`❌ HTTP error from ${providerName}:`, response.status, response.statusText)
       throw new Error(`HTTP error! status: ${response.status}`)
     }
 
     const data = await response.json()
+    
     let content: string
 
     switch (providerName) {
       case 'OpenAI GPT-4':
         content = data.choices[0]?.message?.content || ''
+        console.log(`💬 OpenAI content extracted:`, content)
         break
       case 'Anthropic Claude':
         content = data.content[0]?.text || ''
         break
       case 'Google Gemini':
         content = data.candidates[0]?.content?.parts[0]?.text || ''
-        break
-      case 'Cohere Command':
-        content = data.generations[0]?.text || ''
         break
       case 'Perplexity AI':
         content = data.choices[0]?.message?.content || ''
@@ -283,7 +315,9 @@ Query: ${query}`
         throw new Error(`Unknown provider: ${providerName}`)
     }
 
-    return this.extractBusinessNames(content)
+    const businesses = this.extractBusinessNames(content)
+    
+    return businesses
   }
 
   private static extractBusinessNames(content: string): string[] {
@@ -293,7 +327,11 @@ Query: ${query}`
     for (const line of lines) {
       const match = line.match(/^\d+\.\s*(.+)$/m)
       if (match && match[1]) {
-        businesses.push(match[1].trim())
+        const businessName = match[1].trim()
+        businesses.push(businessName)
+        console.log(`  ✓ Found: "${businessName}"`)
+      } else if (line.trim()) {
+        console.log(`  ✗ Skipped: "${line.trim()}" (doesn't match pattern)`)
       }
     }
 
@@ -306,15 +344,17 @@ Query: ${query}`
     businessName: string,
     attempts: number = 5
   ): Promise<Map<string, LLMResponse[]>> {
+    
     const results = new Map<string, LLMResponse[]>()
 
     for (const provider of providers) {
-      if (!provider.is_active) continue
+      if (!provider.is_active) {
+        continue
+      }
 
       const providerResults: LLMResponse[] = []
       
       for (let i = 0; i < attempts; i++) {
-        console.log(`Running attempt ${i + 1}/${attempts} for ${provider.name}...`)
         
         // Start with 25 businesses, may request more if business not found
         const result = await this.makeRequest(provider, query, businessName, 25)
@@ -323,22 +363,28 @@ Query: ${query}`
         // Log whether business was found for debugging
         if (result.success) {
           if (result.foundBusinessRank) {
-            console.log(`✓ Found "${businessName}" as "${result.foundBusinessName}" at rank ${result.foundBusinessRank}/${result.totalRequested}`)
+            console.log(`✅ Found "${businessName}" as "${result.foundBusinessName}" at rank ${result.foundBusinessRank}/${result.totalRequested}`)
           } else {
-            console.log(`✗ Business "${businessName}" not found in ${result.totalRequested} results`)
+            console.log(`❌ Business "${businessName}" not found in ${result.totalRequested} results`)
           }
+        } else {
+          console.error(`❌ Request failed: ${result.error}`)
         }
         
         // Add delay between requests to be respectful to APIs
-        await new Promise(resolve => setTimeout(resolve, 1500))
+        if (i < attempts - 1) {
+          await new Promise(resolve => setTimeout(resolve, 1500))
+        }
       }
 
       results.set(provider.name, providerResults)
       
       // Longer delay between providers
-      await new Promise(resolve => setTimeout(resolve, 2000))
+      if (providers.indexOf(provider) < providers.length - 1) {
+        await new Promise(resolve => setTimeout(resolve, 2000))
+      }
     }
-
+    
     return results
   }
 }

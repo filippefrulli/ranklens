@@ -8,8 +8,11 @@
 
   let business = $state<Business | null>(null)
   let dashboardData = $state<DashboardData | null>(null)
+  let detailedResults = $state<any>(null)
   let loading = $state(false)
+  let loadingDetailedResults = $state(false)
   let error = $state<string | null>(null)
+  let showDetailedResults = $state(false)
 
   // New business registration form
   let showCreateBusiness = $state(false)
@@ -41,6 +44,11 @@
       loading = true
       error = null
       business = await DatabaseService.getBusiness($user.id)
+      
+      // If business exists, load dashboard data (including queries)
+      if (business) {
+        await loadDashboardData()
+      }
     } catch (err) {
       error = err instanceof Error ? err.message : 'Failed to load business'
     } finally {
@@ -112,6 +120,20 @@
     }
   }
 
+  async function loadDetailedResults() {
+    if (!business) return
+    
+    try {
+      loading = true
+      error = null
+      detailedResults = await DatabaseService.getDetailedRankingResults(business.id)
+    } catch (err) {
+      error = err instanceof Error ? err.message : 'Failed to load detailed results'
+    } finally {
+      loading = false
+    }
+  }
+
   async function addQuery() {
     if (!$user || !newQuery.trim()) return
 
@@ -150,7 +172,18 @@
   }
 
   async function runAnalysis() {
-    if (!dashboardData?.business || !dashboardData?.queries.length) return
+    console.log('🚀 Starting analysis...')
+    console.log('Dashboard data:', dashboardData)
+    
+    if (!dashboardData?.business) {
+      console.error('❌ No business found in dashboard data')
+      return
+    }
+    
+    if (!dashboardData?.queries.length) {
+      console.error('❌ No queries found in dashboard data')
+      return
+    }
 
     try {
       runningAnalysis = true
@@ -158,26 +191,36 @@
 
       const providers = await DatabaseService.getLLMProviders()
       
+      const activeProviders = providers.filter(p => p.is_active)
+      
+      if (activeProviders.length === 0) {
+        throw new Error('No active LLM providers found')
+      }
+      
       // Create an analysis run for this session
       const analysisRun = await DatabaseService.createAnalysisRun(
         dashboardData.business.id, 
         dashboardData.queries.length
       )
       
-      for (const query of dashboardData.queries) {
+      for (let i = 0; i < dashboardData.queries.length; i++) {
+        const query = dashboardData.queries[i]
+        
         const results = await LLMService.runRankingAnalysis(
-          providers,
+          activeProviders,
           query.text,
           dashboardData.business.name,
           5
         )
 
-        // Save results to database using new structure
         const rankingAttempts: any[] = []
         
         for (const [providerName, responses] of results.entries()) {
-          const provider = providers.find(p => p.name === providerName)
-          if (!provider) continue
+          const provider = activeProviders.find(p => p.name === providerName)
+          if (!provider) {
+            console.warn(`⚠️ Provider ${providerName} not found in active providers`)
+            continue
+          }
 
           responses.forEach((response, index) => {
             rankingAttempts.push({
@@ -195,6 +238,8 @@
 
         if (rankingAttempts.length > 0) {
           await DatabaseService.saveRankingAttempts(rankingAttempts)
+        } else {
+          console.warn('⚠️ No ranking attempts to save')
         }
       }
 
@@ -202,14 +247,14 @@
       await DatabaseService.updateAnalysisRun(analysisRun.id, {
         status: 'completed',
         completed_queries: dashboardData.queries.length,
-        completed_llm_calls: dashboardData.queries.length * providers.filter(p => p.is_active).length * 5,
+        completed_llm_calls: dashboardData.queries.length * activeProviders.length * 5,
         completed_at: new Date().toISOString()
       })
 
       // Refresh dashboard data
       await loadDashboardData()
-      
     } catch (err) {
+      console.error('❌ Analysis failed:', err)
       error = err instanceof Error ? err.message : 'Failed to run analysis'
     } finally {
       runningAnalysis = false
@@ -322,11 +367,28 @@
                 
                 {#if dashboardData?.queries.length}
                   <button 
-                    onclick={runAnalysis}
+                    onclick={() => {
+                      console.log('🔘 Run Analysis button clicked!')
+                      runAnalysis()
+                    }}
                     disabled={runningAnalysis}
                     class="bg-green-600 hover:bg-green-700 disabled:bg-gray-400 text-white text-sm font-medium py-2 px-4 rounded-md transition-colors"
                   >
                     {runningAnalysis ? 'Running Analysis...' : 'Run Analysis'}
+                  </button>
+                  
+                  <button 
+                    onclick={async () => {
+                      if (showDetailedResults) {
+                        showDetailedResults = false
+                      } else {
+                        await loadDetailedResults()
+                        showDetailedResults = true
+                      }
+                    }}
+                    class="bg-purple-600 hover:bg-purple-700 text-white text-sm font-medium py-2 px-4 rounded-md transition-colors"
+                  >
+                    {showDetailedResults ? 'Hide Details' : 'View Detailed Results'}
                   </button>
                 {/if}
               </div>
@@ -338,43 +400,75 @@
               <p class="text-gray-600">No queries yet. Add your first query to start analyzing rankings!</p>
             {:else if dashboardData}
               <div class="space-y-6">
-                {#each dashboardData.analytics as analytic}
-                  <div class="border border-gray-200 rounded-lg p-4">
-                    <h3 class="font-medium text-gray-900 mb-2">{analytic.query_text}</h3>
-                    
-                    <div class="grid md:grid-cols-3 gap-4 text-sm">
-                      <div>
-                        <span class="text-gray-500">Average Rank:</span>
-                        <span class="font-medium">
-                          {analytic.average_rank ? analytic.average_rank.toFixed(1) : 'Not found'}
-                        </span>
-                      </div>
-                      
-                      <div>
-                        <span class="text-gray-500">Total Mentions:</span>
-                        <span class="font-medium">{analytic.total_mentions}</span>
-                      </div>
-                      
-                      <div>
-                        <span class="text-gray-500">LLM Sources:</span>
-                        <span class="font-medium">{analytic.llm_breakdown.length}</span>
+                <!-- Show all queries -->
+                <div class="space-y-4">
+                  <h4 class="font-medium text-gray-900">Your Queries</h4>
+                  {#each dashboardData.queries as query}
+                    <div class="border border-gray-200 rounded-lg p-4 bg-gray-50">
+                      <div class="flex justify-between items-start">
+                        <div class="flex-1">
+                          <h3 class="font-medium text-gray-900 mb-2">{query.text}</h3>
+                          <p class="text-sm text-gray-500">
+                            Added {new Date(query.created_at).toLocaleDateString()}
+                          </p>
+                        </div>
+                        <a 
+                          href="/query/{query.id}"
+                          class="ml-4 text-blue-600 hover:text-blue-800 text-sm font-medium flex items-center"
+                        >
+                          View Details
+                          <svg class="w-4 h-4 ml-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path>
+                          </svg>
+                        </a>
                       </div>
                     </div>
+                  {/each}
+                </div>
 
-                    {#if analytic.competitors_ranked_higher.length > 0}
-                      <div class="mt-3">
-                        <h4 class="text-sm font-medium text-gray-700 mb-2">Top Competitors:</h4>
-                        <div class="flex flex-wrap gap-2">
-                          {#each analytic.competitors_ranked_higher.slice(0, 3) as competitor}
-                            <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">
-                              {competitor.business_name} (#{competitor.average_rank.toFixed(1)})
+                <!-- Show analytics if available -->
+                {#if dashboardData.analytics && dashboardData.analytics.length > 0}
+                  <div class="space-y-4">
+                    <h4 class="font-medium text-gray-900">Analysis Results</h4>
+                    {#each dashboardData.analytics as analytic}
+                      <div class="border border-gray-200 rounded-lg p-4">
+                        <h3 class="font-medium text-gray-900 mb-2">{analytic.query_text}</h3>
+                        
+                        <div class="grid md:grid-cols-3 gap-4 text-sm">
+                          <div>
+                            <span class="text-gray-500">Average Rank:</span>
+                            <span class="font-medium">
+                              {analytic.average_rank ? analytic.average_rank.toFixed(1) : 'Not found'}
                             </span>
-                          {/each}
+                          </div>
+                          
+                          <div>
+                            <span class="text-gray-500">Total Mentions:</span>
+                            <span class="font-medium">{analytic.total_mentions}</span>
+                          </div>
+                          
+                          <div>
+                            <span class="text-gray-500">LLM Sources:</span>
+                            <span class="font-medium">{analytic.llm_breakdown.length}</span>
+                          </div>
                         </div>
+
+                        {#if analytic.competitors_ranked_higher.length > 0}
+                          <div class="mt-3">
+                            <h4 class="text-sm font-medium text-gray-700 mb-2">Top Competitors:</h4>
+                            <div class="flex flex-wrap gap-2">
+                              {#each analytic.competitors_ranked_higher.slice(0, 3) as competitor}
+                                <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">
+                                  {competitor.business_name} (#{competitor.average_rank.toFixed(1)})
+                                </span>
+                              {/each}
+                            </div>
+                          </div>
+                        {/if}
                       </div>
-                    {/if}
+                    {/each}
                   </div>
-                {/each}
+                {/if}
               </div>
             {/if}
           </div>
@@ -389,6 +483,64 @@
             ← Back to Business Registration
           </button>
         </div>
+      </div>
+    {/if}
+
+    <!-- Detailed Results Table -->
+    {#if showDetailedResults}
+      <div class="bg-white rounded-lg shadow p-6">
+        <h3 class="text-lg font-semibold mb-4">Detailed Ranking Results</h3>
+        
+        {#if loadingDetailedResults}
+          <div class="text-center py-8">
+            <div class="animate-spin inline-block w-6 h-6 border-[3px] border-current border-t-transparent text-blue-600 rounded-full" role="status"></div>
+            <p class="mt-2 text-gray-600">Loading ranking results...</p>
+          </div>
+        {:else if detailedResults && detailedResults.length > 0}
+          <div class="overflow-x-auto">
+            <table class="min-w-full divide-y divide-gray-200">
+              <thead class="bg-gray-50">
+                <tr>
+                  <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Query</th>
+                  <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Avg Rank</th>
+                  <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Times Found</th>
+                  <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Total Attempts</th>
+                  <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Last Run</th>
+                  <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                </tr>
+              </thead>
+              <tbody class="bg-white divide-y divide-gray-200">
+                {#each detailedResults as result}
+                  <tr>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{result.query_text}</td>
+                    <td class="px-6 py-4 whitespace-nowrap">
+                      <span class="text-sm font-medium {result.avg_rank <= 3 ? 'text-green-600' : result.avg_rank <= 7 ? 'text-yellow-600' : 'text-red-600'}">
+                        {result.avg_rank !== null ? Math.round(result.avg_rank * 10) / 10 : 'N/A'}
+                      </span>
+                    </td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{result.times_found}</td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{result.total_attempts}</td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                      {result.last_run ? new Date(result.last_run).toLocaleDateString() : 'Never'}
+                    </td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm">
+                      <a 
+                        href="/query/{result.query_id}"
+                        class="text-blue-600 hover:text-blue-800 font-medium"
+                      >
+                        View Details
+                      </a>
+                    </td>
+                  </tr>
+                {/each}
+              </tbody>
+            </table>
+          </div>
+        {:else}
+          <div class="text-center py-8">
+            <p class="text-gray-600">No ranking results available yet. Run an analysis to see detailed results.</p>
+          </div>
+        {/if}
       </div>
     {/if}
   </div>

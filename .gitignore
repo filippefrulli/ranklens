@@ -7,7 +7,6 @@ node_modules
 .wrangler
 /.svelte-kit
 /build
-.svelte-kit
 
 # OS
 .DS_Store
@@ -34,5 +33,3 @@ vite.config.ts.timestamp-*
 *.njsproj
 *.sln
 *.sw?
-.svelte-kit/ambient.d.ts
-.svelte-kit/generated/server/internal.js

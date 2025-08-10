@@ -8,16 +8,16 @@
     <div class="flex flex-col md:flex-row justify-between items-center">
       <div class="mb-4 md:mb-0">
         <p class="text-gray-600 text-sm">
-          {$t('footer.copyright')}
+          {('footer.copyright')}
         </p>
         <p class="text-gray-400 text-xs mt-1">
           v{version}
         </p>
       </div>
       <div class="flex space-x-6">
-        <a href="/about" class="text-gray-600 hover:text-black text-sm transition-colors cursor-pointer">{$t('footer.about')}</a>
-        <a href="/about/privacy" class="text-gray-600 hover:text-black text-sm transition-colors cursor-pointer">{$t('footer.privacy')}</a>
-        <a href="/about/terms" class="text-gray-600 hover:text-black text-sm transition-colors cursor-pointer">{$t('footer.terms')}</a>
+        <a href="/about" class="text-gray-600 hover:text-black text-sm transition-colors cursor-pointer">{('footer.about')}</a>
+        <a href="/about/privacy" class="text-gray-600 hover:text-black text-sm transition-colors cursor-pointer">{('footer.privacy')}</a>
+        <a href="/about/terms" class="text-gray-600 hover:text-black text-sm transition-colors cursor-pointer">{('footer.terms')}</a>
       </div>
     </div>
   </div>

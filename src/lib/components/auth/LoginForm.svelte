@@ -1,5 +1,4 @@
 <script lang="ts">
-  import { onMount } from 'svelte'
   import { AuthService } from '../../services/auth-service'
   
   let email = $state('')

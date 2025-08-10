@@ -3,7 +3,7 @@
   import { DatabaseService } from '../../services/database-service'
   import { LLMService } from '../../services/llm-service'
   import { AuthService, user } from '../../services/auth-service'
-  import type { Business, Query, DashboardData } from '../../types'
+  import type { Business, DashboardData } from '../../types'
   import GoogleBusinessSearch from '../business/GoogleBusinessSearch.svelte'
 
   let business = $state<Business | null>(null)

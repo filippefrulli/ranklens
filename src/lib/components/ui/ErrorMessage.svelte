@@ -18,7 +18,7 @@
         <div class="-mx-1.5 -my-1.5">
           <button 
             onclick={onDismiss}
-            class="inline-flex bg-red-50 rounded-md p-1.5 text-red-500 hover:bg-red-100 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-red-50 focus:ring-red-600"
+            class="inline-flex bg-red-50 rounded-md p-1.5 text-red-500 hover:bg-red-100 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-red-50 focus:ring-red-600 cursor-pointer"
           >
             <span class="sr-only">Dismiss</span>
             <svg class="h-3 w-3" fill="currentColor" viewBox="0 0 20 20">

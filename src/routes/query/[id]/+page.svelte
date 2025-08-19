@@ -112,7 +112,7 @@
       <div class="mt-4">
         <button 
           onclick={goBack}
-          class="text-blue-600 hover:text-blue-800 font-medium"
+          class="text-blue-600 hover:text-blue-800 font-medium cursor-pointer"
         >
           ← Back to Dashboard
         </button>

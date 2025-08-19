@@ -360,7 +360,7 @@
               <div class="space-x-2">
                 <button 
                   onclick={() => showAddQuery = true}
-                  class="bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium py-2 px-4 rounded-md transition-colors"
+                  class="bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium py-2 px-4 rounded-md transition-colors cursor-pointer"
                 >
                   Add Query
                 </button>
@@ -372,7 +372,7 @@
                       runAnalysis()
                     }}
                     disabled={runningAnalysis}
-                    class="bg-green-600 hover:bg-green-700 disabled:bg-gray-400 text-white text-sm font-medium py-2 px-4 rounded-md transition-colors"
+                    class="bg-green-600 hover:bg-green-700 disabled:bg-gray-400 text-white text-sm font-medium py-2 px-4 rounded-md transition-colors cursor-pointer disabled:cursor-not-allowed"
                   >
                     {runningAnalysis ? 'Running Analysis...' : 'Run Analysis'}
                   </button>
@@ -386,7 +386,7 @@
                         showDetailedResults = true
                       }
                     }}
-                    class="bg-purple-600 hover:bg-purple-700 text-white text-sm font-medium py-2 px-4 rounded-md transition-colors"
+                    class="bg-purple-600 hover:bg-purple-700 text-white text-sm font-medium py-2 px-4 rounded-md transition-colors cursor-pointer"
                   >
                     {showDetailedResults ? 'Hide Details' : 'View Detailed Results'}
                   </button>
@@ -414,7 +414,7 @@
                         </div>
                         <a 
                           href="/query/{query.id}"
-                          class="ml-4 text-blue-600 hover:text-blue-800 text-sm font-medium flex items-center"
+                          class="ml-4 text-blue-600 hover:text-blue-800 text-sm font-medium flex items-center cursor-pointer"
                         >
                           View Details
                           <svg class="w-4 h-4 ml-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -677,7 +677,7 @@
     <div class="fixed bottom-4 right-4 bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded-lg shadow-lg z-50">
       <div class="flex items-center justify-between">
         <span>{error}</span>
-        <button onclick={() => error = null} class="ml-4 text-red-500 hover:text-red-700">✕</button>
+        <button onclick={() => error = null} class="ml-4 text-red-500 hover:text-red-700 cursor-pointer">✕</button>
       </div>
     </div>
   {/if}

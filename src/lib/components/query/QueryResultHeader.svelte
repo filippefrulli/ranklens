@@ -8,7 +8,7 @@
     <div>
       <button 
         onclick={goBack}
-        class="text-blue-600 hover:text-blue-800 font-medium mb-2 inline-flex items-center"
+        class="text-blue-600 hover:text-blue-800 font-medium mb-2 inline-flex items-center cursor-pointer"
       >
         <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path>

@@ -45,7 +45,7 @@
           <div class="space-x-2">
             <button 
               onclick={() => showDemo = false}
-              class="bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 px-4 rounded-lg transition-colors"
+              class="bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 px-4 rounded-lg transition-colors cursor-pointer"
             >
               Sign In
             </button>
@@ -67,13 +67,13 @@
         <div class="flex justify-center space-x-4">
           <button 
             onclick={() => showDemo = false}
-            class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-8 rounded-lg shadow-lg transform hover:scale-105 transition-all duration-200"
+            class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-8 rounded-lg shadow-lg transform hover:scale-105 transition-all duration-200 cursor-pointer"
           >
             Get Started
           </button>
           <a 
             href="#features" 
-            class="bg-white hover:bg-gray-50 text-blue-600 font-bold py-3 px-8 rounded-lg shadow-lg border-2 border-blue-600 transform hover:scale-105 transition-all duration-200"
+            class="bg-white hover:bg-gray-50 text-blue-600 font-bold py-3 px-8 rounded-lg shadow-lg border-2 border-blue-600 transform hover:scale-105 transition-all duration-200 cursor-pointer"
           >
             Learn More
           </a>

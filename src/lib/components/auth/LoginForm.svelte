@@ -103,7 +103,7 @@
           <button
             type="submit"
             disabled={loading}
-            class="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 text-white font-semibold py-2 px-4 rounded-md transition-colors"
+            class="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 text-white font-semibold py-2 px-4 rounded-md transition-colors cursor-pointer"
           >
             {loading ? 'Sending...' : 'Send Reset Link'}
           </button>
@@ -111,7 +111,7 @@
           <button
             type="button"
             onclick={() => showForgotPassword = false}
-            class="w-full text-sm text-blue-600 hover:text-blue-800"
+            class="w-full text-sm text-blue-600 hover:text-blue-800 cursor-pointer"
           >
             Back to sign in
           </button>
@@ -121,7 +121,7 @@
         <!-- Google OAuth Button -->
         <button
           onclick={handleGoogleAuth}
-          class="w-full flex items-center justify-center px-4 py-2 border border-gray-300 rounded-md shadow-sm bg-white text-sm font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors"
+          class="w-full flex items-center justify-center px-4 py-2 border border-gray-300 rounded-md shadow-sm bg-white text-sm font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors cursor-pointer"
         >
           <svg class="w-5 h-5 mr-2" viewBox="0 0 24 24">
             <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
@@ -174,7 +174,7 @@
           <button
             type="submit"
             disabled={loading}
-            class="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 text-white font-semibold py-2 px-4 rounded-md transition-colors"
+            class="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 text-white font-semibold py-2 px-4 rounded-md transition-colors cursor-pointer"
           >
             {loading ? 'Loading...' : mode === 'signin' ? 'Sign in' : 'Sign up'}
           </button>
@@ -183,7 +183,7 @@
             <button
               type="button"
               onclick={() => showForgotPassword = true}
-              class="text-blue-600 hover:text-blue-800"
+              class="text-blue-600 hover:text-blue-800 cursor-pointer"
             >
               Forgot password?
             </button>
@@ -191,7 +191,7 @@
             <button
               type="button"
               onclick={() => mode = mode === 'signin' ? 'signup' : 'signin'}
-              class="text-blue-600 hover:text-blue-800"
+              class="text-blue-600 hover:text-blue-800 cursor-pointer"
             >
               {mode === 'signin' ? 'Create account' : 'Sign in instead'}
             </button>

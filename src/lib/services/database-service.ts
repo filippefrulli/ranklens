@@ -278,7 +278,6 @@ export class DatabaseService {
                 !businessNameLower.includes(userBusinessName) && 
                 !userBusinessName.includes(businessNameLower)) {
               
-              console.log(`🏆 Adding competitor: "${businessName}" (rank ${rank}) beats user rank ${targetRank}`)
               allCompetitors.push({
                 name: businessName,
                 rank: rank,
@@ -292,13 +291,8 @@ export class DatabaseService {
         }
       })
 
-      console.log('🏆 All competitors found:', allCompetitors)
-
       if (allCompetitors.length === 0) {
-        console.log('❌ No competitors found. Possible reasons:')
-        console.log('  - User business not found in any rankings')
-        console.log('  - No businesses rank higher than user business')
-        console.log('  - Business name matching issues')
+        console.log('❌ No competitors found')
         
         // Still return user's business data if available
         const userBusinessData = this.getUserBusinessData(attempts, userBusinessName)

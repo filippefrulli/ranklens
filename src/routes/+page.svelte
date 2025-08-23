@@ -89,7 +89,7 @@
             </svg>
           </div>
           <h3 class="text-xl font-bold text-gray-900 mb-3">Multi-LLM Analysis</h3>
-          <p class="text-gray-600">Test your rankings across OpenAI GPT-4, Claude, Gemini, and Perplexity with automated queries.</p>
+          <p class="text-gray-600">Test your rankings across OpenAI GPT-5, Claude, Gemini, and Perplexity with automated queries.</p>
         </div>
 
         <div class="bg-white rounded-xl shadow-lg p-8 text-center">

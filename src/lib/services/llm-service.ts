@@ -104,8 +104,6 @@ export class LLMService {
       if (foundResult.rank) {
         console.log(`✅ Found match: "${foundResult.foundName}" at rank ${foundResult.rank}`)
       } else {
-        console.log(`❌ No match found for "${businessName}"`)
-        console.log(`🧪 Testing fuzzy matches:`)
         rankedBusinesses.forEach((business, index) => {
           const score = this.fuzzyMatch(businessName, business)
           if (score > 0) {
@@ -118,11 +116,9 @@ export class LLMService {
       if (!foundResult.rank && rankedBusinesses.length >= requestCount - 5) {
         console.log(`🔄 Business not found, trying extended request...`)
         const extendedPrompt = this.buildExtendedPrompt(query, rankedBusinesses.length + 15)
-        console.log(`📤 Extended prompt:`, extendedPrompt)
         
         const extendedResponse = await this.callProvider(provider, extendedPrompt)
         const extendedResponseText = await extendedResponse.text()
-        console.log(`📄 Extended response:`, extendedResponseText)
         
         const mockExtendedResponse = new Response(extendedResponseText, {
           status: extendedResponse.status,
@@ -133,7 +129,6 @@ export class LLMService {
         const extendedList = await this.parseResponse(mockExtendedResponse, provider.name)
         
         if (extendedList.length > rankedBusinesses.length) {
-          console.log(`📈 Extended list has ${extendedList.length} businesses (was ${rankedBusinesses.length})`)
           rankedBusinesses = extendedList
           totalRequested = rankedBusinesses.length
           foundResult = this.findBusinessInList(businessName, rankedBusinesses)
@@ -197,7 +192,7 @@ Query: ${query}`
 
   private static async callProvider(provider: LLMProvider, prompt: string): Promise<Response> {
     switch (provider.name) {
-      case 'OpenAI GPT-4':
+      case 'OpenAI GPT-5':
         return this.callOpenAI(prompt)
       case 'Anthropic Claude':
         return this.callAnthropic(prompt)
@@ -214,17 +209,15 @@ Query: ${query}`
     const apiKey = import.meta.env.VITE_OPENAI_API_KEY
     if (!apiKey) throw new Error('OpenAI API key not configured')
 
-    return fetch('https://api.openai.com/v1/chat/completions', {
+    return fetch('https://api.openai.com/v1/responses', {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${apiKey}`,
         'Content-Type': 'application/json'
       },
       body: JSON.stringify({
-        model: 'gpt-4',
-        messages: [{ role: 'user', content: prompt }],
-        max_tokens: 500,
-        temperature: 0.3
+        model: 'gpt-5-mini',
+        input: prompt
       })
     })
   }
@@ -298,8 +291,20 @@ Query: ${query}`
     let content: string
 
     switch (providerName) {
-      case 'OpenAI GPT-4':
-        content = data.choices[0]?.message?.content || ''
+      case 'OpenAI GPT-5':
+        // GPT-5 mini has a new response format with output array
+        if (data.output && data.output.length > 1) {
+          // Find the message output (type: "message")
+          const messageOutput = data.output.find((output: any) => output.type === 'message')
+          if (messageOutput && messageOutput.content && messageOutput.content.length > 0) {
+            content = messageOutput.content[0]?.text || ''
+          } else {
+            content = ''
+          }
+        } else {
+          // Fallback to old format if needed
+          content = data.choices?.[0]?.message?.content || ''
+        }
         console.log(`💬 OpenAI content extracted:`, content)
         break
       case 'Anthropic Claude':
@@ -329,7 +334,6 @@ Query: ${query}`
       if (match && match[1]) {
         const businessName = match[1].trim()
         businesses.push(businessName)
-        console.log(`  ✓ Found: "${businessName}"`)
       } else if (line.trim()) {
         console.log(`  ✗ Skipped: "${line.trim()}" (doesn't match pattern)`)
       }

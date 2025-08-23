@@ -90,7 +90,7 @@ CREATE TABLE ranking_sources (
 
 -- Insert default LLM providers with source support info
 INSERT INTO llm_providers (name, supports_sources, is_active) VALUES
-('OpenAI GPT-4', false, true),
+('OpenAI GPT-5', false, true),
 ('Anthropic Claude', false, true),
 ('Google Gemini', false, true),
 ('Perplexity AI', true, true);

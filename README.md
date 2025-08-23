@@ -2,7 +2,7 @@
 
 **Track your business rankings across all major LLM platforms.**
 
-RankLens helps businesses understand how they rank when customers ask AI assistants for recommendations. Get comprehensive analytics from OpenAI GPT-4, Anthropic Claude, Google Gemini, and Perplexity AI.
+RankLens helps businesses understand how they rank when customers ask AI assistants for recommendations. Get comprehensive analytics from OpenAI GPT-5, Anthropic Claude, Google Gemini, and Perplexity AI.
 
 ## 🎯 What RankLens Does
 

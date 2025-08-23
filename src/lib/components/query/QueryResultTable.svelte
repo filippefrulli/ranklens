@@ -6,7 +6,7 @@
     
     switch (llmName.toLowerCase()) {
       case 'openai':
-        return 'OpenAI GPT-4'
+        return 'OpenAI GPT-5'
       case 'anthropic':
         return 'Anthropic Claude'
       case 'gemini':

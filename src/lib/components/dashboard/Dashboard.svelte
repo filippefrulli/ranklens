@@ -223,16 +223,21 @@
           }
 
           responses.forEach((response, index) => {
-            rankingAttempts.push({
-              analysis_run_id: analysisRun.id,
-              query_id: query.id,
-              llm_provider_id: provider.id,
-              attempt_number: index + 1,
-              parsed_ranking: response.rankedBusinesses,
-              target_business_rank: response.foundBusinessRank,
-              success: response.success,
-              error_message: response.error || null
-            })
+            // Only save successful requests to the database
+            if (response.success) {
+              rankingAttempts.push({
+                analysis_run_id: analysisRun.id,
+                query_id: query.id,
+                llm_provider_id: provider.id,
+                attempt_number: index + 1,
+                parsed_ranking: response.rankedBusinesses,
+                target_business_rank: response.foundBusinessRank,
+                success: response.success,
+                error_message: response.error || null
+              })
+            } else {
+              console.warn(`❌ Skipping failed LLM request from ${providerName}, attempt ${index + 1}: ${response.error}`)
+            }
           })
         }
 

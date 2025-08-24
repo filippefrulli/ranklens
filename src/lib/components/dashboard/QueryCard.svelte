@@ -55,7 +55,7 @@
     </a>
   </div>
 
-  <div class="flex justify-between items-center mb-4">
+  <div class="flex justify-between items-center">
     <!-- Average Rank -->
     <div class="text-center">
       <div class="text-2xl font-bold text-gray-900">
@@ -72,11 +72,11 @@
     </div>
 
     <!-- Historical Ranking Chart -->
-    <div class="flex-1 max-w-48">
+    <div class="flex-1 max-w-64">
       <div class="text-sm text-gray-500 mb-2">
         {history.length > 0 ? 'Ranking History' : 'LLM Breakdown'}
       </div>
-      <div class="h-20 bg-gray-100 rounded flex items-end justify-center space-x-1 px-2">
+      <div class="h-32 bg-gray-100 rounded flex items-end justify-center space-x-1 px-2">
         {#if loadingHistories}
           <div class="text-xs text-gray-400 flex items-center">
             <div class="animate-spin rounded-full h-4 w-4 border-b-2 border-gray-400 mr-2"></div>
@@ -107,30 +107,6 @@
       </div>
     </div>
   </div>
-
-  <!-- Additional Stats -->
-  {#if latestRanking}
-    <div class="grid grid-cols-3 gap-4 text-center border-t border-gray-200 pt-4 mt-4">
-      <div>
-        <div class="text-sm font-medium text-gray-900">
-          {latestRanking.best_rank || 'N/A'}
-        </div>
-        <div class="text-xs text-gray-500">Best Rank</div>
-      </div>
-      <div>
-        <div class="text-sm font-medium text-gray-900">
-          {latestRanking.successful_attempts}/{latestRanking.total_attempts}
-        </div>
-        <div class="text-xs text-gray-500">Found</div>
-      </div>
-      <div>
-        <div class="text-sm font-medium text-gray-900">
-          {history.length}
-        </div>
-        <div class="text-xs text-gray-500">Total Runs</div>
-      </div>
-    </div>
-  {/if}
 </div>
 
 <style>

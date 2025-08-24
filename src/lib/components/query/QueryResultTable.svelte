@@ -1,5 +1,7 @@
 <script lang="ts">
-  export let rankingResults: any[]
+  import type { RankingAttemptWithJoins } from '../../types'
+  
+  export let rankingResults: RankingAttemptWithJoins[]
 
   function formatLLMName(llmName: string): string {
     if (!llmName) return 'Unknown Provider'
@@ -33,8 +35,8 @@
     }
   }
 
-  function getRankBadgeClass(rank: number | null): string {
-    if (rank === null) return 'bg-gray-100 text-gray-800'
+  function getRankBadgeClass(rank: number | null | undefined): string {
+    if (rank === null || rank === undefined) return 'bg-gray-100 text-gray-800'
     if (rank <= 3) return 'bg-green-100 text-green-800'
     if (rank <= 7) return 'bg-yellow-100 text-yellow-800'
     return 'bg-red-100 text-red-800'
@@ -85,15 +87,6 @@
             <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
               Rank
             </th>
-            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-              Analysis Run
-            </th>
-            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-              Attempted At
-            </th>
-            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-              Error Details
-            </th>
           </tr>
         </thead>
         <tbody class="bg-white divide-y divide-gray-200">
@@ -116,21 +109,6 @@
                   </span>
                 {:else}
                   <span class="text-gray-400 text-sm">—</span>
-                {/if}
-              </td>
-              <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                #{result.analysis_run_id}
-              </td>
-              <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                {new Date(result.created_at).toLocaleString()}
-              </td>
-              <td class="px-6 py-4 text-sm text-gray-500 max-w-xs">
-                {#if result.error_message}
-                  <div class="truncate" title={result.error_message}>
-                    {result.error_message}
-                  </div>
-                {:else}
-                  <span class="text-gray-400">—</span>
                 {/if}
               </td>
             </tr>

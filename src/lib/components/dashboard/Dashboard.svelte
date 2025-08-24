@@ -7,6 +7,7 @@
     Business,
     DashboardData,
     LLMProvider,
+    WeeklyAnalysisCheck,
   } from "../../types";
   import GoogleBusinessSearch from "../business/GoogleBusinessSearch.svelte";
   import DashboardHeader from "./DashboardHeader.svelte";
@@ -16,6 +17,8 @@
   import BusinessRegistration from "./BusinessRegistration.svelte";
   import AddQueryModal from "./AddQueryModal.svelte";
   import CreateBusinessModal from "./CreateBusinessModal.svelte";
+  import WeeklyAnalysisHistory from "./WeeklyAnalysisHistory.svelte";
+  import AnalysisProgressBar from "./AnalysisProgressBar.svelte";
 
   let business = $state<Business | null>(null);
   let dashboardData = $state<DashboardData | null>(null);
@@ -23,12 +26,22 @@
   let error = $state<string | null>(null);
   let llmProviders = $state<LLMProvider[]>([]);
   let selectedProvider = $state<LLMProvider | null>(null);
+  let weeklyCheck = $state<WeeklyAnalysisCheck>({ canRun: true });
 
   // Modal states
   let showCreateBusiness = $state(false);
   let showGoogleSearch = $state(false);
   let showAddQuery = $state(false);
   let runningAnalysis = $state(false);
+
+  // Progress tracking
+  let analysisProgress = $state({
+    currentStep: 0,
+    totalSteps: 0,
+    percentage: 0,
+    currentQuery: '',
+    currentProvider: ''
+  });
 
   // Form data
   let newBusiness = $state({
@@ -59,6 +72,16 @@
     }
   }
 
+  async function checkWeeklyAnalysis() {
+    if (!business?.id) return;
+    
+    try {
+      weeklyCheck = await DatabaseService.canRunWeeklyAnalysis(business.id);
+    } catch (err) {
+      console.error('Error checking weekly analysis:', err);
+    }
+  }
+
   async function loadBusiness() {
     if (!$user) return;
 
@@ -67,9 +90,10 @@
       error = null;
       business = await DatabaseService.getBusiness($user.id);
 
-      // If business exists, load dashboard data (including queries)
+      // If business exists, load dashboard data and check weekly analysis
       if (business) {
         await loadDashboardData();
+        await checkWeeklyAnalysis();
       }
     } catch (err) {
       console.error("Failed to load business:", err);
@@ -183,77 +207,171 @@
   }
 
   async function runAnalysis() {
-    console.log("🚀 Starting analysis...");
+    console.log("🚀 Starting weekly analysis...");
     console.log("Dashboard data:", dashboardData);
 
     if (!dashboardData?.business) {
       console.error("❌ No business found in dashboard data");
+      error = "No business found";
       return;
     }
 
     if (!dashboardData?.queries.length) {
       console.error("❌ No queries found in dashboard data");
+      error = "No queries found. Please add some queries first.";
       return;
     }
+
+    // Check if weekly analysis can be run
+    if (!weeklyCheck.canRun) {
+      const nextDate = weeklyCheck.nextAllowedDate 
+        ? new Date(weeklyCheck.nextAllowedDate).toLocaleDateString()
+        : 'next week';
+      error = `Weekly analysis already completed. Next analysis available: ${nextDate}`;
+      return;
+    }
+
+    let analysisRun: any = null;
 
     try {
       runningAnalysis = true;
       error = null;
 
       const providers = await DatabaseService.getLLMProviders();
-
       const activeProviders = providers.filter((p) => p.is_active);
 
       if (activeProviders.length === 0) {
         throw new Error("No active LLM providers found");
       }
 
-      // Create an analysis run for this session
-      const analysisRun = await DatabaseService.createAnalysisRun(
+      // Calculate total steps for progress tracking
+      const totalApiCalls = dashboardData.queries.length * activeProviders.length * 5; // 5 attempts per provider per query
+      analysisProgress = {
+        currentStep: 0,
+        totalSteps: totalApiCalls,
+        percentage: 0,
+        currentQuery: '',
+        currentProvider: ''
+      };
+
+      console.log(`📊 Initialized progress: ${analysisProgress.currentStep}/${analysisProgress.totalSteps} (${analysisProgress.percentage}%)`);
+
+      // Log provider status for debugging
+      console.log(`🔧 Active providers: ${activeProviders.map(p => p.name).join(', ')}`);
+
+      // Small delay to ensure progress bar is visible before starting
+      await new Promise(resolve => setTimeout(resolve, 100));
+
+      // Create an analysis run for this week
+      analysisRun = await DatabaseService.createAnalysisRun(
         dashboardData.business.id,
         dashboardData.queries.length
       );
 
+      console.log("📊 Created analysis run:", analysisRun.id);
+
+      // Update analysis run status to running
+      await DatabaseService.updateAnalysisRun(analysisRun.id, {
+        status: 'running',
+        started_at: new Date().toISOString()
+      });
+
       for (let i = 0; i < dashboardData.queries.length; i++) {
         const query = dashboardData.queries[i];
+        console.log(`📝 Processing query ${i + 1}/${dashboardData.queries.length}: ${query.text}`);
 
-        const results = await LLMService.runRankingAnalysis(
-          activeProviders,
-          query.text,
-          dashboardData.business.name,
-          5
-        );
+        // Update progress for current query
+        analysisProgress = {
+          ...analysisProgress,
+          currentQuery: query.text,
+          currentProvider: 'Starting...'
+        };
 
         const rankingAttempts: any[] = [];
 
-        for (const [providerName, responses] of results.entries()) {
-          const provider = activeProviders.find((p) => p.name === providerName);
-          if (!provider) {
-            console.warn(
-              `⚠️ Provider ${providerName} not found in active providers`
-            );
-            continue;
-          }
+        // Process each provider individually for better progress tracking
+        for (const provider of activeProviders) {
+          if (!provider.is_active) continue;
 
-          responses.forEach((response, index) => {
-            // Only save successful requests to the database
-            if (response.success) {
-              rankingAttempts.push({
-                analysis_run_id: analysisRun.id,
-                query_id: query.id,
-                llm_provider_id: provider.id,
-                attempt_number: index + 1,
-                parsed_ranking: response.rankedBusinesses,
-                target_business_rank: response.foundBusinessRank,
-                success: response.success,
-                error_message: response.error || null,
-              });
-            } else {
-              console.warn(
-                `❌ Skipping failed LLM request from ${providerName}, attempt ${index + 1}: ${response.error}`
-              );
+          // Update current provider
+          analysisProgress = {
+            ...analysisProgress,
+            currentProvider: provider.name
+          };
+
+          // Make 5 attempts for this provider
+          for (let attemptNum = 1; attemptNum <= 5; attemptNum++) {
+            try {
+              console.log(`🤖 ${provider.name} - Attempt ${attemptNum}/5`);
+              
+              const result = await LLMService.makeRequest(provider, query.text, dashboardData.business.name, 25);
+              
+              // Update progress after each API call
+              const newStep = analysisProgress.currentStep + 1;
+              analysisProgress = {
+                ...analysisProgress,
+                currentStep: newStep,
+                percentage: Math.round((newStep / analysisProgress.totalSteps) * 100)
+              };
+
+              console.log(`📈 Progress updated: ${newStep}/${analysisProgress.totalSteps} (${analysisProgress.percentage}%) - ${provider.name} attempt ${attemptNum}`);
+
+              // Only save successful requests to the database
+              if (result.success) {
+                rankingAttempts.push({
+                  analysis_run_id: analysisRun.id,
+                  query_id: query.id,
+                  llm_provider_id: provider.id,
+                  attempt_number: attemptNum,
+                  parsed_ranking: result.rankedBusinesses,
+                  target_business_rank: result.foundBusinessRank,
+                  success: result.success,
+                  error_message: result.error || null,
+                });
+
+                if (result.foundBusinessRank) {
+                  console.log(`✅ Found "${dashboardData.business.name}" as "${result.foundBusinessName}" at rank ${result.foundBusinessRank}/${result.totalRequested}`);
+                } else {
+                  console.log(`❌ "${dashboardData.business.name}" not found in results`);
+                }
+              } else {
+                console.warn(`❌ Failed LLM request from ${provider.name}, attempt ${attemptNum}: ${result.error}`);
+              }
+
+              // Small delay between requests to make progress visible and be nice to APIs
+              if (attemptNum < 5) {
+                await new Promise(resolve => setTimeout(resolve, 100));
+              }
+            } catch (err) {
+              console.error(`💥 Error in ${provider.name} attempt ${attemptNum}:`, err);
+              
+              // Check if this is an API key error
+              const errorMessage = err instanceof Error ? err.message : String(err);
+              if (errorMessage.toLowerCase().includes('api key') || errorMessage.toLowerCase().includes('unauthorized') || errorMessage.toLowerCase().includes('authentication')) {
+                console.warn(`🔑 ${provider.name} appears to have authentication issues - skipping remaining attempts`);
+                
+                // Skip remaining attempts for this provider and update progress accordingly
+                const remainingAttempts = 5 - attemptNum;
+                const newStep = analysisProgress.currentStep + remainingAttempts;
+                analysisProgress = {
+                  ...analysisProgress,
+                  currentStep: newStep,
+                  percentage: Math.round((newStep / analysisProgress.totalSteps) * 100)
+                };
+                console.log(`📈 Progress updated (skipped ${remainingAttempts} attempts): ${newStep}/${analysisProgress.totalSteps} (${analysisProgress.percentage}%) - ${provider.name} auth failed`);
+                break; // Exit the attempt loop for this provider
+              }
+              
+              // Still update progress even on error
+              const newStep = analysisProgress.currentStep + 1;
+              analysisProgress = {
+                ...analysisProgress,
+                currentStep: newStep,
+                percentage: Math.round((newStep / analysisProgress.totalSteps) * 100)
+              };
+              console.log(`📈 Progress updated (error): ${newStep}/${analysisProgress.totalSteps} (${analysisProgress.percentage}%) - ${provider.name} attempt ${attemptNum} failed`);
             }
-          });
+          }
         }
 
         if (rankingAttempts.length > 0) {
@@ -272,13 +390,38 @@
         completed_at: new Date().toISOString(),
       });
 
-      // Refresh dashboard data
+      console.log("✅ Weekly analysis completed successfully!");
+      
+      // Refresh dashboard data and weekly check
       await loadDashboardData();
+      await checkWeeklyAnalysis();
     } catch (err) {
-      console.error("❌ Analysis failed:", err);
+      console.error("❌ Weekly analysis failed:", err);
+      error = err instanceof Error ? err.message : "Failed to run weekly analysis";
+      
+      // If we created an analysis run, mark it as failed
+      if (analysisRun?.id) {
+        try {
+          await DatabaseService.updateAnalysisRun(analysisRun.id, {
+            status: "failed",
+            error_message: err instanceof Error ? err.message : "Unknown error",
+            completed_at: new Date().toISOString(),
+          });
+        } catch (updateError) {
+          console.error("Failed to update analysis run status:", updateError);
+        }
+      }
       error = err instanceof Error ? err.message : "Failed to run analysis";
     } finally {
       runningAnalysis = false;
+      // Reset progress
+      analysisProgress = {
+        currentStep: 0,
+        totalSteps: 0,
+        percentage: 0,
+        currentQuery: '',
+        currentProvider: ''
+      };
     }
   }
 
@@ -307,14 +450,20 @@
     {:else}
       <!-- Dashboard -->
       <div class="space-y-6">
-        <DashboardControls
-          {llmProviders}
-          bind:selectedProvider
-          hasQueries={!!dashboardData?.queries.length}
-          {runningAnalysis}
-          onAddQuery={() => (showAddQuery = true)}
-          onRunAnalysis={runAnalysis}
-        />
+    <DashboardControls
+      {llmProviders}
+      {selectedProvider}
+      hasQueries={dashboardData?.queries?.length! > 0}
+      {runningAnalysis}
+      {weeklyCheck}
+      onAddQuery={addQuery}
+      onRunAnalysis={runAnalysis}
+    />
+        
+        <!-- Analysis Progress Bar -->
+        {#if runningAnalysis}
+          <AnalysisProgressBar progress={analysisProgress} />
+        {/if}
 
         {#if dashboardData}
           <QueryGrid
@@ -322,6 +471,11 @@
             analytics={dashboardData.analytics}
             onAddQuery={() => (showAddQuery = true)}
           />
+          
+          <!-- Weekly Analysis History -->
+          <div class="mt-8">
+            <WeeklyAnalysisHistory businessId={business.id} />
+          </div>
         {/if}
       </div>
 
@@ -400,12 +554,3 @@
     </div>
   {/if}
 </div>
-
-<style>
-  .line-clamp-2 {
-    display: -webkit-box;
-    -webkit-line-clamp: 2;
-    -webkit-box-orient: vertical;
-    overflow: hidden;
-  }
-</style>

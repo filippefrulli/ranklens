@@ -1,8 +1,29 @@
 <script lang="ts">
-  import type { Query, RankingAnalytics } from '../../types'
+  import type { Query, RankingAnalytics, QueryRankingHistory } from '../../types'
   
   export let query: Query
   export let analytics: RankingAnalytics | undefined
+  export let history: QueryRankingHistory[] = []
+  export let loadingHistories: boolean = false
+
+  // Get the most recent ranking data for display
+  $: latestRanking = history.length > 0 ? history[history.length - 1] : null
+  $: displayRank = latestRanking?.average_rank || analytics?.average_rank
+
+  // Calculate chart height for each bar (lower rank = taller bar)
+  function getBarHeight(avgRank: number | null): number {
+    if (!avgRank) return 8
+    // Invert the ranking so rank 1 = tallest bar, rank 25+ = shortest bar
+    return Math.max(8, 80 - (avgRank - 1) * 3)
+  }
+
+  // Format date for display
+  function formatDate(dateStr: string): string {
+    return new Date(dateStr).toLocaleDateString('en-US', { 
+      month: 'short', 
+      day: 'numeric' 
+    })
+  }
 </script>
 
 <div class="bg-white rounded-lg shadow-md border border-gray-200 p-6">
@@ -38,38 +59,78 @@
     <!-- Average Rank -->
     <div class="text-center">
       <div class="text-2xl font-bold text-gray-900">
-        {analytics?.average_rank
-          ? analytics.average_rank.toFixed(1)
+        {displayRank
+          ? displayRank.toFixed(1)
           : "N/A"}
       </div>
       <div class="text-sm text-gray-500">Average Rank</div>
+      {#if latestRanking}
+        <div class="text-xs text-gray-400 mt-1">
+          {formatDate(latestRanking.run_date)}
+        </div>
+      {/if}
     </div>
 
-    <!-- Bigger Chart -->
-    <div class="flex-1 max-w-48 ml-6">
-      <div class="text-sm text-gray-500 mb-2">Trend</div>
-      <div class="h-20 bg-gray-100 rounded flex items-end justify-center space-x-1">
-        <!-- Simplified chart bars -->
-        {#if analytics?.llm_breakdown}
+    <!-- Historical Ranking Chart -->
+    <div class="flex-1 max-w-48">
+      <div class="text-sm text-gray-500 mb-2">
+        {history.length > 0 ? 'Ranking History' : 'LLM Breakdown'}
+      </div>
+      <div class="h-20 bg-gray-100 rounded flex items-end justify-center space-x-1 px-2">
+        {#if loadingHistories}
+          <div class="text-xs text-gray-400 flex items-center">
+            <div class="animate-spin rounded-full h-4 w-4 border-b-2 border-gray-400 mr-2"></div>
+            Loading...
+          </div>
+        {:else if history.length > 0}
+          {#each history.slice(-8) as run}
+            <div
+              class="bg-blue-500 w-3 rounded-t transition-all duration-300"
+              style="height: {getBarHeight(run.average_rank)}px"
+              title="Rank {run.average_rank?.toFixed(1) || 'N/A'} on {formatDate(run.run_date)}"
+            ></div>
+          {/each}
+        {:else if analytics?.llm_breakdown && analytics.llm_breakdown.length > 0}
+          <!-- Fallback to analytics data if no historical data -->
           {#each analytics.llm_breakdown.slice(0, 8) as breakdown}
             <div
               class="bg-blue-400 w-3 rounded-t"
               style="height: {breakdown.average_rank
                 ? Math.max(12, 80 - breakdown.average_rank * 3)
                 : 12}px"
+              title="LLM: {breakdown.provider_name}, Avg Rank: {breakdown.average_rank?.toFixed(1) || 'N/A'}"
             ></div>
           {/each}
         {:else}
-          <div class="text-xs text-gray-400">No data</div>
+          <div class="text-xs text-gray-400">No ranking data yet</div>
         {/if}
       </div>
     </div>
   </div>
 
-  <!-- Stats Row -->
-  <div class="flex justify-between text-sm text-gray-600">
-    <span>Mentions: {analytics?.total_mentions || 0}</span>
-  </div>
+  <!-- Additional Stats -->
+  {#if latestRanking}
+    <div class="grid grid-cols-3 gap-4 text-center border-t border-gray-200 pt-4 mt-4">
+      <div>
+        <div class="text-sm font-medium text-gray-900">
+          {latestRanking.best_rank || 'N/A'}
+        </div>
+        <div class="text-xs text-gray-500">Best Rank</div>
+      </div>
+      <div>
+        <div class="text-sm font-medium text-gray-900">
+          {latestRanking.successful_attempts}/{latestRanking.total_attempts}
+        </div>
+        <div class="text-xs text-gray-500">Found</div>
+      </div>
+      <div>
+        <div class="text-sm font-medium text-gray-900">
+          {history.length}
+        </div>
+        <div class="text-xs text-gray-500">Total Runs</div>
+      </div>
+    </div>
+  {/if}
 </div>
 
 <style>

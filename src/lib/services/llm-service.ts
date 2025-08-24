@@ -60,14 +60,13 @@ export class LLMService {
     return { rank: null, foundName: null }
   }
 
-  private static async makeRequest(
+  public static async makeRequest(
     provider: LLMProvider,
     query: string,
     businessName: string,
     requestCount: number = 25
   ): Promise<LLMResponse> {
     const startTime = Date.now()
-    console.log(`🔥 Making request to ${provider.name} for "${query}" (target: "${businessName}")`)
     
     try {
       let rankedBusinesses: string[] = []
@@ -75,12 +74,9 @@ export class LLMService {
       let foundResult = { rank: null as number | null, foundName: null as string | null }
       
       // First attempt with initial count
-      console.log(`📝 Building prompt for ${requestCount} businesses...`)
       const prompt = this.buildPrompt(query, requestCount)
-      console.log(`📤 Sending prompt to ${provider.name}:`, prompt)
       
       const response = await this.callProvider(provider, prompt)
-      console.log(`📥 Raw response from ${provider.name}:`, response.status, response.statusText)
       
       const responseText = await response.text()
       console.log(`📄 Raw response text from ${provider.name}:`, responseText)
@@ -93,12 +89,7 @@ export class LLMService {
       })
       
       rankedBusinesses = await this.parseResponse(mockResponse, provider.name)
-      console.log(`📋 Parsed ${rankedBusinesses.length} businesses from ${provider.name}:`)
-      rankedBusinesses.forEach((business, index) => {
-        console.log(`  ${index + 1}. ${business}`)
-      })
       
-      console.log(`🔍 Searching for "${businessName}" in results...`)
       foundResult = this.findBusinessInList(businessName, rankedBusinesses)
       
       if (foundResult.rank) {

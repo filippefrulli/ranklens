@@ -32,6 +32,7 @@ export interface AnalysisRun {
   id: string
   business_id: string
   run_date: string
+  week_start_date?: string
   status: 'pending' | 'running' | 'completed' | 'failed'
   total_queries: number
   completed_queries: number
@@ -41,6 +42,14 @@ export interface AnalysisRun {
   started_at?: string
   completed_at?: string
   created_at: string
+}
+
+// Weekly analysis check result
+export interface WeeklyAnalysisCheck {
+  canRun: boolean
+  lastRunDate?: string
+  nextAllowedDate?: string
+  currentWeekRun?: AnalysisRun
 }
 
 export interface RankingAttempt {
@@ -100,6 +109,16 @@ export interface RankingAnalytics {
     average_rank: number
     mention_count: number
   }[]
+}
+
+export interface QueryRankingHistory {
+  run_date: string
+  analysis_run_id: string
+  average_rank: number | null
+  best_rank: number | null
+  worst_rank: number | null
+  total_attempts: number
+  successful_attempts: number
 }
 
 export interface DashboardData {

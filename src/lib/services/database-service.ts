@@ -444,6 +444,166 @@ export class DatabaseService {
     return data
   }
 
+  // Weekly Analysis operations
+  static async canRunWeeklyAnalysis(businessId: string): Promise<import('../types').WeeklyAnalysisCheck> {
+    // For development: bypass weekly limit until week_start_date column is added
+    // TODO: Remove this when moving to production
+    if (import.meta.env.DEV || import.meta.env.VITE_DISABLE_WEEKLY_LIMIT === 'true') {
+      console.log('🚧 Development mode: Weekly analysis limit disabled');
+      return { canRun: true };
+    }
+
+    try {
+      const today = new Date();
+      const weekStart = new Date(today);
+      // Get Monday of current week (Monday = 1, Sunday = 0)
+      const dayOfWeek = today.getDay();
+      const daysToMonday = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
+      weekStart.setDate(today.getDate() + daysToMonday);
+      weekStart.setHours(0, 0, 0, 0);
+
+      const { data: existingRun, error } = await supabase
+        .from('analysis_runs')
+        .select('*')
+        .eq('business_id', businessId)
+        .gte('run_date', weekStart.toISOString().split('T')[0])
+        .single();
+
+      if (error && error.code !== 'PGRST116') { // PGRST116 = no rows returned
+        throw error;
+      }
+
+      if (existingRun) {
+        const nextWeek = new Date(weekStart);
+        nextWeek.setDate(nextWeek.getDate() + 7);
+        
+        return {
+          canRun: false,
+          lastRunDate: existingRun.run_date,
+          nextAllowedDate: nextWeek.toISOString().split('T')[0],
+          currentWeekRun: existingRun
+        };
+      }
+
+      return { canRun: true };
+    } catch (error) {
+      console.error('Error checking weekly analysis:', error);
+      // If there's any error (like missing week_start_date column), allow analysis in dev
+      if (import.meta.env.DEV) {
+        console.warn('🚧 Database error in dev mode, allowing analysis to proceed');
+        return { canRun: true };
+      }
+      throw error;
+    }
+  }
+
+  static async getWeeklyAnalysisHistory(businessId: string, limit: number = 10): Promise<AnalysisRun[]> {
+    try {
+      const { data, error } = await supabase
+        .from('analysis_runs')
+        .select('*')
+        .eq('business_id', businessId)
+        .order('run_date', { ascending: false })
+        .limit(limit);
+
+      if (error) throw error;
+      return data || [];
+    } catch (error) {
+      console.error('Error fetching analysis history:', error);
+      throw error;
+    }
+  }
+
+  static async getRankingAttemptsForRun(analysisRunId: string): Promise<RankingAttempt[]> {
+    try {
+      const { data, error } = await supabase
+        .from('ranking_attempts')
+        .select('*')
+        .eq('analysis_run_id', analysisRunId)
+        .order('created_at', { ascending: true });
+
+      if (error) throw error;
+      return data || [];
+    } catch (error) {
+      console.error('Error fetching ranking attempts for run:', error);
+      throw error;
+    }
+  }
+
+  static async getQueryRankingHistory(queryId: string, limit: number = 10): Promise<import('../types').QueryRankingHistory[]> {
+    try {
+      console.log(`Fetching ranking history for query: ${queryId}`)
+      
+      const { data, error } = await supabase
+        .from('ranking_attempts')
+        .select(`
+          analysis_run_id,
+          target_business_rank,
+          success,
+          analysis_runs!inner(
+            run_date
+          )
+        `)
+        .eq('query_id', queryId)
+        .limit(limit * 20); // Get more data to group by run
+
+      console.log(`Raw data for query ${queryId}:`, { data, error })
+
+      if (error) throw error;
+      
+      // Group by analysis run and calculate stats
+      const runStats = new Map<string, {
+        run_date: string
+        analysis_run_id: string
+        ranks: number[]
+        total_attempts: number
+        successful_attempts: number
+      }>();
+
+      data?.forEach((attempt: any) => {
+        const runId = attempt.analysis_run_id;
+        const runDate = attempt.analysis_runs?.run_date;
+        
+        if (!runStats.has(runId)) {
+          runStats.set(runId, {
+            run_date: runDate,
+            analysis_run_id: runId,
+            ranks: [],
+            total_attempts: 0,
+            successful_attempts: 0
+          });
+        }
+        
+        const stats = runStats.get(runId)!;
+        stats.total_attempts++;
+        
+        if (attempt.success && attempt.target_business_rank) {
+          stats.successful_attempts++;
+          stats.ranks.push(attempt.target_business_rank);
+        }
+      });
+
+      // Convert to final format
+      return Array.from(runStats.values())
+        .sort((a, b) => new Date(a.run_date).getTime() - new Date(b.run_date).getTime())
+        .slice(-limit)
+        .map(stats => ({
+          run_date: stats.run_date,
+          analysis_run_id: stats.analysis_run_id,
+          average_rank: stats.ranks.length > 0 
+            ? stats.ranks.reduce((sum, rank) => sum + rank, 0) / stats.ranks.length 
+            : null,
+          best_rank: stats.ranks.length > 0 ? Math.min(...stats.ranks) : null,
+          worst_rank: stats.ranks.length > 0 ? Math.max(...stats.ranks) : null,
+          total_attempts: stats.total_attempts,
+          successful_attempts: stats.successful_attempts
+        }));
+    } catch (error) {
+      console.error('Error fetching query ranking history:', error);
+      throw error;
+    }
+  }
+
   // Ranking Attempt operations
   static async createRankingAttempt(attempt: Omit<RankingAttempt, 'id' | 'created_at'>): Promise<RankingAttempt> {
     const { data, error } = await supabase

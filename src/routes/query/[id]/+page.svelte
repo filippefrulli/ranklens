@@ -1,105 +1,120 @@
 <script lang="ts">
   import { page } from '$app/stores'
   import { goto } from '$app/navigation'
+  import { onMount } from 'svelte'
   import { DatabaseService } from '../../../lib/services/database-service'
   import { user } from '../../../lib/services/auth-service'
   import QueryResultHeader from '../../../lib/components/query/QueryResultHeader.svelte'
-  import QueryResultTable from '../../../lib/components/query/QueryResultTable.svelte'
+  import RankingResultsByLLMTable from '../../../lib/components/query/RankingResultsByLLMTable.svelte'
   import CompetitorRankingsTable from '../../../lib/components/query/CompetitorRankingsTable.svelte'
   import LoadingSpinner from '../../../lib/components/ui/LoadingSpinner.svelte'
   import ErrorMessage from '../../../lib/components/ui/ErrorMessage.svelte'
   import type { Query, RankingAttempt } from '../../../lib/types'
 
   let query = $state<Query | null>(null)
+  let analysisRuns = $state<{id: string, created_at: string}[]>([])
+  let selectedRunId = $state<string | null>(null)
   let rankingResults = $state<RankingAttempt[]>([])
   let competitorRankings = $state<any[]>([])
   let loading = $state(false)
+  let loadingData = $state(false)
   let error = $state<string | null>(null)
 
-  // Reactive queryId from page params using $derived
   let queryId = $derived($page.params.id || '')
 
-  // Load data when queryId or user changes
-  $effect(() => {
-    console.log('🔄 Effect triggered - queryId:', queryId, 'user:', $user)
-    
-    if (!$user) {
-      console.log('❌ No user, redirecting to login')
-      goto('/auth/login')
-      return
+  onMount(() => {
+    if ($user && queryId) {
+      loadInitialData()
     }
-    
-    if (!queryId) {
-      console.log('❌ No query ID provided')
-      error = 'Invalid query ID'
-      return
-    }
-    
-    // Call the async function
-    loadQueryResults()
   })
 
-  async function loadQueryResults() {
-    if (!queryId) return
+  async function loadInitialData() {
+    if (!queryId || !$user) return
     
     try {
-      console.log('🔄 Starting to load query results for ID:', queryId)
       loading = true
       error = null
+      console.log('🔄 Loading initial data for query:', queryId)
 
       // Get query details
-      console.log('📋 Fetching query details...')
       const queryData = await DatabaseService.getQuery(queryId)
-      console.log('📋 Query data received:', queryData)
-      
       if (!queryData) {
-        console.log('❌ Query not found')
         error = 'Query not found'
         return
       }
 
-      // Verify the query belongs to the user's business
-      if ($user) {
-        console.log('🏢 Fetching user business...')
-        const business = await DatabaseService.getBusiness($user.id)
-        console.log('🏢 Business data:', business)
-        
-        if (!business || queryData.business_id !== business.id) {
-          console.log('❌ Access denied - business mismatch')
-          error = 'Access denied'
-          return
-        }
+      // Verify access
+      const business = await DatabaseService.getBusiness($user.id)
+      if (!business || queryData.business_id !== business.id) {
+        error = 'Access denied'
+        return
       }
 
       query = queryData
-      console.log('✅ Query set successfully')
 
-      // Get ranking results for this query
-      console.log('📊 Fetching ranking results...')
-      const results = await DatabaseService.getQueryRankingResults(queryId)
-      console.log('📊 Ranking results received:', results)
+      // Get analysis runs
+      const runs = await DatabaseService.getQueryAnalysisRuns(queryId)
+      analysisRuns = runs
       
-      rankingResults = results
+      // Select the latest run by default
+      if (runs.length > 0) {
+        selectedRunId = runs[0].id
+        await loadRunData(runs[0].id)
+      }
 
-      // Get competitor rankings
-      console.log('🏆 Fetching competitor rankings...')
-      const competitors = await DatabaseService.getCompetitorRankings(queryId)
-      console.log('🏆 Competitor rankings received:', competitors)
-      
-      competitorRankings = competitors
-      console.log('✅ All data loaded successfully')
-
+      console.log('✅ Initial data loaded successfully')
     } catch (err: any) {
-      console.error('💥 Error loading query results:', err)
-      error = err.message || 'Failed to load query results'
+      console.error('� Error loading initial data:', err)
+      error = err.message || 'Failed to load data'
     } finally {
       loading = false
-      console.log('🏁 Loading completed')
     }
+  }
+
+  async function loadRunData(runId: string) {
+    if (!queryId || !runId) return
+    
+    try {
+      loadingData = true
+      console.log('🔄 Loading data for run:', runId)
+
+      // Load ranking results and competitor rankings for this specific run
+      const [rankings, competitors] = await Promise.all([
+        DatabaseService.getQueryRankingResultsByRun(queryId, runId),
+        DatabaseService.getCompetitorRankingsByRun(queryId, runId)
+      ])
+
+      rankingResults = rankings
+      competitorRankings = competitors
+
+      console.log('✅ Run data loaded:', rankings.length, 'rankings,', competitors.length, 'competitors')
+    } catch (err: any) {
+      console.error('💥 Error loading run data:', err)
+      error = err.message || 'Failed to load run data'
+    } finally {
+      loadingData = false
+    }
+  }
+
+  async function selectRun(runId: string) {
+    if (runId === selectedRunId) return
+    
+    selectedRunId = runId
+    await loadRunData(runId)
   }
 
   function goBack() {
     goto('/')
+  }
+
+  function formatDate(dateString: string) {
+    return new Date(dateString).toLocaleDateString('en-US', {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    })
   }
 </script>
 
@@ -119,8 +134,76 @@
       </div>
     {:else if query}
       <QueryResultHeader {query} {goBack} />
-      <QueryResultTable {rankingResults} />
-      <CompetitorRankingsTable {competitorRankings} />
+      
+      <!-- Analysis Run Selector and LLM Results side by side -->
+      {#if analysisRuns.length > 0}
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+          <!-- Analysis Runs (Left Half) -->
+          <div class="bg-white rounded-lg shadow p-6">
+            <h3 class="text-lg font-medium text-gray-900 mb-4">Analysis Runs</h3>
+            <div class="space-y-2">
+              {#each analysisRuns as run (run.id)}
+                <label class="flex items-center p-3 rounded-lg border cursor-pointer hover:bg-gray-50 {selectedRunId === run.id ? 'border-blue-500 bg-blue-50' : 'border-gray-200'}">
+                  <input
+                    type="radio"
+                    name="analysisRun"
+                    value={run.id}
+                    checked={selectedRunId === run.id}
+                    onchange={() => selectRun(run.id)}
+                    class="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300"
+                  />
+                  <div class="ml-3 flex-1">
+                    <div class="flex items-center justify-between">
+                      <span class="text-sm font-medium text-gray-900">
+                        {formatDate(run.created_at)}
+                      </span>
+                      {#if selectedRunId === run.id}
+                        <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                          Selected
+                        </span>
+                      {/if}
+                    </div>
+                    <p class="text-sm text-gray-500">
+                      Run ID: {run.id.slice(0, 8)}...
+                    </p>
+                  </div>
+                </label>
+              {/each}
+            </div>
+          </div>
+          
+          <!-- LLM Results (Right Half) -->
+          {#if selectedRunId && rankingResults.length > 0}
+            <RankingResultsByLLMTable {rankingResults} />
+          {:else if selectedRunId}
+            <div class="bg-white rounded-lg shadow p-6 flex items-center justify-center">
+              <p class="text-gray-500">No LLM results for selected run</p>
+            </div>
+          {:else}
+            <div class="bg-white rounded-lg shadow p-6 flex items-center justify-center">
+              <p class="text-gray-500">Select a run to view LLM results</p>
+            </div>
+          {/if}
+        </div>
+      {/if}
+      
+      <!-- Results Tables -->
+      {#if loadingData}
+        <div class="bg-white rounded-lg shadow p-6 text-center">
+          <LoadingSpinner message="Loading run data..." />
+        </div>
+      {:else if selectedRunId && competitorRankings.length > 0}
+        <!-- Competitor Rankings (full width) -->
+        <CompetitorRankingsTable {competitorRankings} />
+      {:else if selectedRunId}
+        <div class="bg-white rounded-lg shadow p-6 text-center">
+          <p class="text-gray-500">No competitor rankings found for the selected analysis run.</p>
+        </div>
+      {:else if analysisRuns.length === 0}
+        <div class="bg-white rounded-lg shadow p-6 text-center">
+          <p class="text-gray-500">No analysis runs found for this query. Run an analysis to see results.</p>
+        </div>
+      {/if}
     {/if}
   </div>
 </div>

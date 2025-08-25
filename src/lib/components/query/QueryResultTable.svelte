@@ -1,7 +1,5 @@
 <script lang="ts">
-  import type { RankingAttemptWithJoins } from '../../types'
-  
-  export let rankingResults: RankingAttemptWithJoins[]
+  export let rankingResults: any[]
 
   function formatLLMName(llmName: string): string {
     if (!llmName) return 'Unknown Provider'

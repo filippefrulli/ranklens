@@ -953,4 +953,145 @@ export class DatabaseService {
       }
     }
   }
+
+  // New methods for run-based filtering
+  static async getQueryAnalysisRuns(queryId: string): Promise<{id: string, created_at: string}[]> {
+    console.log('📋 DatabaseService.getQueryAnalysisRuns called with queryId:', queryId)
+    
+    const { data, error } = await supabase
+      .from('ranking_attempts')
+      .select('analysis_run_id, analysis_runs!inner(id, created_at)')
+      .eq('query_id', queryId)
+    
+    if (error) {
+      console.log('❌ Error in getQueryAnalysisRuns:', error)
+      throw new Error(`Failed to fetch analysis runs: ${error.message}`)
+    }
+
+    // Extract unique runs
+    const runMap = new Map<string, {id: string, created_at: string}>()
+    data?.forEach((item: any) => {
+      if (item.analysis_runs && !runMap.has(item.analysis_runs.id)) {
+        runMap.set(item.analysis_runs.id, {
+          id: item.analysis_runs.id,
+          created_at: item.analysis_runs.created_at
+        })
+      }
+    })
+    
+    const uniqueRuns = Array.from(runMap.values()).sort((a, b) => 
+      new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+    )
+    
+    console.log('✅ Analysis runs retrieved:', uniqueRuns.length)
+    return uniqueRuns
+  }
+
+  static async getQueryRankingResultsByRun(queryId: string, analysisRunId: string): Promise<RankingAttempt[]> {
+    console.log('📊 DatabaseService.getQueryRankingResultsByRun called with queryId:', queryId, 'runId:', analysisRunId)
+    
+    const { data, error } = await supabase
+      .from('ranking_attempts')
+      .select(`
+        *,
+        llm_providers!inner(
+          id,
+          name
+        )
+      `)
+      .eq('query_id', queryId)
+      .eq('analysis_run_id', analysisRunId)
+      .order('created_at', { ascending: false })
+
+    if (error) {
+      console.log('❌ Error in getQueryRankingResultsByRun:', error)
+      throw new Error(`Failed to fetch ranking results: ${error.message}`)
+    }
+    
+    console.log('✅ Ranking results by run retrieved:', data?.length || 0)
+    return data || []
+  }
+
+  static async getCompetitorRankingsByRun(queryId: string, analysisRunId: string): Promise<any[]> {
+    
+    try {
+      // Get all successful ranking attempts for this query and specific run
+      const { data: attempts, error: attemptsError } = await supabase
+        .from('ranking_attempts')
+        .select('*')
+        .eq('query_id', queryId)
+        .eq('analysis_run_id', analysisRunId)
+        .eq('success', true)
+        .not('parsed_ranking', 'is', null)
+
+      if (attemptsError) {
+        console.log('❌ Error fetching ranking attempts for run:', attemptsError)
+        throw new Error(`Failed to fetch ranking attempts: ${attemptsError.message}`)
+      }
+
+      if (!attempts || attempts.length === 0) {
+        console.log('ℹ️ No successful attempts with parsed rankings found for this run')
+        return []
+      }
+
+      console.log('📊 Processing attempts client-side for run:', attempts.length, 'attempts')
+
+      // Get user's business name
+      const { data: query, error: queryError } = await supabase
+        .from('queries')
+        .select(`
+          *,
+          businesses!inner(
+            name
+          )
+        `)
+        .eq('id', queryId)
+        .single()
+
+      if (queryError) throw queryError
+      const userBusinessName = query.businesses.name.toLowerCase()
+      console.log('🏢 User business name:', userBusinessName)
+
+      // Process each attempt to extract competitors
+      const allCompetitors: any[] = []
+      
+      attempts.forEach((attempt, attemptIndex) => {
+        try {
+          const parsedRanking = JSON.parse(attempt.parsed_ranking)
+          if (Array.isArray(parsedRanking)) {
+            parsedRanking.forEach((businessName, index) => {
+              const rank = index + 1
+              const cleanBusinessName = businessName.toLowerCase().trim()
+              
+              // Skip if it's the user's business
+              if (cleanBusinessName !== userBusinessName) {
+                allCompetitors.push({
+                  id: `${attempt.id}-${rank}`,
+                  ranking_attempt_id: attempt.id,
+                  business_name: businessName,
+                  rank_position: rank,
+                  analysis_run_id: analysisRunId,
+                  llm_provider: attempt.llm_provider_id,
+                  attempt_number: attempt.attempt_number,
+                  created_at: attempt.created_at
+                })
+              }
+            })
+          }
+        } catch (parseError) {
+          console.warn('Failed to parse ranking for attempt:', attempt.id, parseError)
+        }
+      })
+
+      // Sort by rank position
+      allCompetitors.sort((a, b) => a.rank_position - b.rank_position)
+      
+      console.log('✅ Competitor rankings by run retrieved:', allCompetitors.length)
+      return allCompetitors
+
+    } catch (error: any) {
+      console.error('💥 Error in getCompetitorRankingsByRun:', error)
+      throw new Error(`Failed to fetch competitor rankings: ${error.message}`)
+    }
+  }
 }

@@ -67,23 +67,17 @@
         </thead>
         <tbody class="bg-white divide-y divide-gray-200">
           {#each competitorRankings as competitor, index}
-            <tr class="hover:bg-gray-50 {competitor.is_user_business ? 'bg-blue-50 border-l-4 border-blue-500' : ''}">
+            <tr class="hover:bg-gray-50 {competitor.is_user_business ? 'bg-blue-50/80 border-l-4 border-blue-500 ring-2 ring-blue-400' : ''}" aria-current={competitor.is_user_business ? 'true' : 'false'}>
               <td class="px-6 py-4 whitespace-nowrap">
                 <div class="flex items-center">
-                  <div class="flex-shrink-0 w-8 h-8 {competitor.is_user_business ? 'bg-blue-100' : 'bg-gray-100'} rounded-full flex items-center justify-center">
-                    {#if competitor.is_user_business}
-                      <svg class="w-4 h-4 text-blue-600" fill="currentColor" viewBox="0 0 20 20">
-                        <path d="M10 2L3 7v11a1 1 0 001 1h3v-8a1 1 0 011-1h4a1 1 0 011 1v8h3a1 1 0 001-1V7l-7-5z"/>
-                      </svg>
-                    {:else}
-                      <span class="text-sm font-medium text-gray-600">#{index + 1}</span>
-                    {/if}
+                  <div class="flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center {competitor.is_user_business ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-700'}">
+                    <span class="text-sm font-semibold">#{index + 1}</span>
                   </div>
                   <div class="ml-4">
-                    <div class="text-sm font-medium {competitor.is_user_business ? 'text-blue-900' : 'text-gray-900'}">
+                    <div class="text-sm {competitor.is_user_business ? 'text-blue-900 font-semibold' : 'text-gray-900 font-medium'}">
                       {competitor.business_name}
                       {#if competitor.is_user_business}
-                        <span class="ml-2 inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-800">
+                        <span class="ml-2 inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold bg-blue-600 text-white">
                           Your Business
                         </span>
                       {/if}

@@ -76,7 +76,7 @@ export class LLMService {
       // First attempt with initial count
       const prompt = this.buildPrompt(query, requestCount)
       
-        // Call server-side proxy for provider
+  // Call server-side proxy for provider
         const resp = await fetch('/api/llm', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -88,9 +88,12 @@ export class LLMService {
           throw new Error(`LLM proxy error ${resp.status}: ${t}`)
         }
         
-        const { content } = await resp.json()
+  const { content } = await resp.json()
         
-        rankedBusinesses = this.extractBusinessNames(content)
+  rankedBusinesses = this.extractBusinessNames(content)
+  // Normalize by collapsing near-duplicate names so variants like
+  // "Big Bus Tours" vs "Big Bus Tours Dublin" don't count separately.
+  rankedBusinesses = this.deduplicateRankedList(rankedBusinesses)
       
       foundResult = this.findBusinessInList(businessName, rankedBusinesses)
       
@@ -129,15 +132,15 @@ export class LLMService {
   }
 
   private static buildPrompt(query: string, count: number = 25): string {
-    return `Please provide a ranked list of the top ${count} businesses that best match this query: "${query}"
+    return `Provide a ranked list of the top ${count} businesses that best match this query: "${query}"
 
-Requirements:
-- Return ONLY a numbered list of business names
-- List them in order of relevance/quality (best first)
-- Include ${count} businesses if possible
-- Format each as: "1. Business Name"
-- No additional commentary, explanations, or text
-- Focus on actual, real businesses
+Strict formatting and naming rules:
+- Return ONLY a numbered list of business names (one per line)
+- Format each line exactly as: "1. Official Business Name"
+- Use the official business name as listed on Google Maps (or the most commonly recognized official name)
+- Do not add location qualifiers like city/country/neighborhood unless they are part of the official name
+- No additional commentary, addresses, URLs, categories, or descriptions
+- Aim for ${count} businesses if possible, in order of best first
 
 Query: ${query}`
   }
@@ -159,6 +162,25 @@ Query: ${query}`
     }
 
     return businesses
+  }
+
+  // Collapse near-duplicate names in a ranked list while preserving order.
+  // Uses a strict threshold so brand + city variants collapse to a single entry.
+  private static deduplicateRankedList(names: string[]): string[] {
+    const unique: string[] = []
+
+    for (const name of names) {
+      const isDup = unique.some(existing => {
+        const scoreA = this.fuzzyMatch(existing, name)
+        const scoreB = this.fuzzyMatch(name, existing)
+        const score = Math.max(scoreA, scoreB)
+        // Treat as duplicate if highly similar or contains-based (~0.8)
+        return score >= 0.85 || score === 0.8
+      })
+      if (!isDup) unique.push(name)
+    }
+
+    return unique
   }
 
   public static async runRankingAnalysis(

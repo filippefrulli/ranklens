@@ -19,6 +19,7 @@
   import CreateBusinessModal from "./CreateBusinessModal.svelte";
   import WeeklyAnalysisHistory from "./WeeklyAnalysisHistory.svelte";
   import AnalysisProgressBar from "./AnalysisProgressBar.svelte";
+  import QuerySuggestionsModal from "./QuerySuggestionsModal.svelte";
 
   let business = $state<Business | null>(null);
   let dashboardData = $state<DashboardData | null>(null);
@@ -32,6 +33,7 @@
   let showCreateBusiness = $state(false);
   let showGoogleSearch = $state(false);
   let showAddQuery = $state(false);
+  let showQuerySuggestions = $state(false);
   let runningAnalysis = $state(false);
 
   // Progress tracking
@@ -160,6 +162,11 @@
       // Set the business from dashboard data
       if (dashboardData?.business) {
         business = dashboardData.business;
+        
+        // Show query suggestions if user has no queries and hasn't seen suggestions yet
+        if (dashboardData.queries.length === 0 && !showQuerySuggestions) {
+          showQuerySuggestions = true;
+        }
       }
     } catch (err) {
       error =
@@ -203,6 +210,37 @@
       error = err instanceof Error ? err.message : "Failed to add query";
     } finally {
       loading = false;
+    }
+  }
+
+  async function acceptQuerySuggestion(queryText: string) {
+    if (!$user || !queryText.trim()) return;
+
+    try {
+      console.log('🤖 Accepting query suggestion:', queryText);
+      
+      // Get business ID from dashboard data
+      const businessId = dashboardData?.business?.id;
+      if (!businessId) {
+        error = "Business not found";
+        return;
+      }
+
+      const existingQueries = dashboardData?.queries || [];
+      const query = await DatabaseService.createQuery({
+        business_id: businessId,
+        text: queryText.trim(),
+        order_index: existingQueries.length,
+      });
+
+      console.log('✅ Query suggestion accepted and saved:', query);
+      
+      // Refresh dashboard data to show the new query
+      await loadDashboardData();
+      
+    } catch (err) {
+      console.error('❌ Error accepting query suggestion:', err);
+      error = err instanceof Error ? err.message : "Failed to add suggested query";
     }
   }
 
@@ -470,6 +508,7 @@
             queries={dashboardData.queries}
             analytics={dashboardData.analytics}
             onAddQuery={() => (showAddQuery = true)}
+            onGetAISuggestions={() => (showQuerySuggestions = true)}
           />
           
           <!-- Weekly Analysis History -->
@@ -477,19 +516,6 @@
             <WeeklyAnalysisHistory businessId={business.id} />
           </div>
         {/if}
-      </div>
-
-      <!-- Back to projects -->
-      <div class="text-center mt-8">
-        <button
-          onclick={() => {
-            business = null;
-            dashboardData = null;
-          }}
-          class="text-blue-600 hover:text-blue-800 text-sm font-medium cursor-pointer"
-        >
-          ← Back to Business Registration
-        </button>
       </div>
     {/if}
   </div>
@@ -527,7 +553,16 @@
     bind:newQuery
     onSubmit={addQuery}
     onClose={() => (showAddQuery = false)}
-  />    <!-- Error Toast -->
+  />
+
+  {#if business}
+    <QuerySuggestionsModal
+      show={showQuerySuggestions}
+      {business}
+      onAcceptQuery={acceptQuerySuggestion}
+      onClose={() => (showQuerySuggestions = false)}
+    />
+  {/if}    <!-- Error Toast -->
   {#if error}
     <div class="fixed bottom-4 right-4 bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded-lg shadow-lg z-50">
       <div class="flex items-center justify-between">

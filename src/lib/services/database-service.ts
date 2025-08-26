@@ -151,254 +151,6 @@ export class DatabaseService {
     return data || []
   }
 
-  static async getCompetitorRankings(queryId: string): Promise<any[]> {
-    console.log('🏆 DatabaseService.getCompetitorRankings called with queryId:', queryId)
-    
-    // First, let's check what ranking attempts we have for this query
-    const { data: attempts, error: attemptsError } = await supabase
-      .from('ranking_attempts')
-      .select('*')
-      .eq('query_id', queryId)
-    
-    console.log('📊 Raw ranking attempts for query:', attempts)
-    console.log('📊 Any errors getting attempts:', attemptsError)
-    
-    // For debugging, let's always use client-side processing to see what's happening
-    console.log('🔄 Using client-side processing for debugging...')
-    return await this.getCompetitorRankingsClientSide(queryId)
-    
-    /* Temporarily disable RPC for debugging
-    const { data, error } = await supabase
-      .rpc('get_competitor_rankings', { query_id: queryId })
-
-    if (error) {
-      console.log('❌ Error in getCompetitorRankings RPC:', error)
-      console.log('🔄 Falling back to client-side processing...')
-      return await this.getCompetitorRankingsClientSide(queryId)
-    }
-    
-    console.log('✅ Competitor rankings retrieved via RPC:', data)
-    return data || []
-    */
-  }
-
-  static async getCompetitorRankingsClientSide(queryId: string): Promise<any[]> {
-    try {
-      // Get all successful ranking attempts for this query
-      const { data: attempts, error: attemptsError } = await supabase
-        .from('ranking_attempts')
-        .select('*')
-        .eq('query_id', queryId)
-        .eq('success', true)
-        .not('parsed_ranking', 'is', null)
-
-      if (attemptsError) throw attemptsError
-      if (!attempts || attempts.length === 0) {
-        console.log('❌ No successful attempts with parsed rankings found')
-        return []
-      }
-
-      console.log('📊 Processing attempts client-side:', attempts)
-
-      // Get user's business name
-      const { data: query, error: queryError } = await supabase
-        .from('queries')
-        .select(`
-          *,
-          businesses!inner(
-            name
-          )
-        `)
-        .eq('id', queryId)
-        .single()
-
-      if (queryError) throw queryError
-      const userBusinessName = query.businesses.name.toLowerCase()
-      console.log('🏢 User business name:', userBusinessName)
-
-      // Process each attempt to extract competitors
-      const allCompetitors: any[] = []
-      
-      attempts.forEach(attempt => {
-        console.log(`🔍 Processing attempt ${attempt.attempt_number}:`, {
-          hasRanking: !!attempt.parsed_ranking,
-          rankingType: Array.isArray(attempt.parsed_ranking) ? 'array' : typeof attempt.parsed_ranking,
-          rankingLength: attempt.parsed_ranking?.length,
-          targetRank: attempt.target_business_rank,
-          firstFewEntries: attempt.parsed_ranking?.slice(0, 3)
-        })
-
-        if (!attempt.parsed_ranking || !Array.isArray(attempt.parsed_ranking)) {
-          console.log('⚠️ Invalid parsed_ranking for attempt:', attempt.id)
-          return
-        }
-
-        // Handle case where parsed_ranking is an array of strings (business names)
-        // In this format, the index + 1 is the rank
-        let userBusinessFoundInThisAttempt = false
-        let userBusinessRankInThisAttempt = null
-        
-        attempt.parsed_ranking.forEach((businessName: string, index: number) => {
-          const rank = index + 1
-          const businessNameLower = businessName.toLowerCase()
-          
-          // Check if this is the user's business with more detailed logging
-          const isMatch = businessNameLower.includes(userBusinessName) || 
-                         userBusinessName.includes(businessNameLower)
-          
-          if (isMatch) {
-            console.log(`🎯 MATCH FOUND! User business "${userBusinessName}" matches "${businessName}" at rank ${rank} in attempt ${attempt.attempt_number}`)
-            userBusinessFoundInThisAttempt = true
-            userBusinessRankInThisAttempt = rank
-            
-            // Update the target_business_rank if it wasn't set
-            if (attempt.target_business_rank === null) {
-              console.log(`📝 Setting target_business_rank to ${rank} for attempt ${attempt.id}`)
-              attempt.target_business_rank = rank
-            }
-          }
-        })
-        
-        console.log(`📊 Attempt ${attempt.attempt_number} summary:`, {
-          userBusinessFound: userBusinessFoundInThisAttempt,
-          userBusinessRank: userBusinessRankInThisAttempt,
-          storedTargetRank: attempt.target_business_rank
-        })
-        
-        // Now find competitors using the determined rank
-        const targetRank = attempt.target_business_rank || userBusinessRankInThisAttempt
-        if (targetRank) {
-          attempt.parsed_ranking.forEach((businessName: string, index: number) => {
-            const rank = index + 1
-            const businessNameLower = businessName.toLowerCase()
-            
-            // Add competitors (businesses that rank better than user's business)
-            if (rank < targetRank &&
-                !businessNameLower.includes(userBusinessName) && 
-                !userBusinessName.includes(businessNameLower)) {
-              
-              allCompetitors.push({
-                name: businessName,
-                rank: rank,
-                attemptId: attempt.id,
-                attemptNumber: attempt.attempt_number
-              })
-            }
-          })
-        } else {
-          console.log(`❌ No target rank found for attempt ${attempt.attempt_number} - user business not found`)
-        }
-      })
-
-      if (allCompetitors.length === 0) {
-        console.log('❌ No competitors found')
-        
-        // Still return user's business data if available
-        const userBusinessData = this.getUserBusinessData(attempts, userBusinessName)
-        return userBusinessData ? [userBusinessData] : []
-      }
-
-      // Aggregate competitors by business name
-      const competitorMap = new Map()
-      allCompetitors.forEach(competitor => {
-        const name = competitor.name
-        if (!competitorMap.has(name)) {
-          competitorMap.set(name, {
-            business_name: name,
-            ranks: [],
-            appearances_count: 0,
-            total_attempts: attempts.length,
-            is_user_business: false
-          })
-        }
-        
-        const existing = competitorMap.get(name)
-        existing.ranks.push(competitor.rank)
-        existing.appearances_count += 1
-      })
-
-      // Add user's business data
-      const userBusinessData = this.getUserBusinessData(attempts, userBusinessName)
-      if (userBusinessData) {
-        competitorMap.set(userBusinessData.business_name, {
-          ...userBusinessData,
-          is_user_business: true
-        })
-      }
-
-      // Calculate averages and format results with weighted scoring
-      const results = Array.from(competitorMap.values()).map(competitor => {
-        const averageRank = competitor.ranks.reduce((a: number, b: number) => a + b, 0) / competitor.ranks.length
-        const appearanceRate = competitor.appearances_count / competitor.total_attempts
-        
-        // Weighted score: combines rank quality with consistency
-        // Lower score = better (lower rank + higher appearance rate)
-        // Formula: (average_rank) * (2 - appearance_rate)
-        // This means:
-        // - 100% appearance rate: multiply by 1.0 (no penalty)
-        // - 50% appearance rate: multiply by 1.5 (moderate penalty)  
-        // - 20% appearance rate: multiply by 1.8 (high penalty)
-        const weightedScore = averageRank * (2 - appearanceRate)
-        
-        return {
-          business_name: competitor.business_name,
-          average_rank: averageRank,
-          appearances_count: competitor.appearances_count,
-          total_attempts: competitor.total_attempts,
-          appearance_rate: appearanceRate,
-          weighted_score: weightedScore,
-          is_user_business: competitor.is_user_business || false
-        }
-      }).sort((a, b) => a.weighted_score - b.weighted_score) // Sort by weighted score instead of just rank
-
-      console.log('✅ Final competitor rankings (weighted by consistency):', results)
-      return results
-
-    } catch (error) {
-      console.error('💥 Error in client-side competitor rankings:', error)
-      return []
-    }
-  }
-
-  private static getUserBusinessData(attempts: any[], userBusinessName: string): any | null {
-    const userRanks: number[] = []
-    let userAppearances = 0
-    let userBusinessDisplayName = userBusinessName
-
-    attempts.forEach(attempt => {
-      if (!attempt.parsed_ranking || !Array.isArray(attempt.parsed_ranking)) return
-
-      attempt.parsed_ranking.forEach((businessName: string, index: number) => {
-        const rank = index + 1
-        const businessNameLower = businessName.toLowerCase()
-        
-        // Check if this is the user's business
-        if (businessNameLower.includes(userBusinessName) || 
-            userBusinessName.includes(businessNameLower)) {
-          userRanks.push(rank)
-          userAppearances += 1
-          userBusinessDisplayName = businessName // Use the actual name from results
-        }
-      })
-    })
-
-    if (userRanks.length === 0) return null
-
-    const averageRank = userRanks.reduce((a, b) => a + b, 0) / userRanks.length
-    const appearanceRate = userAppearances / attempts.length
-    const weightedScore = averageRank * (2 - appearanceRate)
-
-    return {
-      business_name: userBusinessDisplayName,
-      ranks: userRanks,
-      appearances_count: userAppearances,
-      total_attempts: attempts.length,
-      average_rank: averageRank,
-      appearance_rate: appearanceRate,
-      weighted_score: weightedScore
-    }
-  }
-
   // LLM Provider operations
   static async getLLMProviders(): Promise<LLMProvider[]> {
     const { data, error } = await supabase
@@ -440,7 +192,265 @@ export class DatabaseService {
       .single()
 
     if (error) throw new Error(`Failed to update analysis run: ${error.message}`)
+    
+    // If analysis is being marked as completed, populate competitor results
+    if (updates.status === 'completed') {
+      try {
+        await this.populateCompetitorResultsForAnalysisRun(id)
+      } catch (populateError) {
+        console.warn('⚠️ Failed to populate competitor results:', populateError)
+        // Don't fail the analysis run update if competitor results population fails
+      }
+    }
+    
     return data
+  }
+
+  static async populateCompetitorResultsForAnalysisRun(analysisRunId: string): Promise<number> {
+    console.log('📊 Populating competitor results for analysis run:', analysisRunId)
+    
+    // Get all unique queries for this analysis run
+    const { data: queryIds, error: queryError } = await supabase
+      .from('ranking_attempts')
+      .select('query_id')
+      .eq('analysis_run_id', analysisRunId)
+      .not('query_id', 'is', null)
+
+    if (queryError) {
+      console.error('❌ Error fetching query IDs:', queryError)
+      throw new Error(`Failed to fetch query IDs: ${queryError.message}`)
+    }
+
+    if (!queryIds || queryIds.length === 0) {
+      console.log('ℹ️ No queries found for analysis run')
+      return 0
+    }
+
+    // Get unique query IDs
+    const uniqueQueryIds = [...new Set(queryIds.map(q => q.query_id))]
+    console.log(`📋 Processing ${uniqueQueryIds.length} unique queries`)
+
+    let totalInserted = 0
+    for (const queryId of uniqueQueryIds) {
+      try {
+        const inserted = await this.populateCompetitorResultsForQuery(queryId, analysisRunId)
+        totalInserted += inserted
+      } catch (error) {
+        console.error(`❌ Error populating results for query ${queryId}:`, error)
+        // Continue with other queries even if one fails
+      }
+    }
+
+    console.log(`✅ Populated ${totalInserted} competitor result records across ${uniqueQueryIds.length} queries`)
+    return totalInserted
+  }
+
+  static async populateCompetitorResultsForQuery(queryId: string, analysisRunId: string): Promise<number> {
+    console.log(`📊 Populating competitor results for query ${queryId}, run ${analysisRunId}`)
+
+    // Get the user's business name for this query
+    const { data: queryData, error: queryError } = await supabase
+      .from('queries')
+      .select(`
+        *,
+        businesses!inner(
+          name
+        )
+      `)
+      .eq('id', queryId)
+      .single()
+
+    if (queryError) {
+      throw new Error(`Failed to fetch query data: ${queryError.message}`)
+    }
+
+    const userBusinessName = queryData.businesses.name.toLowerCase().trim()
+    console.log(`🏢 User business name: "${userBusinessName}"`)
+
+    // Get all successful ranking attempts for this query and run
+    const { data: attempts, error: attemptsError } = await supabase
+      .from('ranking_attempts')
+      .select(`
+        *,
+        llm_providers!inner(
+          name
+        )
+      `)
+      .eq('query_id', queryId)
+      .eq('analysis_run_id', analysisRunId)
+      .eq('success', true)
+      .not('parsed_ranking', 'is', null)
+
+    if (attemptsError) {
+      throw new Error(`Failed to fetch ranking attempts: ${attemptsError.message}`)
+    }
+
+    if (!attempts || attempts.length === 0) {
+      console.log('ℹ️ No successful attempts found for this query/run')
+      return 0
+    }
+
+    console.log(`📊 Processing ${attempts.length} successful attempts`)
+
+    // Clear existing results for this query/run
+    const { error: deleteError } = await supabase
+      .from('competitor_results')
+      .delete()
+      .eq('query_id', queryId)
+      .eq('analysis_run_id', analysisRunId)
+
+    if (deleteError) {
+      console.warn('⚠️ Error clearing existing results:', deleteError)
+    }
+
+    // Process all businesses mentioned in rankings
+    const businessMap = new Map<string, {
+      business_name: string
+      ranks: number[]
+      llm_providers: string[]
+      appearances_count: number
+      is_user_business: boolean
+    }>()
+
+    // Extract businesses from all attempts
+    attempts.forEach(attempt => {
+      try {
+        let parsedRanking: string[]
+        
+        // Handle both cases: string that needs parsing or already an array
+        if (typeof attempt.parsed_ranking === 'string') {
+          parsedRanking = JSON.parse(attempt.parsed_ranking)
+        } else if (Array.isArray(attempt.parsed_ranking)) {
+          parsedRanking = attempt.parsed_ranking
+        } else {
+          console.warn('❌ Invalid parsed_ranking format for attempt:', attempt.id)
+          return
+        }
+
+        if (!Array.isArray(parsedRanking)) {
+          console.warn('❌ parsed_ranking is not an array for attempt:', attempt.id)
+          return
+        }
+
+        const providerName = attempt.llm_providers?.name || 'Unknown'
+        
+        parsedRanking.forEach((businessName, index) => {
+          const rank = index + 1
+          const businessKey = businessName.trim()
+          const businessNameLower = businessName.toLowerCase().trim()
+          
+          // Determine if this is the user's business
+          const isUserBusiness = businessNameLower === userBusinessName || 
+                                businessNameLower.includes(userBusinessName) ||
+                                userBusinessName.includes(businessNameLower)
+
+          if (!businessMap.has(businessKey)) {
+            businessMap.set(businessKey, {
+              business_name: businessName,
+              ranks: [],
+              llm_providers: [],
+              appearances_count: 0,
+              is_user_business: isUserBusiness
+            })
+          }
+
+          const business = businessMap.get(businessKey)!
+          business.ranks.push(rank)
+          business.appearances_count++
+          
+          // Add LLM provider if not already included
+          if (!business.llm_providers.includes(providerName)) {
+            business.llm_providers.push(providerName)
+          }
+        })
+      } catch (parseError) {
+        console.warn('Failed to parse ranking for attempt:', attempt.id, parseError)
+      }
+    })
+
+    // Convert to competitor results and insert
+    const competitorResults = Array.from(businessMap.values()).map(business => {
+      const averageRank = business.ranks.reduce((sum, rank) => sum + rank, 0) / business.ranks.length
+      const bestRank = Math.min(...business.ranks)
+      const worstRank = Math.max(...business.ranks)
+      const appearanceRate = (business.appearances_count / attempts.length) * 100
+      const weightedScore = averageRank * (2.0 - (appearanceRate / 100))
+
+      return {
+        query_id: queryId,
+        analysis_run_id: analysisRunId,
+        business_name: business.business_name,
+        average_rank: Number(averageRank.toFixed(2)),
+        best_rank: bestRank,
+        worst_rank: worstRank,
+        appearances_count: business.appearances_count,
+        total_attempts: attempts.length,
+        weighted_score: Number(weightedScore.toFixed(2)),
+        llm_providers: business.llm_providers,
+        raw_ranks: business.ranks,
+        is_user_business: business.is_user_business
+      }
+    })
+
+    if (competitorResults.length === 0) {
+      console.log('ℹ️ No competitor results to insert')
+      return 0
+    }
+
+    // Insert all competitor results
+    const { data: insertedData, error: insertError } = await supabase
+      .from('competitor_results')
+      .insert(competitorResults)
+      .select('id')
+
+    if (insertError) {
+      console.error('❌ Error inserting competitor results:', insertError)
+      throw new Error(`Failed to insert competitor results: ${insertError.message}`)
+    }
+
+    const insertedCount = insertedData?.length || 0
+    console.log(`✅ Inserted ${insertedCount} competitor results for query ${queryId}`)
+    
+    return insertedCount
+  }
+
+  static async getLatestCompetitorResultsForBusiness(businessId: string): Promise<any[]> {
+    console.log('📊 Getting latest competitor results for business:', businessId)
+    
+    // Get the most recent analysis run for this business
+    const { data: latestRun, error: runError } = await supabase
+      .from('analysis_runs')
+      .select('id')
+      .eq('business_id', businessId)
+      .eq('status', 'completed')
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .single()
+
+    if (runError) {
+      if (runError.code === 'PGRST116') return [] // No runs found
+      throw new Error(`Failed to fetch latest analysis run: ${runError.message}`)
+    }
+
+    if (!latestRun) return []
+
+    // Get all competitor results for this run
+    const { data, error } = await supabase
+      .from('competitor_results')
+      .select(`
+        *,
+        queries!inner(id, text)
+      `)
+      .eq('analysis_run_id', latestRun.id)
+      .order('weighted_score', { ascending: true })
+
+    if (error) {
+      console.error('❌ Error fetching competitor results:', error)
+      throw new Error(`Failed to fetch competitor results: ${error.message}`)
+    }
+
+    console.log('✅ Latest competitor results retrieved:', data?.length || 0)
+    return data || []
   }
 
   // Weekly Analysis operations
@@ -1013,85 +1023,40 @@ export class DatabaseService {
   }
 
   static async getCompetitorRankingsByRun(queryId: string, analysisRunId: string): Promise<any[]> {
+    console.log('📊 Getting competitor rankings for run:', { queryId, analysisRunId })
     
-    try {
-      // Get all successful ranking attempts for this query and specific run
-      const { data: attempts, error: attemptsError } = await supabase
-        .from('ranking_attempts')
-        .select('*')
-        .eq('query_id', queryId)
-        .eq('analysis_run_id', analysisRunId)
-        .eq('success', true)
-        .not('parsed_ranking', 'is', null)
+    const { data, error } = await supabase
+      .from('competitor_results')
+      .select('*')
+      .eq('query_id', queryId)
+      .eq('analysis_run_id', analysisRunId)
+      .order('weighted_score', { ascending: true })
 
-      if (attemptsError) {
-        console.log('❌ Error fetching ranking attempts for run:', attemptsError)
-        throw new Error(`Failed to fetch ranking attempts: ${attemptsError.message}`)
-      }
-
-      if (!attempts || attempts.length === 0) {
-        console.log('ℹ️ No successful attempts with parsed rankings found for this run')
-        return []
-      }
-
-      console.log('📊 Processing attempts client-side for run:', attempts.length, 'attempts')
-
-      // Get user's business name
-      const { data: query, error: queryError } = await supabase
-        .from('queries')
-        .select(`
-          *,
-          businesses!inner(
-            name
-          )
-        `)
-        .eq('id', queryId)
-        .single()
-
-      if (queryError) throw queryError
-      const userBusinessName = query.businesses.name.toLowerCase()
-      console.log('🏢 User business name:', userBusinessName)
-
-      // Process each attempt to extract competitors
-      const allCompetitors: any[] = []
-      
-      attempts.forEach((attempt, attemptIndex) => {
-        try {
-          const parsedRanking = JSON.parse(attempt.parsed_ranking)
-          if (Array.isArray(parsedRanking)) {
-            parsedRanking.forEach((businessName, index) => {
-              const rank = index + 1
-              const cleanBusinessName = businessName.toLowerCase().trim()
-              
-              // Skip if it's the user's business
-              if (cleanBusinessName !== userBusinessName) {
-                allCompetitors.push({
-                  id: `${attempt.id}-${rank}`,
-                  ranking_attempt_id: attempt.id,
-                  business_name: businessName,
-                  rank_position: rank,
-                  analysis_run_id: analysisRunId,
-                  llm_provider: attempt.llm_provider_id,
-                  attempt_number: attempt.attempt_number,
-                  created_at: attempt.created_at
-                })
-              }
-            })
-          }
-        } catch (parseError) {
-          console.warn('Failed to parse ranking for attempt:', attempt.id, parseError)
-        }
-      })
-
-      // Sort by rank position
-      allCompetitors.sort((a, b) => a.rank_position - b.rank_position)
-      
-      console.log('✅ Competitor rankings by run retrieved:', allCompetitors.length)
-      return allCompetitors
-
-    } catch (error: any) {
-      console.error('💥 Error in getCompetitorRankingsByRun:', error)
-      throw new Error(`Failed to fetch competitor rankings: ${error.message}`)
+    if (error) {
+      console.error('❌ Error fetching competitor results:', error)
+      throw new Error(`Failed to fetch competitor results: ${error.message}`)
     }
+
+    if (!data || data.length === 0) {
+      console.log('ℹ️ No competitor results found for this query/run')
+      return []
+    }
+
+    console.log('✅ Competitor rankings retrieved:', data.length)
+    return data.map(result => ({
+      id: result.id,
+      business_name: result.business_name,
+      average_rank: result.average_rank,
+      best_rank: result.best_rank,
+      worst_rank: result.worst_rank,
+      appearances_count: result.appearances_count,
+      total_attempts: result.total_attempts,
+      appearance_rate: result.appearance_rate,
+      weighted_score: result.weighted_score,
+      llm_providers: result.llm_providers || [],
+      is_user_business: result.is_user_business || false
+    }))
   }
+
+    // New methods for run-based filtering
 }

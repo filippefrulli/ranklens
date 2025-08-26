@@ -183,7 +183,7 @@
         bind:value={searchQuery}
         onkeydown={handleKeydown}
         type="text"
-        placeholder="e.g., Joe's Pizza New York"
+        placeholder="e.g., Joe's Pizza Dublin"
         class="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
         disabled={isSearching}
       />

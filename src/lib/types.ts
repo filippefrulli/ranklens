@@ -132,3 +132,10 @@ export interface DashboardData {
     total_mentions: number
   }
 }
+
+export interface QuerySuggestion {
+  text: string
+  reasoning: string
+  accepted?: boolean
+  rejected?: boolean
+}

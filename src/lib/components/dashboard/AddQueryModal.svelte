@@ -8,7 +8,7 @@
 
 {#if show}
   <div class="fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center p-4 z-50">
-    <div class="bg-white rounded-lg shadow-xl max-w-md w-full p-6">
+    <div class="bg-white rounded-lg shadow-xl max-w-lg w-full p-6">
       <h3 class="text-lg font-semibold text-gray-900 mb-4">Add Query</h3>
 
       <form
@@ -31,10 +31,10 @@
             required
             rows="3"
             class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-            placeholder="Best pizza place in New York"
+            placeholder="Best pizza place in Dublin"
           ></textarea>
           <p class="text-xs text-gray-500 mt-1">
-            This query will be sent to all LLM providers to get ranking lists.
+            Enter a search phrase that represents what customers might search for when looking for your business.
           </p>
         </div>
 

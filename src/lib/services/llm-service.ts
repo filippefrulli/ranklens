@@ -103,33 +103,6 @@ export class LLMService {
         })
       }
       
-      // If business not found and we got fewer than requested, try asking for more
-      if (!foundResult.rank && rankedBusinesses.length >= requestCount - 5) {
-        console.log(`🔄 Business not found, trying extended request...`)
-        const extendedPrompt = this.buildExtendedPrompt(query, rankedBusinesses.length + 15)
-        
-        const extendedResponse = await this.callProvider(provider, extendedPrompt)
-        const extendedResponseText = await extendedResponse.text()
-        
-        const mockExtendedResponse = new Response(extendedResponseText, {
-          status: extendedResponse.status,
-          statusText: extendedResponse.statusText,
-          headers: extendedResponse.headers
-        })
-        
-        const extendedList = await this.parseResponse(mockExtendedResponse, provider.name)
-        
-        if (extendedList.length > rankedBusinesses.length) {
-          rankedBusinesses = extendedList
-          totalRequested = rankedBusinesses.length
-          foundResult = this.findBusinessInList(businessName, rankedBusinesses)
-          
-          if (foundResult.rank) {
-            console.log(`✅ Found in extended results: "${foundResult.foundName}" at rank ${foundResult.rank}`)
-          }
-        }
-      }
-      
       const responseTimeMs = Date.now() - startTime
       
       return {
@@ -163,20 +136,6 @@ Requirements:
 - Format each as: "1. Business Name"
 - No additional commentary, explanations, or text
 - Focus on actual, real businesses
-
-Query: ${query}`
-  }
-
-  private static buildExtendedPrompt(query: string, count: number): string {
-    return `Please provide a comprehensive ranked list of the top ${count} businesses for: "${query}"
-
-Requirements:
-- Return ONLY a numbered list of business names
-- Include both well-known and lesser-known options
-- List ${count} businesses in order of relevance
-- Format: "1. Business Name"
-- No additional text or explanations
-- Focus on real, operating businesses
 
 Query: ${query}`
   }

@@ -76,19 +76,21 @@ export class LLMService {
       // First attempt with initial count
       const prompt = this.buildPrompt(query, requestCount)
       
-      const response = await this.callProvider(provider, prompt)
-      
-      const responseText = await response.text()
-      console.log(`📄 Raw response text from ${provider.name}:`, responseText)
-      
-      // Re-create response for parsing
-      const mockResponse = new Response(responseText, {
-        status: response.status,
-        statusText: response.statusText,
-        headers: response.headers
-      })
-      
-      rankedBusinesses = await this.parseResponse(mockResponse, provider.name)
+        // Call server-side proxy for provider
+        const resp = await fetch('/api/llm', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ provider: provider.name, prompt })
+        })
+        
+        if (!resp.ok) {
+          const t = await resp.text()
+          throw new Error(`LLM proxy error ${resp.status}: ${t}`)
+        }
+        
+        const { content } = await resp.json()
+        
+        rankedBusinesses = this.extractBusinessNames(content)
       
       foundResult = this.findBusinessInList(businessName, rankedBusinesses)
       
@@ -140,140 +142,7 @@ Requirements:
 Query: ${query}`
   }
 
-  private static async callProvider(provider: LLMProvider, prompt: string): Promise<Response> {
-    switch (provider.name) {
-      case 'OpenAI GPT-5':
-        return this.callOpenAI(prompt)
-      case 'Anthropic Claude':
-        return this.callAnthropic(prompt)
-      case 'Google Gemini':
-        return this.callGemini(prompt)
-      case 'Perplexity AI':
-        return this.callPerplexity(prompt)
-      default:
-        throw new Error(`Unsupported LLM provider: ${provider.name}`)
-    }
-  }
-
-  private static async callOpenAI(prompt: string): Promise<Response> {
-    const apiKey = import.meta.env.VITE_OPENAI_API_KEY
-    if (!apiKey) throw new Error('OpenAI API key not configured')
-
-    return fetch('https://api.openai.com/v1/responses', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${apiKey}`,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        model: 'gpt-5-mini',
-        input: prompt
-      })
-    })
-  }
-
-  private static async callAnthropic(prompt: string): Promise<Response> {
-    const apiKey = import.meta.env.VITE_ANTHROPIC_API_KEY
-    if (!apiKey) throw new Error('Anthropic API key not configured')
-
-    return fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: {
-        'x-api-key': apiKey,
-        'Content-Type': 'application/json',
-        'anthropic-version': '2023-06-01'
-      },
-      body: JSON.stringify({
-        model: 'claude-3-sonnet-20240229',
-        max_tokens: 500,
-        messages: [{ role: 'user', content: prompt }]
-      })
-    })
-  }
-
-  private static async callGemini(prompt: string): Promise<Response> {
-    const apiKey = import.meta.env.VITE_GOOGLE_API_KEY
-    if (!apiKey) throw new Error('Google API key not configured')
-
-    return fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=${apiKey}`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        contents: [{ parts: [{ text: prompt }] }],
-        generationConfig: {
-          maxOutputTokens: 500,
-          temperature: 0.3
-        }
-      })
-    })
-  }
-
-  private static async callPerplexity(prompt: string): Promise<Response> {
-    const apiKey = import.meta.env.VITE_PERPLEXITY_API_KEY
-    if (!apiKey) throw new Error('Perplexity API key not configured')
-
-    return fetch('https://api.perplexity.ai/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${apiKey}`,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        model: 'llama-3.1-sonar-small-128k-online',
-        messages: [{ role: 'user', content: prompt }],
-        max_tokens: 500,
-        temperature: 0.3
-      })
-    })
-  }
-
-  private static async parseResponse(response: Response, providerName: string): Promise<string[]> {
-    
-    if (!response.ok) {
-      console.error(`❌ HTTP error from ${providerName}:`, response.status, response.statusText)
-      throw new Error(`HTTP error! status: ${response.status}`)
-    }
-
-    const data = await response.json()
-    
-    let content: string
-
-    switch (providerName) {
-      case 'OpenAI GPT-5':
-        // GPT-5 mini has a new response format with output array
-        if (data.output && data.output.length > 1) {
-          // Find the message output (type: "message")
-          const messageOutput = data.output.find((output: any) => output.type === 'message')
-          if (messageOutput && messageOutput.content && messageOutput.content.length > 0) {
-            content = messageOutput.content[0]?.text || ''
-          } else {
-            content = ''
-          }
-        } else {
-          // Fallback to old format if needed
-          content = data.choices?.[0]?.message?.content || ''
-        }
-        console.log(`💬 OpenAI content extracted:`, content)
-        break
-      case 'Anthropic Claude':
-        content = data.content[0]?.text || ''
-        break
-      case 'Google Gemini':
-        content = data.candidates[0]?.content?.parts[0]?.text || ''
-        break
-      case 'Perplexity AI':
-        content = data.choices[0]?.message?.content || ''
-        break
-      default:
-        throw new Error(`Unknown provider: ${providerName}`)
-    }
-
-    const businesses = this.extractBusinessNames(content)
-    
-    return businesses
-  }
+  // Provider HTTP calls moved server-side (/api/llm). No direct client calls remain.
 
   private static extractBusinessNames(content: string): string[] {
     const lines = content.split('\n')

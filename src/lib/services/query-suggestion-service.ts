@@ -6,47 +6,27 @@ interface QuerySuggestion {
 }
 
 export class QuerySuggestionService {
-  private static readonly OPENAI_API_URL = 'https://api.openai.com/v1/chat/completions'
-  
   static async generateQuerySuggestions(business: Business): Promise<QuerySuggestion[]> {
-    const apiKey = import.meta.env.VITE_OPENAI_API_KEY
-    
-    if (!apiKey) {
-      throw new Error('OpenAI API key not configured')
-    }
-
     const prompt = this.buildPrompt(business)
     
     try {
-      const response = await fetch(this.OPENAI_API_URL, {
+      const response = await fetch('/api/llm', {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${apiKey}`
+          'Content-Type': 'application/json'
         },
         body: JSON.stringify({
-          model: 'gpt-4',
-          messages: [
-            {
-              role: 'system',
-              content: 'You are an expert SEO and local search specialist. Generate realistic search queries that customers would use to find specific types of businesses. Focus on queries where the business has a realistic chance of ranking in the top 25 results.'
-            },
-            {
-              role: 'user',
-              content: prompt
-            }
-          ],
-          temperature: 0.7,
-          max_tokens: 1000
+          provider: 'OpenAI GPT-5',
+          model: 'gpt-5-mini',
+          prompt
         })
       })
 
       if (!response.ok) {
-        throw new Error(`OpenAI API error: ${response.status} ${response.statusText}`)
+        throw new Error(`Query suggestions API error: ${response.status} ${response.statusText}`)
       }
 
-      const data = await response.json()
-      const content = data.choices[0]?.message?.content
+      const { content } = await response.json()
 
       if (!content) {
         throw new Error('No content received from OpenAI')

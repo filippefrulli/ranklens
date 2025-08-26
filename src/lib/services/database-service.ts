@@ -105,7 +105,6 @@ export class DatabaseService {
   }
 
   static async getQuery(id: string): Promise<Query | null> {
-    console.log('🔍 DatabaseService.getQuery called with ID:', id)
     
     const { data, error } = await supabase
       .from('queries')
@@ -119,12 +118,10 @@ export class DatabaseService {
       throw new Error(`Failed to fetch query: ${error.message}`)
     }
     
-    console.log('✅ Query data retrieved:', data)
     return data
   }
 
   static async getQueryRankingResults(queryId: string): Promise<RankingAttempt[]> {
-    console.log('📊 DatabaseService.getQueryRankingResults called with queryId:', queryId)
     
     const { data, error } = await supabase
       .from('ranking_attempts')
@@ -207,7 +204,6 @@ export class DatabaseService {
   }
 
   static async populateCompetitorResultsForAnalysisRun(analysisRunId: string): Promise<number> {
-    console.log('📊 Populating competitor results for analysis run:', analysisRunId)
     
     // Get all unique queries for this analysis run
     const { data: queryIds, error: queryError } = await supabase
@@ -228,7 +224,6 @@ export class DatabaseService {
 
     // Get unique query IDs
     const uniqueQueryIds = [...new Set(queryIds.map(q => q.query_id))]
-    console.log(`📋 Processing ${uniqueQueryIds.length} unique queries`)
 
     let totalInserted = 0
     for (const queryId of uniqueQueryIds) {
@@ -246,7 +241,6 @@ export class DatabaseService {
   }
 
   static async populateCompetitorResultsForQuery(queryId: string, analysisRunId: string): Promise<number> {
-    console.log(`📊 Populating competitor results for query ${queryId}, run ${analysisRunId}`)
 
     // Get the user's business name for this query
     const { data: queryData, error: queryError } = await supabase
@@ -289,8 +283,6 @@ export class DatabaseService {
       console.log('ℹ️ No successful attempts found for this query/run')
       return 0
     }
-
-    console.log(`📊 Processing ${attempts.length} successful attempts`)
 
     // Clear existing results for this query/run
     const { error: deleteError } = await supabase
@@ -415,7 +407,6 @@ export class DatabaseService {
   }
 
   static async getLatestCompetitorResultsForBusiness(businessId: string): Promise<any[]> {
-    console.log('📊 Getting latest competitor results for business:', businessId)
     
     // Get the most recent analysis run for this business
     const { data: latestRun, error: runError } = await supabase
@@ -540,9 +531,7 @@ export class DatabaseService {
   }
 
   static async getQueryRankingHistory(queryId: string, limit: number = 10): Promise<import('../types').QueryRankingHistory[]> {
-    try {
-      console.log(`Fetching ranking history for query: ${queryId}`)
-      
+    try {      
       const { data, error } = await supabase
         .from('ranking_attempts')
         .select(`
@@ -555,8 +544,6 @@ export class DatabaseService {
         `)
         .eq('query_id', queryId)
         .limit(limit * 20); // Get more data to group by run
-
-      console.log(`Raw data for query ${queryId}:`, { data, error })
 
       if (error) throw error;
       
@@ -966,7 +953,6 @@ export class DatabaseService {
 
   // New methods for run-based filtering
   static async getQueryAnalysisRuns(queryId: string): Promise<{id: string, created_at: string}[]> {
-    console.log('📋 DatabaseService.getQueryAnalysisRuns called with queryId:', queryId)
     
     const { data, error } = await supabase
       .from('ranking_attempts')
@@ -998,7 +984,6 @@ export class DatabaseService {
   }
 
   static async getQueryRankingResultsByRun(queryId: string, analysisRunId: string): Promise<RankingAttempt[]> {
-    console.log('📊 DatabaseService.getQueryRankingResultsByRun called with queryId:', queryId, 'runId:', analysisRunId)
     
     const { data, error } = await supabase
       .from('ranking_attempts')
@@ -1023,7 +1008,6 @@ export class DatabaseService {
   }
 
   static async getCompetitorRankingsByRun(queryId: string, analysisRunId: string): Promise<any[]> {
-    console.log('📊 Getting competitor rankings for run:', { queryId, analysisRunId })
     
     const { data, error } = await supabase
       .from('competitor_results')

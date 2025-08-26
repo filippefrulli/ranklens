@@ -26,9 +26,7 @@
     try {
       const histories = new Map()
       for (const query of queries) {
-        console.log(`Loading history for query: ${query.id}`)
         const history = await DatabaseService.getQueryRankingHistory(query.id, 10)
-        console.log(`History for query ${query.id}:`, history)
         histories.set(query.id, history)
       }
       queryHistories = histories

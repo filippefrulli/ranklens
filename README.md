@@ -46,10 +46,10 @@ VITE_SUPABASE_URL=your_supabase_project_url
 VITE_SUPABASE_ANON_KEY=your_supabase_anon_key
 
 # LLM API Keys
-VITE_OPENAI_API_KEY=your_openai_api_key
-VITE_ANTHROPIC_API_KEY=your_anthropic_api_key
-VITE_GOOGLE_API_KEY=your_google_api_key
-VITE_PERPLEXITY_API_KEY=your_perplexity_api_key
+OPENAI_API_KEY=your_openai_api_key
+ANTHROPIC_API_KEY=your_anthropic_api_key
+GOOGLE_API_KEY=your_google_api_key
+PERPLEXITY_API_KEY=your_perplexity_api_key
 ```
 
 4. Set up your Supabase database using the schema in `database/schema.sql`

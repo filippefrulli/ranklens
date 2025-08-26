@@ -199,11 +199,41 @@ export class DatabaseService {
         // Don't fail the analysis run update if competitor results population fails
       }
     }
-    
+
     return data
   }
 
-  static async populateCompetitorResultsForAnalysisRun(analysisRunId: string): Promise<number> {
+  static async getRunningAnalysis(businessId: string): Promise<AnalysisRun | null> {
+    console.log('🔍 Checking for running analysis for business:', businessId);
+    
+    // Check if user is authenticated first
+    const { data: userData, error: userError } = await supabase.auth.getUser();
+    
+    if (userError || !userData?.user) {
+      console.log('🔍 User not authenticated, cannot check for running analysis');
+      return null;
+    }
+    
+    console.log('🔍 User authenticated:', userData.user.id);
+    
+    // Now check for running analysis runs
+    const { data, error } = await supabase
+      .from('analysis_runs')
+      .select('*')
+      .eq('business_id', businessId)
+      .in('status', ['pending', 'running'])
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle()
+
+    if (error) {
+      console.error('❌ Error fetching running analysis:', error);
+      throw new Error(`Failed to fetch running analysis: ${error.message}`)
+    }
+    
+    console.log('🔍 Running analysis result:', data);
+    return data
+  }  static async populateCompetitorResultsForAnalysisRun(analysisRunId: string): Promise<number> {
     
     // Get all unique queries for this analysis run
     const { data: queryIds, error: queryError } = await supabase

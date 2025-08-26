@@ -189,9 +189,7 @@
       return;
     }
 
-    try {
-      console.log('🔍 Checking for running analysis for business:', business.id);
-      
+    try {      
       // Get the current session to include in the request
       const { data: { session } } = await supabase.auth.getSession();
       if (!session?.access_token) {
@@ -205,12 +203,10 @@
         }
       });
       const data = await response.json();
-      console.log('🔍 Analysis status response:', data);
       
       const { runningAnalysis: activeAnalysis } = data;
       
       if (activeAnalysis) {
-        console.log('📊 Found running analysis:', activeAnalysis.id);
         runningAnalysis = true;
         
         // Calculate progress based on completed vs total calls
@@ -224,13 +220,7 @@
           currentQuery: 'Resuming analysis...',
           currentProvider: 'Checking status...'
         };
-        
-        console.log('📊 Set progress state:', analysisProgress);
-        console.log('📊 Running analysis state:', runningAnalysis);
-        
-        // Resume the analysis from where it left off
-        console.log('🔄 Analysis running on server, monitoring progress');
-        
+
         // Start polling for updates
         startAnalysisPolling();
       } else {
@@ -344,9 +334,7 @@
   async function acceptQuerySuggestion(queryText: string) {
     if (!$user || !queryText.trim()) return;
 
-    try {
-      console.log('🤖 Accepting query suggestion:', queryText);
-      
+    try {      
       // Get business ID from dashboard data
       const businessId = dashboardData?.business?.id;
       if (!businessId) {
@@ -360,8 +348,6 @@
         text: queryText.trim(),
         order_index: existingQueries.length,
       });
-
-      console.log('✅ Query suggestion accepted and saved:', query);
       
       // Refresh dashboard data to show the new query
       await loadDashboardData();
@@ -373,8 +359,6 @@
   }
 
   async function runAnalysis() {
-    console.log("🚀 Starting server-side weekly analysis...");
-
     if (!dashboardData?.business) {
       console.error("❌ No business found in dashboard data");
       error = "No business found";
@@ -409,8 +393,6 @@
         currentProvider: 'Initializing...'
       };
 
-      console.log(`� Starting server-side analysis for business: ${dashboardData.business.id}`);
-
       // Get the current session for authorization
       const { data: { session } } = await supabase.auth.getSession();
       if (!session?.access_token) {
@@ -434,8 +416,6 @@
       if (!response.ok) {
         throw new Error(result.error || 'Failed to start analysis');
       }
-
-      console.log('✅ Analysis started successfully:', result.analysisRunId);
 
       // Update progress to show analysis is running
       analysisProgress = {

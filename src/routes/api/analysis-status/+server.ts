@@ -5,7 +5,6 @@ import { env } from '$env/dynamic/private'
 export const GET: RequestHandler = async ({ url, request }) => {
   try {
     const businessId = url.searchParams.get('businessId')
-    console.log('🔍 Analysis status API called for business:', businessId);
     
     if (!businessId) {
       return new Response(JSON.stringify({ error: 'businessId is required' }), { 
@@ -52,9 +51,7 @@ export const GET: RequestHandler = async ({ url, request }) => {
         headers: { 'Content-Type': 'application/json' }
       })
     }
-    
-    console.log('🔍 Analysis status API returning:', { runningAnalysis });
-    
+        
     return new Response(JSON.stringify({ runningAnalysis }), {
       status: 200,
       headers: { 'Content-Type': 'application/json' }

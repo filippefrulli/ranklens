@@ -36,8 +36,6 @@ export const POST: RequestHandler = async ({ request }) => {
       }
     })
 
-    console.log('🚀 Starting server-side analysis for business:', businessId)
-
     // Get business data
     const { data: business, error: businessError } = await supabase
       .from('businesses')
@@ -78,8 +76,6 @@ export const POST: RequestHandler = async ({ request }) => {
       })
     }
 
-    console.log(`📊 Found ${queries.length} queries and ${providers.length} active providers`)
-
     // Create analysis run
     const { data: analysisRun, error: analysisRunError } = await supabase
       .from('analysis_runs')
@@ -103,8 +99,6 @@ export const POST: RequestHandler = async ({ request }) => {
         headers: { 'Content-Type': 'application/json' }
       })
     }
-
-    console.log('📊 Created analysis run:', analysisRun.id)
 
     // Start the analysis in the background
     runAnalysisInBackground(supabase, analysisRun, business, queries, providers)
@@ -137,23 +131,18 @@ async function runAnalysisInBackground(
   providers: any[]
 ) {
   try {
-    console.log('🔄 Starting background analysis...')
     let completedCalls = 0
     const totalCalls = queries.length * providers.length * 5
 
     for (let queryIndex = 0; queryIndex < queries.length; queryIndex++) {
       const query = queries[queryIndex]
-      console.log(`📝 Processing query ${queryIndex + 1}/${queries.length}: ${query.text}`)
 
       const rankingAttempts: any[] = []
 
       for (const provider of providers) {
-        console.log(`🤖 Processing provider: ${provider.name}`)
 
         for (let attemptNum = 1; attemptNum <= 5; attemptNum++) {
           try {
-            console.log(`🤖 ${provider.name} - Attempt ${attemptNum}/5`)
-            
             const result = await LLMService.makeRequest(provider, query.text, business.name, 25)
             completedCalls++
 
@@ -255,8 +244,6 @@ async function runAnalysisInBackground(
         completed_at: new Date().toISOString()
       })
       .eq('id', analysisRun.id)
-
-    console.log('✅ Background analysis completed successfully!')
 
   } catch (err) {
     console.error('❌ Background analysis failed:', err)

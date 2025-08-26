@@ -144,7 +144,6 @@ export class DatabaseService {
       throw new Error(`Failed to fetch ranking results: ${error.message}`)
     }
     
-    console.log('✅ Ranking results retrieved:', data)
     return data || []
   }
 
@@ -204,7 +203,6 @@ export class DatabaseService {
   }
 
   static async getRunningAnalysis(businessId: string): Promise<AnalysisRun | null> {
-    console.log('🔍 Checking for running analysis for business:', businessId);
     
     // Check if user is authenticated first
     const { data: userData, error: userError } = await supabase.auth.getUser();
@@ -213,9 +211,7 @@ export class DatabaseService {
       console.log('🔍 User not authenticated, cannot check for running analysis');
       return null;
     }
-    
-    console.log('🔍 User authenticated:', userData.user.id);
-    
+        
     // Now check for running analysis runs
     const { data, error } = await supabase
       .from('analysis_runs')
@@ -231,7 +227,6 @@ export class DatabaseService {
       throw new Error(`Failed to fetch running analysis: ${error.message}`)
     }
     
-    console.log('🔍 Running analysis result:', data);
     return data
   }  static async populateCompetitorResultsForAnalysisRun(analysisRunId: string): Promise<number> {
     
@@ -266,7 +261,6 @@ export class DatabaseService {
       }
     }
 
-    console.log(`✅ Populated ${totalInserted} competitor result records across ${uniqueQueryIds.length} queries`)
     return totalInserted
   }
 
@@ -289,7 +283,6 @@ export class DatabaseService {
     }
 
     const userBusinessName = queryData.businesses.name.toLowerCase().trim()
-    console.log(`🏢 User business name: "${userBusinessName}"`)
 
     // Get all successful ranking attempts for this query and run
     const { data: attempts, error: attemptsError } = await supabase
@@ -431,7 +424,6 @@ export class DatabaseService {
     }
 
     const insertedCount = insertedData?.length || 0
-    console.log(`✅ Inserted ${insertedCount} competitor results for query ${queryId}`)
     
     return insertedCount
   }
@@ -470,7 +462,6 @@ export class DatabaseService {
       throw new Error(`Failed to fetch competitor results: ${error.message}`)
     }
 
-    console.log('✅ Latest competitor results retrieved:', data?.length || 0)
     return data || []
   }
 
@@ -1009,7 +1000,6 @@ export class DatabaseService {
       new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
     )
     
-    console.log('✅ Analysis runs retrieved:', uniqueRuns.length)
     return uniqueRuns
   }
 
@@ -1033,7 +1023,6 @@ export class DatabaseService {
       throw new Error(`Failed to fetch ranking results: ${error.message}`)
     }
     
-    console.log('✅ Ranking results by run retrieved:', data?.length || 0)
     return data || []
   }
 
@@ -1056,7 +1045,6 @@ export class DatabaseService {
       return []
     }
 
-    console.log('✅ Competitor rankings retrieved:', data.length)
     return data.map(result => ({
       id: result.id,
       business_name: result.business_name,

@@ -19,7 +19,6 @@ function withTimeout<T>(promise: Promise<T>, ms = 30000): Promise<T> {
 export const POST: RequestHandler = async ({ request }) => {
   try {
     const { provider, prompt, model } = await request.json()
-    console.log('LLM API called:', { provider, model, promptLength: prompt?.length })
     
     if (!provider || !prompt) {
       console.error('Missing required fields:', { provider: !!provider, prompt: !!prompt })
@@ -51,14 +50,12 @@ export const POST: RequestHandler = async ({ request }) => {
           body: JSON.stringify(payload)
         })
       )
-      console.log('OpenAI response status:', resp.status)
       if (!resp.ok) {
         const t = await resp.text()
         console.error('OpenAI error details:', { status: resp.status, response: t })
         return new Response(JSON.stringify({ error: `OpenAI error ${resp.status}: ${t}` }), { status: 502 })
       }
       const data = await resp.json()
-      console.log('OpenAI response data:', JSON.stringify(data, null, 2))
       
       // Parse the new Responses API structure
       content = ''
@@ -84,7 +81,6 @@ export const POST: RequestHandler = async ({ request }) => {
           : (data?.choices?.[0]?.message?.content || '')
       }
       
-      console.log('Extracted content length:', content?.length || 0)
     } else if (provider === 'Anthropic Claude' || provider === 'Anthropic') {
       const apiKey = env.ANTHROPIC_API_KEY || env.VITE_ANTHROPIC_API_KEY
       if (!apiKey) return new Response(JSON.stringify({ error: 'Anthropic API key not configured' }), { status: 500 })

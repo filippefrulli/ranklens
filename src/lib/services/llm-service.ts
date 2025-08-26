@@ -98,13 +98,9 @@ export class LLMService {
       foundResult = this.findBusinessInList(businessName, rankedBusinesses)
       
       if (foundResult.rank) {
-        console.log(`✅ Found match: "${foundResult.foundName}" at rank ${foundResult.rank}`)
       } else {
         rankedBusinesses.forEach((business, index) => {
           const score = this.fuzzyMatch(businessName, business)
-          if (score > 0) {
-            console.log(`  ${index + 1}. "${business}" - score: ${score.toFixed(2)}`)
-          }
         })
       }
       
@@ -156,8 +152,6 @@ Query: ${query}`
       if (match && match[1]) {
         const businessName = match[1].trim()
         businesses.push(businessName)
-      } else if (line.trim()) {
-        console.log(`  ✗ Skipped: "${line.trim()}" (doesn't match pattern)`)
       }
     }
 
@@ -204,17 +198,6 @@ Query: ${query}`
         // Start with 25 businesses, may request more if business not found
         const result = await this.makeRequest(provider, query, businessName, 25)
         providerResults.push(result)
-        
-        // Log whether business was found for debugging
-        if (result.success) {
-          if (result.foundBusinessRank) {
-            console.log(`✅ Found "${businessName}" as "${result.foundBusinessName}" at rank ${result.foundBusinessRank}/${result.totalRequested}`)
-          } else {
-            console.log(`❌ Business "${businessName}" not found in ${result.totalRequested} results`)
-          }
-        } else {
-          console.error(`❌ Request failed: ${result.error}`)
-        }
         
         // Add delay between requests to be respectful to APIs
         if (i < attempts - 1) {

@@ -56,56 +56,65 @@
   </div>
 
   <div class="flex justify-between items-center">
-    <!-- Average Rank -->
-    <div class="text-center">
-      <div class="text-2xl font-bold text-gray-900">
-        {displayRank
-          ? displayRank.toFixed(1)
-          : "N/A"}
-      </div>
-      <div class="text-sm text-gray-500">Average Rank</div>
-      {#if latestRanking}
-        <div class="text-xs text-gray-400 mt-1">
-          {formatDate(latestRanking.run_date)}
+    {#if displayRank || history.length > 0 || (analytics?.llm_breakdown && analytics.llm_breakdown.length > 0)}
+      <!-- Average Rank -->
+      <div class="text-center">
+        <div class="text-2xl font-bold text-gray-900">
+          {displayRank
+            ? displayRank.toFixed(1)
+            : "N/A"}
         </div>
-      {/if}
-    </div>
-
-    <!-- Historical Ranking Chart -->
-    <div class="flex-1 max-w-64">
-      <div class="text-sm text-gray-500 mb-2">
-        {history.length > 0 ? 'Ranking History' : 'LLM Breakdown'}
-      </div>
-      <div class="h-32 bg-gray-100 rounded flex items-end justify-center space-x-1 px-2">
-        {#if loadingHistories}
-          <div class="text-xs text-gray-400 flex items-center">
-            <div class="animate-spin rounded-full h-4 w-4 border-b-2 border-gray-400 mr-2"></div>
-            Loading...
+        <div class="text-sm text-gray-500">Average Rank</div>
+        {#if latestRanking}
+          <div class="text-xs text-gray-400 mt-1">
+            {formatDate(latestRanking.run_date)}
           </div>
-        {:else if history.length > 0}
-          {#each history.slice(-8) as run}
-            <div
-              class="bg-blue-500 w-3 rounded-t transition-all duration-300"
-              style="height: {getBarHeight(run.average_rank)}px"
-              title="Rank {run.average_rank?.toFixed(1) || 'N/A'} on {formatDate(run.run_date)}"
-            ></div>
-          {/each}
-        {:else if analytics?.llm_breakdown && analytics.llm_breakdown.length > 0}
-          <!-- Fallback to analytics data if no historical data -->
-          {#each analytics.llm_breakdown.slice(0, 8) as breakdown}
-            <div
-              class="bg-blue-400 w-3 rounded-t"
-              style="height: {breakdown.average_rank
-                ? Math.max(12, 80 - breakdown.average_rank * 3)
-                : 12}px"
-              title="LLM: {breakdown.provider_name}, Avg Rank: {breakdown.average_rank?.toFixed(1) || 'N/A'}"
-            ></div>
-          {/each}
-        {:else}
-          <div class="text-xs text-gray-400">No ranking data yet</div>
         {/if}
       </div>
-    </div>
+
+      <!-- Historical Ranking Chart -->
+      <div class="flex-1 max-w-64">
+        <div class="text-sm text-gray-500 mb-2">
+          {history.length > 0 ? 'Ranking History' : 'LLM Breakdown'}
+        </div>
+        <div class="h-32 bg-gray-100 rounded flex items-center justify-center space-x-1 px-2">
+          {#if loadingHistories}
+            <div class="text-xs text-gray-400 flex items-center">
+              <div class="animate-spin rounded-full h-4 w-4 border-b-2 border-gray-400 mr-2"></div>
+              Loading...
+            </div>
+          {:else if history.length > 0}
+            <div class="flex items-end justify-center space-x-1 h-full">
+              {#each history.slice(-8) as run}
+                <div
+                  class="bg-blue-500 w-3 rounded-t transition-all duration-300"
+                  style="height: {getBarHeight(run.average_rank)}px"
+                  title="Rank {run.average_rank?.toFixed(1) || 'N/A'} on {formatDate(run.run_date)}"
+                ></div>
+              {/each}
+            </div>
+          {:else if analytics?.llm_breakdown && analytics.llm_breakdown.length > 0}
+            <div class="flex items-end justify-center space-x-1 h-full">
+              {#each analytics.llm_breakdown.slice(0, 8) as breakdown}
+                <div
+                  class="bg-blue-400 w-3 rounded-t"
+                  style="height: {breakdown.average_rank
+                    ? Math.max(12, 80 - breakdown.average_rank * 3)
+                    : 12}px"
+                  title="LLM: {breakdown.provider_name}, Avg Rank: {breakdown.average_rank?.toFixed(1) || 'N/A'}"
+                ></div>
+              {/each}
+            </div>
+          {/if}
+        </div>
+      </div>
+    {:else}
+      <!-- Simple N/A state when no data -->
+      <div class="flex-1 text-center">
+        <div class="text-2xl font-bold text-gray-400">N/A</div>
+        <div class="text-sm text-gray-500">No data yet</div>
+      </div>
+    {/if}
   </div>
 </div>
 

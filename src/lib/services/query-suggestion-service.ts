@@ -17,7 +17,7 @@ export class QuerySuggestionService {
         },
         body: JSON.stringify({
           provider: 'OpenAI GPT-5',
-          model: 'gpt-5-mini',
+          model: 'gpt-5-nano',
           prompt
         })
       })
@@ -56,23 +56,32 @@ CRITICAL REQUIREMENTS:
 5. Avoid review-focused queries ("reviews", "ratings", "feedback")
 6. Avoid comparison queries ("compare", "vs", "versus", "difference between")
 7. Focus on superlative and ranking language that demands ordered lists
-8. Include location-based queries (using the city if provided)
-9. Consider market size - some niches may only have a few businesses
-10. Vary query length and specificity
 
-Examples of PERFECT ranking queries:
-- "best pizza restaurants in Dublin"
-- "top coffee shops Dublin city center"
-- "most recommended sushi places downtown"
-- "highest rated Italian restaurants Dublin"
-- "best brunch spots Dublin weekends"
+LOCATION STRATEGY - CRITICAL:
+8. Use NATURAL, SEARCHABLE location terms that real customers use:
+   - For local businesses (cafes, restaurants, shops): Use neighborhood names, districts, or well-known areas
+   - For larger cities: Use neighborhoods like "Temple Bar", "Grafton Street", "Dublin city center", "Southside Dublin"
+   - NEVER use postal codes (D08, D02) or technical city codes - use natural names
+   - Examples: "Dublin 8" or "the Liberties" instead of "D08", "city center" instead of "CBD"
+   - For service businesses: Can use broader city names if they serve the whole city
 
-Examples of BAD queries that don't produce rankings:
-- "top 10 pizza places Dublin" (numbered constraint)
-- "where to find pizza in Dublin" (informational)
-- "reviews of Pizza Palace" (review-focused)
-- "compare Italian restaurants" (comparison)
-- "how to choose a restaurant" (how-to)
+9. Match location granularity to business type:
+   - Coffee shops, restaurants, retail: Use specific neighborhoods or districts
+   - Professional services, hotels: Can use broader city areas
+   - Consider realistic catchment area - a local cafe competes locally, not city-wide
+
+10. Vary query length and specificity across the 5 suggestions
+
+Examples of PERFECT location usage:
+- "best coffee shops Dublin city center" (natural area name)
+- "top brunch spots Temple Bar Dublin" (specific neighborhood)
+- "most recommended cafes Grafton Street area" (well-known street/area)
+- "highest rated restaurants Dublin 8" (natural postal district name)
+
+Examples of BAD location usage:
+- "best cafes D08" (postal code - users don't search this way)
+- "top restaurants CBD Dublin" (technical term)
+- "best coffee Dublin" (too broad for a local business)
 
 Format your response as JSON with this structure:
 {
@@ -88,16 +97,16 @@ Example for a pizza restaurant in Dublin:
 {
   "suggestions": [
     {
-      "text": "best pizza delivery Dublin",
-      "reasoning": "Uses 'best' superlative to request open-ended ranked list of pizza delivery options"
+      "text": "best pizza delivery Temple Bar",
+      "reasoning": "Uses 'best' superlative with natural neighborhood name for local ranking"
     },
     {
       "text": "top Italian restaurants Dublin city center",
-      "reasoning": "Uses 'top' ranking language for location-specific ordered recommendations"
+      "reasoning": "Uses 'top' ranking language for natural city area search"
     },
     {
-      "text": "most recommended pizza places Dublin",
-      "reasoning": "Uses 'most recommended' superlative that demands ranked results without number limits"
+      "text": "most recommended pizza places Dublin 2",
+      "reasoning": "Uses 'most recommended' superlative with natural postal area reference"
     }
   ]
 }`

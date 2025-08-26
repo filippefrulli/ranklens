@@ -76,11 +76,11 @@ export class LLMService {
       // First attempt with initial count
       const prompt = this.buildPrompt(query, requestCount)
       
-  // Call server-side proxy for provider
+        // Call server-side proxy for provider
         const resp = await fetch('/api/llm', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ provider: provider.name, prompt })
+          body: JSON.stringify({ provider: provider.name, prompt, model: 'gpt-5-mini' })
         })
         
         if (!resp.ok) {

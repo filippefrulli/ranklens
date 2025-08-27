@@ -80,6 +80,24 @@ export interface RankingSource {
   created_at: string
 }
 
+export interface CompetitorResult {
+  id: string
+  query_id: string
+  analysis_run_id: string
+  business_name: string
+  average_rank: number
+  best_rank: number
+  worst_rank: number
+  appearances_count: number
+  total_attempts: number
+  appearance_rate: number
+  weighted_score: number
+  llm_providers: string[]
+  raw_ranks: number[]
+  is_user_business: boolean
+  created_at: string
+}
+
 // Keep the old RankingResult interface for backward compatibility
 export interface RankingResult {
   id: string

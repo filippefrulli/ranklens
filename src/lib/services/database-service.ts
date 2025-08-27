@@ -113,7 +113,6 @@ export class DatabaseService {
       .single()
 
     if (error) {
-      console.log('❌ Error in getQuery:', error)
       if (error.code === 'PGRST116') return null // No rows returned
       throw new Error(`Failed to fetch query: ${error.message}`)
     }
@@ -140,7 +139,6 @@ export class DatabaseService {
       .order('created_at', { ascending: false })
 
     if (error) {
-      console.log('❌ Error in getQueryRankingResults:', error)
       throw new Error(`Failed to fetch ranking results: ${error.message}`)
     }
     
@@ -303,7 +301,6 @@ export class DatabaseService {
     }
 
     if (!attempts || attempts.length === 0) {
-      console.log('ℹ️ No successful attempts found for this query/run')
       return 0
     }
 
@@ -408,7 +405,6 @@ export class DatabaseService {
     })
 
     if (competitorResults.length === 0) {
-      console.log('ℹ️ No competitor results to insert')
       return 0
     }
 
@@ -981,7 +977,6 @@ export class DatabaseService {
       .eq('query_id', queryId)
     
     if (error) {
-      console.log('❌ Error in getQueryAnalysisRuns:', error)
       throw new Error(`Failed to fetch analysis runs: ${error.message}`)
     }
 
@@ -1019,7 +1014,6 @@ export class DatabaseService {
       .order('created_at', { ascending: false })
 
     if (error) {
-      console.log('❌ Error in getQueryRankingResultsByRun:', error)
       throw new Error(`Failed to fetch ranking results: ${error.message}`)
     }
     
@@ -1041,7 +1035,6 @@ export class DatabaseService {
     }
 
     if (!data || data.length === 0) {
-      console.log('ℹ️ No competitor results found for this query/run')
       return []
     }
 

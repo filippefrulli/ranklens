@@ -185,23 +185,11 @@
 
   async function checkForRunningAnalysis() {
     if (!business?.id) {
-      console.log('🔍 No business ID available for checking running analysis');
       return;
     }
 
     try {      
-      // Get the current session to include in the request
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session?.access_token) {
-        console.log('🔍 No valid session found');
-        return;
-      }
-
-      const response = await fetch(`/api/analysis-status?businessId=${business.id}`, {
-        headers: {
-          'Authorization': `Bearer ${session.access_token}`
-        }
-      });
+      const response = await AuthService.makeAuthenticatedRequest(`/api/analysis-status?businessId=${business.id}`);
       const data = await response.json();
       
       const { runningAnalysis: activeAnalysis } = data;
@@ -224,7 +212,6 @@
         // Start polling for updates
         startAnalysisPolling();
       } else {
-        console.log('📊 No running analysis found');
         runningAnalysis = false;
       }
     } catch (err) {
@@ -244,12 +231,7 @@
       }
 
       try {
-        const session = await supabase.auth.getSession();
-        const response = await fetch(`/api/analysis-status?businessId=${business.id}`, {
-          headers: {
-            'Authorization': `Bearer ${session.data.session?.access_token}`
-          }
-        });
+        const response = await AuthService.makeAuthenticatedRequest(`/api/analysis-status?businessId=${business.id}`);
         const { runningAnalysis: currentAnalysis } = await response.json();
         
         if (!currentAnalysis || currentAnalysis.status === 'completed' || currentAnalysis.status === 'failed') {
@@ -393,19 +375,9 @@
         currentProvider: 'Initializing...'
       };
 
-      // Get the current session for authorization
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session?.access_token) {
-        throw new Error('No valid session found');
-      }
-
       // Call the server-side analysis endpoint
-      const response = await fetch('/api/run-analysis', {
+      const response = await AuthService.makeAuthenticatedRequest('/api/run-analysis', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${session.access_token}`
-        },
         body: JSON.stringify({
           businessId: dashboardData.business.id
         })

@@ -1,0 +1,332 @@
+import type { LLMProvider } from '../types'
+import { env } from '$env/dynamic/private'
+
+export interface LLMResponse {
+  rankedBusinesses: string[]
+  foundBusinessRank: number | null // null if business not found
+  foundBusinessName: string | null // the actual name found (might differ slightly)
+  responseTimeMs: number
+  success: boolean
+  error?: string
+  totalRequested: number // how many businesses were requested
+}
+
+function withTimeout<T>(promise: Promise<T>, ms = 30000): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const id = setTimeout(() => reject(new Error('LLM request timed out')), ms)
+    promise
+      .then((res) => {
+        clearTimeout(id)
+        resolve(res)
+      })
+      .catch((err) => {
+        clearTimeout(id)
+        reject(err)
+      })
+  })
+}
+
+export class ServerLLMService {
+  // Fuzzy matching utility to find business in results
+  private static fuzzyMatch(target: string, candidate: string): number {
+    const targetLower = target.toLowerCase().trim()
+    const candidateLower = candidate.toLowerCase().trim()
+    
+    // Exact match
+    if (targetLower === candidateLower) return 1.0
+    
+    // Contains match
+    if (candidateLower.includes(targetLower) || targetLower.includes(candidateLower)) {
+      return 0.8
+    }
+    
+    // Simple word overlap scoring
+    const targetWords = targetLower.split(/\s+/)
+    const candidateWords = candidateLower.split(/\s+/)
+    
+    let matchingWords = 0
+    for (const targetWord of targetWords) {
+      if (candidateWords.some(cw => cw.includes(targetWord) || targetWord.includes(cw))) {
+        matchingWords++
+      }
+    }
+    
+    const score = matchingWords / Math.max(targetWords.length, candidateWords.length)
+    return score >= 0.6 ? score : 0 // Only consider matches above 60%
+  }
+
+  private static findBusinessInList(businessName: string, rankedList: string[]): {
+    rank: number | null,
+    foundName: string | null
+  } {
+    let bestMatch = { score: 0, rank: -1, name: '' }
+    
+    for (let i = 0; i < rankedList.length; i++) {
+      const score = this.fuzzyMatch(businessName, rankedList[i])
+      if (score > bestMatch.score) {
+        bestMatch = { score, rank: i + 1, name: rankedList[i] }
+      }
+    }
+    
+    if (bestMatch.score > 0) {
+      return { rank: bestMatch.rank, foundName: bestMatch.name }
+    }
+    
+    return { rank: null, foundName: null }
+  }
+
+  private static buildPrompt(query: string, count: number): string {
+    return `You are a helpful assistant that provides ranked lists of businesses. You must always provide a complete ranked list without asking clarifying questions.
+
+Query: "${query}"
+
+IMPORTANT: Do not ask clarifying questions. Make reasonable assumptions and provide exactly ${count} businesses that best match this query. If the query mentions a location, include businesses in and around that area using your best judgment.
+
+Format your response as a simple numbered list with just the business names, like:
+
+1. Business Name One
+2. Business Name Two
+3. Business Name Three
+...
+
+Required guidelines:
+- Provide exactly ${count} businesses (no more, no less)
+- Use actual business names, not generic descriptions
+- Rank them from best to worst match for the query
+- Include a mix of well-known and local businesses when relevant
+- For location-based queries, interpret broadly to include nearby areas
+- Do not include explanations, questions, or additional text
+- Only provide the numbered list of business names
+- Make reasonable assumptions if the query is ambiguous`
+  }
+
+  private static extractBusinessNames(text: string): string[] {
+    const lines = text.split('\n')
+    const businesses: string[] = []
+    
+    for (const line of lines) {
+      const trimmed = line.trim()
+      
+      // Match numbered list patterns: "1. Business Name" or "1) Business Name"
+      const match = trimmed.match(/^\d+[\.\)]\s*(.+)$/)
+      if (match && match[1]) {
+        const businessName = match[1].trim()
+        if (businessName && businessName.length > 0) {
+          businesses.push(businessName)
+        }
+      }
+    }
+    
+    return businesses
+  }
+
+  private static deduplicateRankedList(names: string[]): string[] {
+    const seen = new Set<string>()
+    const result: string[] = []
+    
+    for (const name of names) {
+      const normalized = name.toLowerCase().trim()
+      if (!seen.has(normalized)) {
+        seen.add(normalized)
+        result.push(name)
+      }
+    }
+    
+    return result
+  }
+
+  // Direct API calls (server-only)
+  private static async callOpenAI(prompt: string): Promise<string> {
+    const apiKey = env.OPENAI_API_KEY
+    if (!apiKey) throw new Error('OpenAI API key not configured')
+    
+    const payload: Record<string, any> = {
+      model: 'gpt-5-mini',
+      input: prompt,
+      reasoning: { effort: 'low' }
+    }
+
+    const resp = await withTimeout(
+      fetch('https://api.openai.com/v1/responses', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(payload)
+      })
+    )
+
+    if (!resp.ok) {
+      const errorText = await resp.text()
+      console.error('OpenAI API error:', resp.status, errorText)
+      throw new Error(`OpenAI error ${resp.status}: ${errorText}`)
+    }
+    
+    const data = await resp.json()
+    
+    // The /v1/responses endpoint returns a complex nested structure
+    // The actual text content is in output[1].content[0].text (based on the response structure you provided)
+    let content = ''
+    
+    if (data?.output && Array.isArray(data.output)) {
+      // Find the message output (type: "message")
+      const messageOutput = data.output.find((item: any) => item.type === 'message')
+      if (messageOutput?.content && Array.isArray(messageOutput.content)) {
+        // Find the text content (type: "output_text")
+        const textContent = messageOutput.content.find((item: any) => item.type === 'output_text')
+        if (textContent?.text) {
+          content = textContent.text
+        }
+      }
+    }
+    
+    // Fallback to other possible fields if the above structure doesn't work
+    if (!content) {
+      content = data?.output || data?.response || data?.content || data?.text || ''
+    }
+    
+    return content
+  }
+
+  private static async callAnthropic(prompt: string): Promise<string> {
+    const apiKey = env.ANTHROPIC_API_KEY
+    if (!apiKey) throw new Error('Anthropic API key not configured')
+
+    const resp = await withTimeout(
+      fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: {
+          'x-api-key': apiKey,
+          'Content-Type': 'application/json',
+          'anthropic-version': '2023-06-01'
+        },
+        body: JSON.stringify({
+          model: 'claude-3-sonnet-20240229',
+          max_tokens: 500,
+          messages: [{ role: 'user', content: prompt }]
+        })
+      })
+    )
+    
+    if (!resp.ok) {
+      const t = await resp.text()
+      throw new Error(`Anthropic error ${resp.status}: ${t}`)
+    }
+    
+    const data = await resp.json()
+    return data?.content?.[0]?.text || ''
+  }
+
+  private static async callGemini(prompt: string): Promise<string> {
+    const apiKey = env.GOOGLE_API_KEY
+    if (!apiKey) throw new Error('Google API key not configured')
+
+    const resp = await withTimeout(
+      fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=${apiKey}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: prompt }] }],
+          generationConfig: { maxOutputTokens: 500, temperature: 0.3 }
+        })
+      })
+    )
+    
+    if (!resp.ok) {
+      const t = await resp.text()
+      throw new Error(`Google error ${resp.status}: ${t}`)
+    }
+    
+    const data = await resp.json()
+    return data?.candidates?.[0]?.content?.parts?.[0]?.text || ''
+  }
+
+  private static async callPerplexity(prompt: string): Promise<string> {
+    const apiKey = env.PERPLEXITY_API_KEY
+    if (!apiKey) throw new Error('Perplexity API key not configured')
+
+    const resp = await withTimeout(
+      fetch('https://api.perplexity.ai/chat/completions', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          model: 'llama-3.1-sonar-small-128k-online',
+          messages: [{ role: 'user', content: prompt }],
+          max_tokens: 500,
+          temperature: 0.3
+        })
+      })
+    )
+    
+    if (!resp.ok) {
+      const t = await resp.text()
+      throw new Error(`Perplexity error ${resp.status}: ${t}`)
+    }
+    
+    const data = await resp.json()
+    return data?.choices?.[0]?.message?.content || ''
+  }
+
+  // Main method for making LLM requests (server-only)
+  public static async makeRequest(
+    provider: LLMProvider,
+    query: string,
+    businessName: string,
+    requestCount: number = 25
+  ): Promise<LLMResponse> {
+    const startTime = Date.now()
+    
+    try {
+      const prompt = this.buildPrompt(query, requestCount)
+      let content = ''
+      
+      // Call appropriate LLM API directly
+      switch (provider.name) {
+        case 'OpenAI GPT-5':
+        case 'OpenAI':
+          content = await this.callOpenAI(prompt)
+          break
+        case 'Anthropic Claude':
+        case 'Anthropic':
+          content = await this.callAnthropic(prompt)
+          break
+        case 'Google Gemini':
+        case 'Gemini':
+          content = await this.callGemini(prompt)
+          break
+        case 'Perplexity':
+          content = await this.callPerplexity(prompt)
+          break
+        default:
+          throw new Error(`Unsupported provider: ${provider.name}`)
+      }
+      
+      const rankedBusinesses = this.deduplicateRankedList(this.extractBusinessNames(content))
+      const foundResult = this.findBusinessInList(businessName, rankedBusinesses)
+      
+      return {
+        rankedBusinesses,
+        foundBusinessRank: foundResult.rank,
+        foundBusinessName: foundResult.foundName,
+        responseTimeMs: Date.now() - startTime,
+        success: true,
+        totalRequested: requestCount
+      }
+      
+    } catch (err) {
+      return {
+        rankedBusinesses: [],
+        foundBusinessRank: null,
+        foundBusinessName: null,
+        responseTimeMs: Date.now() - startTime,
+        success: false,
+        error: err instanceof Error ? err.message : String(err),
+        totalRequested: requestCount
+      }
+    }
+  }
+}

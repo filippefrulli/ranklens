@@ -1,6 +1,7 @@
 import { writable } from 'svelte/store'
 import { supabase } from '../supabase'
 import type { User, Session } from '@supabase/supabase-js'
+import { browser } from '$app/environment'
 
 // Auth state stores
 export const user = writable<User | null>(null)
@@ -18,10 +19,26 @@ export class AuthService {
       session.set(initialSession)
       user.set(initialSession?.user ?? null)
 
+      // Store access token in cookie for server-side access
+      if (browser && initialSession?.access_token) {
+        document.cookie = `sb-access-token=${initialSession.access_token}; path=/; max-age=${24 * 60 * 60}; secure; samesite=strict`
+      }
+
       // Listen for auth changes
       supabase.auth.onAuthStateChange((_event, newSession) => {
         session.set(newSession)
         user.set(newSession?.user ?? null)
+        
+        // Update access token cookie
+        if (browser) {
+          if (newSession?.access_token) {
+            document.cookie = `sb-access-token=${newSession.access_token}; path=/; max-age=${24 * 60 * 60}; secure; samesite=strict`
+          } else {
+            // Clear cookie on sign out
+            document.cookie = 'sb-access-token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT'
+          }
+        }
+        
         loading.set(false)
       })
     } catch (error) {
@@ -100,6 +117,11 @@ export class AuthService {
       user.set(null)
       session.set(null)
       
+      // Clear access token cookie
+      if (browser) {
+        document.cookie = 'sb-access-token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT'
+      }
+      
       return { error: null }
     } catch (error) {
       console.error('Sign-out error:', error)
@@ -121,5 +143,34 @@ export class AuthService {
       console.error('Password reset error:', error)
       return { data: null, error }
     }
+  }
+
+  // Helper to get access token for API requests
+  static async getAccessToken(): Promise<string | null> {
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      return session?.access_token || null
+    } catch (error) {
+      console.error('Error getting access token:', error)
+      return null
+    }
+  }
+
+  // Helper to make authenticated API requests
+  static async makeAuthenticatedRequest(url: string, options: RequestInit = {}) {
+    const accessToken = await this.getAccessToken()
+    
+    if (!accessToken) {
+      throw new Error('No access token available')
+    }
+
+    return fetch(url, {
+      ...options,
+      headers: {
+        ...options.headers,
+        'Authorization': `Bearer ${accessToken}`,
+        'Content-Type': 'application/json'
+      }
+    })
   }
 }

@@ -34,7 +34,6 @@
     try {
       loading = true
       error = null
-      console.log('🔄 Loading initial data for query:', queryId)
 
       // Get query details
       const queryData = await DatabaseService.getQuery(queryId)
@@ -62,7 +61,6 @@
         await loadRunData(runs[0].id)
       }
 
-      console.log('✅ Initial data loaded successfully')
     } catch (err: any) {
       console.error('� Error loading initial data:', err)
       error = err.message || 'Failed to load data'
@@ -76,7 +74,6 @@
     
     try {
       loadingData = true
-      console.log('🔄 Loading data for run:', runId)
 
       // Load ranking results and competitor rankings for this specific run
       const [rankings, competitors] = await Promise.all([
@@ -87,7 +84,6 @@
       rankingResults = rankings
       competitorRankings = competitors
 
-      console.log('✅ Run data loaded:', rankings.length, 'rankings,', competitors.length, 'competitors')
     } catch (err: any) {
       console.error('💥 Error loading run data:', err)
       error = err.message || 'Failed to load run data'

@@ -22,10 +22,8 @@
     error = null
     
     try {
-      console.log('🤖 Generating query suggestions for business:', business.name)
       const generatedSuggestions = await QuerySuggestionService.generateQuerySuggestions(business)
       suggestions = generatedSuggestions.map(s => ({ ...s, accepted: false, rejected: false }))
-      console.log('✅ Generated suggestions:', suggestions)
     } catch (err) {
       console.error('❌ Error generating suggestions:', err)
       error = err instanceof Error ? err.message : 'Failed to generate suggestions'

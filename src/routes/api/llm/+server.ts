@@ -27,7 +27,7 @@ export const POST: RequestHandler = async ({ request }) => {
 
     let content = ''
 
-    if (provider === 'OpenAI GPT-5' || provider === 'OpenAI' || provider === 'OpenAI GPT-4') {
+    if (provider === 'OpenAI GPT-5' || provider === 'OpenAI' || provider === 'OpenAI GPT-5') {
       const apiKey = env.OPENAI_API_KEY || env.VITE_OPENAI_API_KEY
       if (!apiKey) return new Response(JSON.stringify({ error: 'OpenAI API key not configured' }), { status: 500 })
       const selectedModel = 'gpt-5-nano'

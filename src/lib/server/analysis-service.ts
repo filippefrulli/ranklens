@@ -78,9 +78,7 @@ export class ServerAnalysisService {
         for (const provider of providers) {
 
           for (let attemptNum = 1; attemptNum <= 5; attemptNum++) {
-            try {
-              console.log(`🤖 ${provider.name} - Attempt ${attemptNum}/5`)
-              
+            try {              
               const result = await ServerLLMService.makeRequest(provider, query.text, business.name, 25)
               completedCalls++
 
@@ -95,16 +93,6 @@ export class ServerAnalysisService {
                 success: result.success,
                 error_message: result.error || null,
               })
-
-              if (result.success) {
-                if (result.foundBusinessRank) {
-                  console.log(`✅ Found "${business.name}" at rank ${result.foundBusinessRank}`)
-                } else {
-                  console.log(`📊 Business "${business.name}" not found in ranking`)
-                }
-              } else {
-                console.warn(`❌ Failed LLM request from ${provider.name}: ${result.error}`)
-              }
 
               // Update progress in database every 5 calls or at the end
               if (completedCalls % 5 === 0 || completedCalls === totalCalls) {
@@ -179,7 +167,6 @@ export class ServerAnalysisService {
         // Save ranking attempts for this query
         if (rankingAttempts.length > 0) {
           await this.dbService.saveRankingAttempts(rankingAttempts)
-          console.log(`✅ Successfully saved ${rankingAttempts.length} ranking attempts`)
         } else {
           console.warn(`⚠️ No ranking attempts to save for query: ${query.text}`)
         }
@@ -200,7 +187,6 @@ export class ServerAnalysisService {
 
       try {
         const competitorResultsCount = await this.dbService.populateCompetitorResultsForAnalysisRun(analysisRun.id)
-        console.log(`✅ Populated ${competitorResultsCount} competitor results`)
       } catch (competitorError) {
         console.error('❌ Failed to populate competitor results:', competitorError)
         // Don't fail the whole analysis if competitor results fail

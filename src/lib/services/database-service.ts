@@ -206,7 +206,6 @@ export class DatabaseService {
     const { data: userData, error: userError } = await supabase.auth.getUser();
     
     if (userError || !userData?.user) {
-      console.log('🔍 User not authenticated, cannot check for running analysis');
       return null;
     }
         
@@ -241,7 +240,6 @@ export class DatabaseService {
     }
 
     if (!queryIds || queryIds.length === 0) {
-      console.log('ℹ️ No queries found for analysis run')
       return 0
     }
 

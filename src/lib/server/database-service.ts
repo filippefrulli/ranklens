@@ -239,7 +239,6 @@ export class ServerDatabaseService {
       }
     }
 
-    console.log(`✅ Total competitor results populated: ${totalInserted}`)
     return totalInserted
   }
 
@@ -401,7 +400,6 @@ export class ServerDatabaseService {
     }
 
     const insertedCount = insertedData?.length || 0
-    console.log(`✅ Inserted ${insertedCount} competitor results for query`)
     
     return insertedCount
   }

@@ -1,35 +1,19 @@
 import type { Business } from '../types'
+import { ServerLLMService } from './llm-service'
 
 interface QuerySuggestion {
   text: string
-  reasoning: string
 }
 
-export class QuerySuggestionService {
+export class ServerQuerySuggestionService {
   static async generateQuerySuggestions(business: Business): Promise<QuerySuggestion[]> {
     const prompt = this.buildPrompt(business)
     
     try {
-      const response = await fetch('/api/llm', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          provider: 'OpenAI GPT-5',
-          model: 'gpt-5-nano',
-          prompt
-        })
-      })
-
-      if (!response.ok) {
-        throw new Error(`Query suggestions API error: ${response.status} ${response.statusText}`)
-      }
-
-      const { content } = await response.json()
+      const content = await ServerLLMService.queryLLM('OpenAI GPT-5', 'gpt-5', prompt)
 
       if (!content) {
-        throw new Error('No content received from OpenAI')
+        throw new Error('No content received from LLM')
       }
 
       return this.parseQuerySuggestions(content)
@@ -86,28 +70,22 @@ Examples of BAD location usage:
 Format your response as JSON with this structure:
 {
   "suggestions": [
-    {
-      "text": "search query text",
-      "reasoning": "brief explanation why this query will produce a ranked list"
-    }
+    "search query text 1",
+    "search query text 2",
+    "search query text 3",
+    "search query text 4",
+    "search query text 5"
   ]
 }
 
 Example for a pizza restaurant in Dublin:
 {
   "suggestions": [
-    {
-      "text": "best pizza delivery Temple Bar",
-      "reasoning": "Uses 'best' superlative with natural neighborhood name for local ranking"
-    },
-    {
-      "text": "top Italian restaurants Dublin city center",
-      "reasoning": "Uses 'top' ranking language for natural city area search"
-    },
-    {
-      "text": "most recommended pizza places Dublin 2",
-      "reasoning": "Uses 'most recommended' superlative with natural postal area reference"
-    }
+    "best pizza delivery Temple Bar",
+    "top Italian restaurants Dublin city center",
+    "most recommended pizza places Dublin 2",
+    "highest rated pizzerias near Grafton Street",
+    "best takeaway pizza the Liberties Dublin"
   ]
 }`
   }
@@ -123,10 +101,11 @@ Example for a pizza restaurant in Dublin:
         throw new Error('Invalid response format')
       }
 
-      return parsed.suggestions.map((suggestion: any) => ({
-        text: suggestion.text || '',
-        reasoning: suggestion.reasoning || ''
+      const results = parsed.suggestions.map((suggestion: any) => ({
+        text: typeof suggestion === 'string' ? suggestion : suggestion.text || ''
       })).filter((s: QuerySuggestion) => s.text.trim().length > 0)
+      
+      return results
       
     } catch (error) {
       console.error('Error parsing query suggestions:', error)
@@ -140,8 +119,7 @@ Example for a pizza restaurant in Dublin:
         const match = line.match(/"([^"]+)"/)
         if (match && match[1].length > 10) { // Reasonable query length
           queries.push({
-            text: match[1],
-            reasoning: 'Generated query suggestion'
+            text: match[1]
           })
         }
       }

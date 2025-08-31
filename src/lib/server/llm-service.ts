@@ -75,6 +75,32 @@ export class ServerLLMService {
     return { rank: null, foundName: null }
   }
 
+  // Public method for general LLM queries (server-side only)
+  public static async queryLLM(providerName: string, model: string, prompt: string): Promise<string> {
+    try {
+      // For now, just use OpenAI as the default for query suggestions
+      // You can extend this to support other providers if needed
+      switch (providerName) {
+        case 'OpenAI GPT-5':
+        case 'OpenAI':
+          return await this.callOpenAI(prompt, model)
+        case 'Anthropic Claude':
+        case 'Anthropic':
+          return await this.callAnthropic(prompt)
+        case 'Google Gemini':
+        case 'Gemini':
+          return await this.callGemini(prompt)
+        case 'Perplexity':
+          return await this.callPerplexity(prompt)
+        default:
+          throw new Error(`Unsupported LLM provider: ${providerName}`)
+      }
+    } catch (error) {
+      console.error(`Error querying ${providerName}:`, error)
+      throw error
+    }
+  }
+
   private static buildPrompt(query: string, count: number): string {
     return `You are a helpful assistant that provides ranked lists of businesses. You must always provide a complete ranked list without asking clarifying questions.
 
@@ -136,12 +162,12 @@ Required guidelines:
   }
 
   // Direct API calls (server-only)
-  private static async callOpenAI(prompt: string): Promise<string> {
+  private static async callOpenAI(prompt: string, model: string): Promise<string> {
     const apiKey = env.OPENAI_API_KEY
     if (!apiKey) throw new Error('OpenAI API key not configured')
     
     const payload: Record<string, any> = {
-      model: 'gpt-5-mini',
+      model: model,
       input: prompt,
       reasoning: { effort: 'low' }
     }
@@ -288,7 +314,7 @@ Required guidelines:
       switch (provider.name) {
         case 'OpenAI GPT-5':
         case 'OpenAI':
-          content = await this.callOpenAI(prompt)
+          content = await this.callOpenAI(prompt, 'gpt-5-nano')
           break
         case 'Anthropic Claude':
         case 'Anthropic':

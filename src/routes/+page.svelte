@@ -1,8 +1,15 @@
 <script lang="ts">
+  import type { PageData, ActionData } from './$types'
   import { user } from '../lib/services/auth-service'
   import LoginForm from '../lib/components/auth/LoginForm.svelte'
   import Dashboard from '../lib/components/dashboard/Dashboard.svelte'
 
+  interface Props {
+    data: PageData
+    form: ActionData
+  }
+
+  let { data, form }: Props = $props()
   let showDemo = $state(true)
 
   // Reactive navigation based on auth state
@@ -132,5 +139,5 @@
 
 {:else}
   <!-- Dashboard Application for Authenticated Users -->
-  <Dashboard />
+  <Dashboard {form} />
 {/if}

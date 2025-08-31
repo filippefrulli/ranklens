@@ -1,29 +1,29 @@
 <script lang="ts">
   import type { Business, QuerySuggestion } from '../../types'
-  import { QuerySuggestionService } from '../../services/query-suggestion-service'
   
   interface Props {
     show: boolean
     business: Business
     onAcceptQuery: (queryText: string) => void
     onClose: () => void
+    generateSuggestions: () => Promise<QuerySuggestion[]>
   }
   
-  let { show, business, onAcceptQuery, onClose }: Props = $props()
+  let { show, business, onAcceptQuery, onClose, generateSuggestions }: Props = $props()
 
   let suggestions: QuerySuggestion[] = $state([])
   let loading = $state(false)
   let error = $state<string | null>(null)
 
-  async function generateSuggestions() {
+  async function loadSuggestions() {
     if (suggestions.length > 0) return // Already generated
     
     loading = true
     error = null
     
     try {
-      const generatedSuggestions = await QuerySuggestionService.generateQuerySuggestions(business)
-      suggestions = generatedSuggestions.map(s => ({ ...s, accepted: false, rejected: false }))
+      const generatedSuggestions = await generateSuggestions()
+      suggestions = generatedSuggestions.map((s: any) => ({ ...s, accepted: false, rejected: false }))
     } catch (err) {
       console.error('❌ Error generating suggestions:', err)
       error = err instanceof Error ? err.message : 'Failed to generate suggestions'
@@ -49,13 +49,13 @@
 
   function regenerateSuggestions() {
     suggestions = []
-    generateSuggestions()
+    loadSuggestions()
   }
 
   // Generate suggestions when modal opens
   $effect(() => {
     if (show) {
-      generateSuggestions()
+      loadSuggestions()
     }
   })
 </script>
@@ -119,9 +119,6 @@
                   <h4 class="font-medium text-gray-900 mb-1 {suggestion.rejected ? 'line-through text-gray-500' : ''}">
                     "{suggestion.text}"
                   </h4>
-                  <p class="text-sm text-gray-600">
-                    {suggestion.reasoning}
-                  </p>
                   {#if suggestion.accepted}
                     <div class="mt-2 inline-flex items-center text-xs text-green-700">
                       <svg class="w-3 h-3 mr-1" fill="currentColor" viewBox="0 0 20 20">

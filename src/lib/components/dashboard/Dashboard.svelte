@@ -7,6 +7,7 @@
     DashboardData,
     LLMProvider,
     WeeklyAnalysisCheck,
+    QuerySuggestion,
   } from "../../types";
   import GoogleBusinessSearch from "../business/GoogleBusinessSearch.svelte";
   import DashboardHeader from "./DashboardHeader.svelte";
@@ -19,6 +20,12 @@
   import WeeklyAnalysisHistory from "./WeeklyAnalysisHistory.svelte";
   import AnalysisProgressBar from "./AnalysisProgressBar.svelte";
   import QuerySuggestionsModal from "./QuerySuggestionsModal.svelte";
+
+  interface Props {
+    form?: any
+  }
+
+  let { form }: Props = $props()
 
   let business = $state<Business | null>(null);
   let dashboardData = $state<DashboardData | null>(null);
@@ -338,6 +345,60 @@
     }
   }
 
+  async function generateQuerySuggestions(): Promise<QuerySuggestion[]> {
+    if (!business) {
+      throw new Error('Business not found')
+    }
+
+    // Use a programmatic form submission to call the server action
+    const formData = new FormData()
+    
+    const response = await fetch('/?/generateQuerySuggestions', {
+      method: 'POST',
+      body: formData
+    })
+
+    if (!response.ok) {
+      throw new Error(`Server error: ${response.status} ${response.statusText}`)
+    }
+
+    const result = await response.json()
+    console.log('🔍 CLIENT DEBUG: Full response:', result)
+    
+    if (result.type === 'success') {
+      // The data is being returned as a stringified array, let's parse it
+      let suggestions;
+      
+      if (typeof result.data === 'string') {
+        try {
+          console.log('🔍 CLIENT DEBUG: Parsing stringified data:', result.data)
+          const parsed = JSON.parse(result.data)
+          console.log('🔍 CLIENT DEBUG: Parsed array:', parsed)
+          
+          // Extract only the string values from the parsed array
+          suggestions = parsed.filter((item: unknown) => typeof item === 'string' && item.length > 10)
+          console.log('🔍 CLIENT DEBUG: Filtered strings:', suggestions)
+        } catch (e) {
+          console.error('❌ Failed to parse data:', e)
+          throw new Error('Invalid response format')
+        }
+      } else if (result.data?.suggestions) {
+        suggestions = result.data.suggestions
+      } else if (Array.isArray(result.data)) {
+        suggestions = result.data
+      }
+      
+      if (suggestions && Array.isArray(suggestions)) {
+        // Convert strings to QuerySuggestion objects
+        const formattedSuggestions = suggestions.map(text => ({ text }))
+        console.log('🔍 CLIENT DEBUG: Final formatted suggestions:', formattedSuggestions)
+        return formattedSuggestions
+      }
+    }
+    
+    throw new Error(result.data?.error || 'Failed to generate suggestions')
+  }
+
   async function runAnalysis() {
     if (!dashboardData?.business) {
       console.error("❌ No business found in dashboard data");
@@ -511,6 +572,7 @@
       {business}
       onAcceptQuery={acceptQuerySuggestion}
       onClose={() => (showQuerySuggestions = false)}
+      generateSuggestions={generateQuerySuggestions}
     />
   {/if}    <!-- Error Toast -->
   {#if error}

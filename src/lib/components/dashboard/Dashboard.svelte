@@ -1,8 +1,6 @@
 <script lang="ts">
   import { onMount } from "svelte";
-  import { supabase } from "../../supabase";
   import { DatabaseService } from "../../services/database-service";
-  import { LLMService } from "../../services/llm-service";
   import { AuthService, user } from "../../services/auth-service";
   import type {
     Business,
@@ -446,7 +444,7 @@
       hasQueries={dashboardData?.queries?.length! > 0}
       {runningAnalysis}
       {weeklyCheck}
-      onAddQuery={addQuery}
+      onAddQuery={() => (showAddQuery = true)}
       onRunAnalysis={runAnalysis}
     />
         

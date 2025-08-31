@@ -24,16 +24,8 @@
     ></div>
   </div>
   
-  <!-- Progress Details -->
-  <div class="space-y-2">
-    <div class="flex justify-between items-center text-sm">
-      <span class="text-gray-600">Step:</span>
-      <span class="font-medium text-gray-900">{progress.currentStep} of {progress.totalSteps}</span>
-    </div>
-  </div>
-  
   <!-- Animation for active state -->
-  <div class="mt-4 flex items-center justify-center">
+  <div class="mt-8 flex items-center justify-center">
     <div class="animate-spin rounded-full h-5 w-5 border-b-2 border-blue-600 mr-2"></div>
     <span class="text-sm text-gray-600">Running analysis...</span>
   </div>

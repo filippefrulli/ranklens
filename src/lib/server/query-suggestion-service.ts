@@ -24,7 +24,7 @@ export class ServerQuerySuggestionService {
   }
 
   private static buildPrompt(business: Business): string {
-    return `Generate 5 realistic search queries that potential customers would use to find the business called "${business.name}".
+    return `Generate 5 natural, conversational queries that potential customers would ask an AI assistant when looking for the business called "${business.name}" or similar services.
 
 Business Details:
 - Name: ${business.name}
@@ -32,66 +32,70 @@ Business Details:
 - Business Type: ${business.google_primary_type_display || 'Not specified'}
 - Google Types: ${business.google_types ? JSON.stringify(business.google_types) : 'Not specified'}
 
-CRITICAL REQUIREMENTS:
-1. Queries MUST result in RANKED LISTS of businesses/services when asked to AI
-2. Use ONLY ranking phrases: "best", "top", "most recommended", "highest rated"
-3. Avoid numbered lists ("top 10", "top 5") - use open-ended ranking terms
-4. Avoid informational queries ("where to find", "how to", "what is", "where can I")
-5. Avoid review-focused queries ("reviews", "ratings", "feedback")
-6. Avoid comparison queries ("compare", "vs", "versus", "difference between")
-7. Focus on superlative and ranking language that demands ordered lists
+CRITICAL REQUIREMENTS - NATURAL LANGUAGE STYLE:
+1. Write queries as if someone is talking to an AI assistant conversationally
+2. Use first-person language ("I am looking for", "I need", "I want", "Can you recommend")
+3. Include context and specific needs/preferences when relevant
+4. Queries should be complete sentences, not keyword searches
+5. Make them sound natural and human-like, as people would actually speak
 
-LOCATION STRATEGY - CRITICAL:
-8. Use NATURAL, SEARCHABLE location terms that real customers use:
-   - For local businesses (cafes, restaurants, shops): Use neighborhood names, districts, or well-known areas
-   - For larger cities: Use neighborhoods like "Temple Bar", "Grafton Street", "Dublin city center", "Southside Dublin"
-   - NEVER use postal codes (D08, D02) or technical city codes - use natural names
-   - Examples: "Dublin 8" or "the Liberties" instead of "D08", "city center" instead of "CBD"
-   - For service businesses: Can use broader city names if they serve the whole city
+QUERY STRUCTURE GUIDELINES:
+6. Start with conversational phrases like:
+   - "I am looking for..."
+   - "I need help finding..."
+   - "Can you recommend..."
+   - "I want to find..."
+   - "What are the best options for..."
+   - "I'm searching for..."
 
-9. Match location granularity to business type:
-   - Coffee shops, restaurants, retail: Use specific neighborhoods or districts
-   - Professional services, hotels: Can use broader city areas
-   - Consider realistic catchment area - a local cafe competes locally, not city-wide
-   - Do not go too granular, avoid overly specific street names or small localities.
+7. Include specific context when relevant:
+   - Occasion: "for a date night", "for a business meeting", "for my family"
+   - Group size: "for a couple", "for a group of friends", "for my team"
+   - Specific needs: "with outdoor seating", "that delivers", "open late"
+   - Purpose: "for a special celebration", "for lunch", "for weekend brunch"
 
-10. Vary query length and specificity across the 5 suggestions
+8. Use natural location references:
+   - "in Dublin city center"
+   - "near Temple Bar"
+   - "in the Dublin area"
+   - "around Grafton Street"
+   - "in Dublin 8" or "the Liberties"
 
-11. Figure out what the business is and does, and generate the queries accordingly. 
-12. If you don't know the business or can't find anything about it, use generic queries based on the business type and location.
-13. If your knowledge of the business is different than the Google Types, use your knowledge but ensure it's relevant and accurate.
+9. Vary the query styles across the 5 suggestions:
+   - Mix different starting phrases
+   - Include different contexts/occasions
+   - Vary specificity levels
+   - Some with specific needs, some more general
 
-Examples of PERFECT location usage:
-- "best coffee shops Dublin city center" (natural area name)
-- "Luxury apartment complex near Temple Bar Dublin" (specific neighborhood)
-- "most recommended cafes Grafton Street area" (well-known street/area)
-- "highest rated restaurants Dublin 8" (natural postal district name)
+10. Ensure queries would generate ranked lists when asked to AI
+11. Focus on services/experiences that match the business type
+12. Make them sound like real customer requests
 
-Examples of BAD location usage:
-- "best cafes D08" (postal code - users don't search this way)
-- "Luxury apartments near Kevin Street Dublin" (too narrow)
-- "top restaurants CBD Dublin" (technical term)
-- "best coffee Dublin" (too broad for a local business)
+Examples for different business types:
+
+For a tour company:
+- "I am looking for a fun Dublin city tour for a couple visiting for the weekend"
+- "Can you recommend the best guided walking tours in Dublin city center?"
+- "I need help finding an interesting historical tour of Dublin for my family"
+
+For a restaurant:
+- "I want to find a great Italian restaurant in Temple Bar for a date night"
+- "What are the best pizza places near Grafton Street that deliver?"
+- "I'm looking for a cozy restaurant in Dublin 8 for a business lunch"
+
+For a coffee shop:
+- "I need a good coffee shop in Dublin city center with wifi for working"
+- "Can you recommend the best cafes around Trinity College for studying?"
+- "I'm searching for a great brunch spot in the Liberties area"
 
 Format your response as JSON with this structure:
 {
   "suggestions": [
-    "search query text 1",
-    "search query text 2",
-    "search query text 3",
-    "search query text 4",
-    "search query text 5"
-  ]
-}
-
-Example for a pizza restaurant in Dublin:
-{
-  "suggestions": [
-    "best pizza delivery near Temple Bar",
-    "top Italian restaurants in the Dublin city center",
-    "most recommended pizza places in Dublin 2",
-    "highest rated pizzerias near Grafton Street",
-    "best takeaway pizza in the Liberties Dublin"
+    "conversational query text 1",
+    "conversational query text 2", 
+    "conversational query text 3",
+    "conversational query text 4",
+    "conversational query text 5"
   ]
 }`
   }

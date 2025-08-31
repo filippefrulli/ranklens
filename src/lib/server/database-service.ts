@@ -387,7 +387,25 @@ export class ServerDatabaseService {
 
         const providerName = attempt.llm_providers?.name || 'Unknown'
         
-        parsedRanking.forEach((businessName, index) => {
+        // First, find user business rank to determine truncation limit
+        let userBusinessRank: number | null = null
+        for (let i = 0; i < parsedRanking.length; i++) {
+          const businessNameLower = parsedRanking[i].toLowerCase().trim()
+          if (businessNameLower === userBusinessName || 
+              businessNameLower.includes(userBusinessName) ||
+              userBusinessName.includes(businessNameLower)) {
+            userBusinessRank = i + 1
+            break
+          }
+        }
+        
+        // Calculate truncation limit
+        const truncationLimit = this.calculateTruncationLimit(userBusinessRank, parsedRanking.length)
+        
+        // Only process businesses up to the truncation limit
+        const businessesToProcess = parsedRanking.slice(0, truncationLimit)
+        
+        businessesToProcess.forEach((businessName, index) => {
           const rank = index + 1
           const businessKey = this.normalizeBusinessName(businessName) // Use normalized name as key
           const businessNameLower = businessName.toLowerCase().trim()
@@ -470,6 +488,20 @@ export class ServerDatabaseService {
     const insertedCount = insertedData?.length || 0
     
     return insertedCount
+  }
+
+  // Calculate truncation limit based on user business rank
+  private calculateTruncationLimit(userRank: number | null, totalBusinesses: number): number {
+    if (!userRank) {
+      // If user business not found, return all businesses
+      return totalBusinesses
+    }
+    
+    // Round up to next multiple of 5
+    const roundedRank = Math.ceil(userRank / 5) * 5
+    
+    // Don't exceed the total number of businesses
+    return Math.min(roundedRank, totalBusinesses)
   }
 
   // Get competitor results for a query/run

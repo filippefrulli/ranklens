@@ -37,7 +37,7 @@
       case 'perplexity':
         return '/images/providers/perplexity.svg'
       default:
-        return '/images/providers/default.svg'
+        return '/images/providers/all.png'
     }
   }
 
@@ -88,7 +88,7 @@
 
   // Get display text for selected provider
   const selectedDisplayText = $derived(selectedProvider?.name || 'All Providers')
-  const selectedIconPath = $derived(selectedProvider ? getProviderIconPath(selectedProvider.name) : '/images/providers/all.svg')
+  const selectedIconPath = $derived(selectedProvider ? getProviderIconPath(selectedProvider.name) : '/images/providers/all.png')
 </script>
 
 <svelte:window on:click={handleClickOutside} on:keydown={handleKeydown} />
@@ -140,7 +140,7 @@
           class="flex items-center gap-2 w-full px-3 py-2 text-left hover:bg-gray-50 focus:bg-gray-50 focus:outline-none {selectedProvider === null ? 'bg-blue-50 text-blue-600' : 'text-gray-900'}"
         >
           <img 
-            src="/images/providers/all.svg" 
+            src="/images/providers/all.png" 
             alt="All Providers"
             class="{iconSizeClasses[size]} flex-shrink-0"
             loading="lazy"

@@ -260,6 +260,20 @@ export class DatabaseService {
     return totalInserted
   }
 
+  // Calculate truncation limit based on user business rank
+  private static calculateTruncationLimit(userRank: number | null, totalBusinesses: number): number {
+    if (!userRank) {
+      // If user business not found, return all businesses
+      return totalBusinesses
+    }
+    
+    // Round up to next multiple of 5
+    const roundedRank = Math.ceil(userRank / 5) * 5
+    
+    // Don't exceed the total number of businesses
+    return Math.min(roundedRank, totalBusinesses)
+  }
+
   static async populateCompetitorResultsForQuery(queryId: string, analysisRunId: string): Promise<number> {
 
     // Get the user's business name for this query
@@ -344,7 +358,25 @@ export class DatabaseService {
 
         const providerName = attempt.llm_providers?.name || 'Unknown'
         
-        parsedRanking.forEach((businessName, index) => {
+        // First, find user business rank to determine truncation limit
+        let userBusinessRank: number | null = null
+        for (let i = 0; i < parsedRanking.length; i++) {
+          const businessNameLower = parsedRanking[i].toLowerCase().trim()
+          if (businessNameLower === userBusinessName || 
+              businessNameLower.includes(userBusinessName) ||
+              userBusinessName.includes(businessNameLower)) {
+            userBusinessRank = i + 1
+            break
+          }
+        }
+        
+        // Calculate truncation limit
+        const truncationLimit = this.calculateTruncationLimit(userBusinessRank, parsedRanking.length)
+        
+        // Only process businesses up to the truncation limit
+        const businessesToProcess = parsedRanking.slice(0, truncationLimit)
+        
+        businessesToProcess.forEach((businessName, index) => {
           const rank = index + 1
           const businessKey = businessName.trim()
           const businessNameLower = businessName.toLowerCase().trim()
@@ -1103,7 +1135,25 @@ export class DatabaseService {
 
       const rankings = Array.isArray(attempt.parsed_ranking) ? attempt.parsed_ranking : []
       
-      rankings.forEach((business: string, index: number) => {
+      // Find user business rank to determine truncation limit
+      let userBusinessRank: number | null = null
+      for (let i = 0; i < rankings.length; i++) {
+        const businessNameLower = rankings[i].toLowerCase().trim()
+        if (businessNameLower === userBusinessName || 
+            businessNameLower.includes(userBusinessName) ||
+            userBusinessName.includes(businessNameLower)) {
+          userBusinessRank = i + 1
+          break
+        }
+      }
+      
+      // Calculate truncation limit
+      const truncationLimit = this.calculateTruncationLimit(userBusinessRank, rankings.length)
+      
+      // Only process businesses up to the truncation limit
+      const businessesToProcess = rankings.slice(0, truncationLimit)
+      
+      businessesToProcess.forEach((business: string, index: number) => {
         const rank = index + 1
         
         if (!businessMap.has(business)) {

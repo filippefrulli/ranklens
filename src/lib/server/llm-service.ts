@@ -109,8 +109,6 @@ Query: "${query}"
 
 IMPORTANT: Do not ask clarifying questions. Make reasonable assumptions and provide exactly ${count} businesses that best match this query. If the query mentions a location, include businesses in and around that area using your best judgment.
 
-SPECIAL INSTRUCTION: If the business "${userBusinessName}" appears in your ranking, use exactly this name: "${userBusinessName}" (do not use variations, abbreviations, or different formatting).
-
 Format your response as a simple numbered list with just the business names, like:
 
 1. Business Name One
@@ -120,12 +118,10 @@ Format your response as a simple numbered list with just the business names, lik
 
 Required guidelines:
 - Provide exactly ${count} businesses (no more, no less)
-- Provide the official, exact google maps business name, nothing else.
-- For each business check what the google maps name is and use that.
-- EXCEPTION: If "${userBusinessName}" appears in the ranking, use exactly "${userBusinessName}" instead of any variation.
-- Rank them from best to worst match for the query.
-- Do not include explanations, questions, or additional text other than the business name.
-- Only provide the numbered list of business names.
+- Provide business names as they are listed on google maps, and no other way.
+- Rank them from best to worst match for the query
+- Do not include explanations, questions, or additional text other than the business name
+- Only provide the numbered list of business names
 - Make reasonable assumptions if the query is ambiguous`
   }
 
@@ -151,19 +147,89 @@ Required guidelines:
     return businesses
   }
 
+  private static normalizeBusinessName(name: string): string {
+    return name
+      .toLowerCase()
+      .trim()
+      // Remove common prefixes/suffixes
+      .replace(/^(the\s+)/i, '')
+      .replace(/(\s+ltd\.?|\s+llc\.?|\s+inc\.?|\s+corp\.?|\s+co\.?)$/i, '')
+      // Handle plural forms by removing trailing 's' if it makes sense
+      .replace(/(\w)s$/, '$1')
+      // Remove extra whitespace
+      .replace(/\s+/g, ' ')
+      .trim()
+  }
+
   private static deduplicateRankedList(names: string[]): string[] {
-    const seen = new Set<string>()
+    const seen = new Map<string, string>() // normalized -> original
     const result: string[] = []
     
     for (const name of names) {
-      const normalized = name.toLowerCase().trim()
+      const normalized = this.normalizeBusinessName(name)
+      
       if (!seen.has(normalized)) {
-        seen.add(normalized)
+        seen.set(normalized, name)
         result.push(name)
+      } else {
+        // If we have a duplicate, prefer the version without "The" prefix
+        const existing = seen.get(normalized)!
+        if (existing.toLowerCase().startsWith('the ') && !name.toLowerCase().startsWith('the ')) {
+          // Replace the existing one with the non-"The" version
+          const index = result.indexOf(existing)
+          if (index !== -1) {
+            result[index] = name
+            seen.set(normalized, name)
+          }
+        }
       }
     }
     
     return result
+  }
+
+  // Post-process business names with Gemini to standardize to Google Maps names
+  private static async standardizeBusinessNames(businessNames: string[], userBusinessName: string): Promise<string[]> {
+    if (businessNames.length === 0) return businessNames
+
+    try {
+      const prompt = `You are a business name standardization assistant. Your task is to convert business names to their official Google Maps names and eliminate duplicates.
+
+IMPORTANT INSTRUCTIONS:
+1. For each business name provided, return the exact official Google Maps business name
+2. If a business name matches or is very similar to "${userBusinessName}", return exactly "${userBusinessName}"
+3. ELIMINATE DUPLICATES: If you see variations like "Wild Rover Tours" and "The Wild Rover Tours", or "Dublin Free Walking Tour" and "Dublin Free Walking Tours", only return ONE version - the most official Google Maps name
+4. Prefer names WITHOUT "The" prefix unless that's the official name (e.g., prefer "Wild Rover Tours" over "The Wild Rover Tours")
+5. Use singular forms unless plural is the official name (e.g., prefer "Dublin Free Walking Tour" over "Dublin Free Walking Tours")
+6. Only return the standardized names, one per line, no numbering or extra text
+7. If a business is not a real, Google Maps registered business, remove it from the list
+8. If multiple variations refer to the same business, only include it once
+
+Business names to standardize:
+${businessNames.map((name, index) => `${index + 1}. ${name}`).join('\n')}
+
+Return format: Just the unique standardized business names, one per line, with duplicates removed:`
+
+      const standardizedText = await this.callGemini(prompt)
+      
+      // Extract standardized names
+      const standardizedNames = standardizedText
+        .split('\n')
+        .map(line => line.trim())
+        .filter(line => line.length > 0)
+
+      // We might get fewer results than we sent if Gemini removed duplicates/invalid businesses
+      // This is expected and desirable
+      if (standardizedNames.length > 0) {
+        return standardizedNames
+      } else {
+        console.warn('Gemini standardization returned no results, using original names')
+        return businessNames
+      }
+    } catch (error) {
+      console.warn('Failed to standardize business names with Gemini, using original names:', error)
+      return businessNames
+    }
   }
 
   // Direct API calls (server-only)
@@ -294,6 +360,20 @@ Required guidelines:
     return data?.choices?.[0]?.message?.content || ''
   }
 
+  // Calculate truncation limit based on user business rank
+  private static calculateTruncationLimit(userRank: number | null, totalBusinesses: number): number {
+    if (!userRank) {
+      // If user business not found, return all businesses
+      return totalBusinesses
+    }
+    
+    // Round up to next multiple of 5
+    const roundedRank = Math.ceil(userRank / 5) * 5
+    
+    // Don't exceed the total number of businesses
+    return Math.min(roundedRank, totalBusinesses)
+  }
+
   // Main method for making LLM requests (server-only)
   public static async makeRequest(
     provider: LLMProvider,
@@ -328,8 +408,19 @@ Required guidelines:
           throw new Error(`Unsupported provider: ${provider.name}`)
       }
       
-      const rankedBusinesses = this.deduplicateRankedList(this.extractBusinessNames(content))
-      const foundResult = this.findBusinessInList(businessName, rankedBusinesses)
+      const rawBusinessNames = this.deduplicateRankedList(this.extractBusinessNames(content))
+      
+      // Standardize business names using Gemini
+      const standardizedBusinesses = await this.standardizeBusinessNames(rawBusinessNames, businessName)
+      
+      // Find user business in the full list first
+      const foundResult = this.findBusinessInList(businessName, standardizedBusinesses)
+      
+      // Calculate truncation limit based on user business rank
+      const truncationLimit = this.calculateTruncationLimit(foundResult.rank, standardizedBusinesses.length)
+      
+      // Truncate the results to only include businesses up to the limit
+      const rankedBusinesses = standardizedBusinesses.slice(0, truncationLimit)
       
       return {
         rankedBusinesses,

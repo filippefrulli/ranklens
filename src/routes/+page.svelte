@@ -1,29 +1,9 @@
 <script lang="ts">
-  import { onMount } from 'svelte'
-  import { goto } from '$app/navigation'
   import { user } from '../lib/services/auth-service'
-  import { supabase } from '../lib/supabase'
   import LoginForm from '../lib/components/auth/LoginForm.svelte'
   import Dashboard from '../lib/components/dashboard/Dashboard.svelte'
 
-  let connectionStatus = $state('Testing connection...')
   let showDemo = $state(true)
-
-  onMount(async () => {
-    // Test Supabase connection
-    try {
-      const { data, error } = await supabase.from('_metadata').select('*').limit(1)
-      if (error && error.message.includes('relation "_metadata" does not exist')) {
-        connectionStatus = 'Connected to Supabase! (No tables found, which is expected for a new project)'
-      } else if (error) {
-        connectionStatus = `Supabase connection error: ${error.message}`
-      } else {
-        connectionStatus = 'Connected to Supabase successfully!'
-      }
-    } catch (err) {
-      connectionStatus = 'Please configure your Supabase environment variables'
-    }
-  })
 
   // Reactive navigation based on auth state
   $effect(() => {
@@ -141,18 +121,6 @@
             <h3 class="font-semibold text-gray-900 mb-2">Get Insights</h3>
             <p class="text-sm text-gray-600">View your average rankings, competitor analysis, and improvement opportunities.</p>
           </div>
-        </div>
-      </div>
-
-      <!-- Connection Status -->
-      <div class="bg-white rounded-xl shadow-lg p-6 text-center">
-        <h3 class="text-lg font-semibold text-gray-800 mb-2">System Status</h3>
-        <p class="text-sm text-gray-600">{connectionStatus}</p>
-        
-        <div class="mt-4 text-xs text-gray-500">
-          <p>• Configure your Supabase database using the provided schema</p>
-          <p>• Add your LLM API keys to start analyzing rankings</p>
-          <p>• Built with SvelteKit, Tailwind CSS, and TypeScript</p>
         </div>
       </div>
     </div>

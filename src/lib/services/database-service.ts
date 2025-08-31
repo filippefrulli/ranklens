@@ -1051,5 +1051,91 @@ export class DatabaseService {
     }))
   }
 
+  static async getCompetitorRankingsByRunAndProvider(queryId: string, analysisRunId: string, providerId: string): Promise<any[]> {
+    // Get ranking attempts for the specific provider and calculate competitor rankings on the fly
+    const { data: attempts, error } = await supabase
+      .from('ranking_attempts')
+      .select(`
+        *,
+        llm_providers:llm_provider_id (
+          id,
+          name
+        )
+      `)
+      .eq('query_id', queryId)
+      .eq('analysis_run_id', analysisRunId)
+      .eq('llm_provider_id', providerId)
+      .eq('success', true)
+      .not('parsed_ranking', 'is', null)
+
+    if (error) {
+      console.error('❌ Error fetching ranking attempts:', error)
+      throw new Error(`Failed to fetch ranking attempts: ${error.message}`)
+    }
+
+    if (!attempts || attempts.length === 0) {
+      return []
+    }
+
+    // Aggregate results by business name
+    const businessMap = new Map()
+
+    attempts.forEach(attempt => {
+      if (!attempt.parsed_ranking) return
+
+      const rankings = Array.isArray(attempt.parsed_ranking) ? attempt.parsed_ranking : []
+      
+      rankings.forEach((business: string, index: number) => {
+        const rank = index + 1
+        
+        if (!businessMap.has(business)) {
+          businessMap.set(business, {
+            business_name: business,
+            ranks: [],
+            appearances: 0,
+            total_attempts: 0
+          })
+        }
+
+        const businessData = businessMap.get(business)
+        businessData.ranks.push(rank)
+        businessData.appearances++
+      })
+    })
+
+    // Calculate final statistics for each business
+    const results = Array.from(businessMap.values()).map(business => {
+      const average_rank = business.ranks.length > 0 
+        ? business.ranks.reduce((sum: number, rank: number) => sum + rank, 0) / business.ranks.length 
+        : null
+      
+      const best_rank = business.ranks.length > 0 ? Math.min(...business.ranks) : null
+      const worst_rank = business.ranks.length > 0 ? Math.max(...business.ranks) : null
+      const total_attempts = attempts.length
+      const appearance_rate = total_attempts > 0 ? (business.appearances / total_attempts) * 100 : 0
+      
+      // Calculate weighted score (lower is better)
+      const weighted_score = average_rank && appearance_rate > 0 
+        ? average_rank * (1 + (100 - appearance_rate) / 100)
+        : 999
+
+      return {
+        business_name: business.business_name,
+        average_rank,
+        best_rank,
+        worst_rank,
+        appearances_count: business.appearances,
+        total_attempts,
+        appearance_rate,
+        weighted_score,
+        llm_providers: [providerId],
+        is_user_business: false // This would need to be determined based on business data
+      }
+    })
+
+    // Sort by weighted score (lower is better)
+    return results.sort((a, b) => a.weighted_score - b.weighted_score)
+  }
+
     // New methods for run-based filtering
 }

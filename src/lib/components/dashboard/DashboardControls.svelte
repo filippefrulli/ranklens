@@ -21,6 +21,7 @@
       bind:value={selectedProvider}
       class="border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
     >
+      <option value={null}>All Providers</option>
       {#each llmProviders as provider}
         <option value={provider}>{provider.name}</option>
       {/each}

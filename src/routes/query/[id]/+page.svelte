@@ -9,18 +9,26 @@
   import CompetitorRankingsTable from '../../../lib/components/query/CompetitorRankingsTable.svelte'
   import LoadingSpinner from '../../../lib/components/ui/LoadingSpinner.svelte'
   import ErrorMessage from '../../../lib/components/ui/ErrorMessage.svelte'
-  import type { Query, RankingAttempt } from '../../../lib/types'
+  import type { Query, RankingAttempt, LLMProvider } from '../../../lib/types'
 
   let query = $state<Query | null>(null)
   let analysisRuns = $state<{id: string, created_at: string}[]>([])
   let selectedRunId = $state<string | null>(null)
   let rankingResults = $state<RankingAttempt[]>([])
   let competitorRankings = $state<any[]>([])
+  let llmProviders = $state<LLMProvider[]>([])
+  let selectedProviderId = $state<string | null>(null) // null means "All providers"
   let loading = $state(false)
   let loadingData = $state(false)
   let error = $state<string | null>(null)
 
   let queryId = $derived($page.params.id || '')
+
+  // Filtered data based on selected provider
+  let filteredRankingResults = $derived(() => {
+    if (!selectedProviderId) return rankingResults
+    return rankingResults.filter(result => result.llm_provider_id === selectedProviderId)
+  })
 
   onMount(() => {
     if ($user && queryId) {
@@ -51,9 +59,14 @@
 
       query = queryData
 
-      // Get analysis runs
-      const runs = await DatabaseService.getQueryAnalysisRuns(queryId)
+      // Get analysis runs and LLM providers
+      const [runs, providers] = await Promise.all([
+        DatabaseService.getQueryAnalysisRuns(queryId),
+        DatabaseService.getLLMProviders()
+      ])
+      
       analysisRuns = runs
+      llmProviders = providers
       
       // Select the latest run by default
       if (runs.length > 0) {
@@ -75,13 +88,17 @@
     try {
       loadingData = true
 
-      // Load ranking results and competitor rankings for this specific run
-      const [rankings, competitors] = await Promise.all([
-        DatabaseService.getQueryRankingResultsByRun(queryId, runId),
-        DatabaseService.getCompetitorRankingsByRun(queryId, runId)
-      ])
-
+      // Load ranking results for this specific run
+      const rankings = await DatabaseService.getQueryRankingResultsByRun(queryId, runId)
       rankingResults = rankings
+
+      // Load competitor rankings based on selected provider
+      let competitors
+      if (selectedProviderId) {
+        competitors = await DatabaseService.getCompetitorRankingsByRunAndProvider(queryId, runId, selectedProviderId)
+      } else {
+        competitors = await DatabaseService.getCompetitorRankingsByRun(queryId, runId)
+      }
       competitorRankings = competitors
 
     } catch (err: any) {
@@ -89,6 +106,13 @@
       error = err.message || 'Failed to load run data'
     } finally {
       loadingData = false
+    }
+  }
+
+  // When provider selection changes, reload the data
+  async function onProviderChange() {
+    if (selectedRunId) {
+      await loadRunData(selectedRunId)
     }
   }
 
@@ -131,6 +155,30 @@
     {:else if query}
       <QueryResultHeader {query} {goBack} />
       
+      <!-- LLM Provider Filter -->
+      {#if llmProviders.length > 0}
+        <div class="bg-white rounded-lg shadow p-6 mb-6">
+          <div class="flex items-center justify-between">
+            <div>
+              <h3 class="text-lg font-medium text-gray-900">Filter by LLM Provider</h3>
+              <p class="text-sm text-gray-500 mt-1">View results from specific LLM providers or all combined</p>
+            </div>
+            <div class="w-64">
+              <select 
+                bind:value={selectedProviderId}
+                onchange={onProviderChange}
+                class="block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
+              >
+                <option value={null}>All Providers</option>
+                {#each llmProviders as provider (provider.id)}
+                  <option value={provider.id}>{provider.name}</option>
+                {/each}
+              </select>
+            </div>
+          </div>
+        </div>
+      {/if}
+      
       <!-- Analysis Run Selector and LLM Results side by side -->
       {#if analysisRuns.length > 0}
         <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
@@ -169,11 +217,13 @@
           </div>
           
           <!-- LLM Results (Right Half) -->
-          {#if selectedRunId && rankingResults.length > 0}
-            <RankingResultsByLLMTable {rankingResults} />
+          {#if selectedRunId && filteredRankingResults().length > 0}
+            <RankingResultsByLLMTable rankingResults={filteredRankingResults()} />
           {:else if selectedRunId}
             <div class="bg-white rounded-lg shadow p-6 flex items-center justify-center">
-              <p class="text-gray-500">No LLM results for selected run</p>
+              <p class="text-gray-500">
+                {selectedProviderId ? 'No LLM results for selected provider and run' : 'No LLM results for selected run'}
+              </p>
             </div>
           {:else}
             <div class="bg-white rounded-lg shadow p-6 flex items-center justify-center">
@@ -193,7 +243,9 @@
         <CompetitorRankingsTable {competitorRankings} />
       {:else if selectedRunId}
         <div class="bg-white rounded-lg shadow p-6 text-center">
-          <p class="text-gray-500">No competitor rankings found for the selected analysis run.</p>
+          <p class="text-gray-500">
+            {selectedProviderId ? 'No competitor rankings found for the selected provider and analysis run.' : 'No competitor rankings found for the selected analysis run.'}
+          </p>
         </div>
       {:else if analysisRuns.length === 0}
         <div class="bg-white rounded-lg shadow p-6 text-center">

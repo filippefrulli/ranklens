@@ -117,9 +117,8 @@
   async function loadLLMProviders() {
     try {
       llmProviders = await DatabaseService.getLLMProviders();
-      if (llmProviders.length > 0) {
-        selectedProvider = llmProviders[0];
-      }
+      // Start with "All Providers" selected (null)
+      selectedProvider = null;
     } catch (err) {
       console.error("Failed to load LLM providers:", err);
     }

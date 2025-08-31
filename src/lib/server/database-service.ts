@@ -88,7 +88,7 @@ export class ServerDatabaseService {
     return data || []
   }
 
-  // LLM Provider operations
+    // LLM Provider operations
   async getActiveLLMProviders(): Promise<LLMProvider[]> {
     const { data, error } = await this.supabase
       .from('llm_providers')
@@ -98,10 +98,57 @@ export class ServerDatabaseService {
     
     if (error) {
       console.error('Error fetching LLM providers:', error)
-      return []
+      throw new Error(`Failed to fetch LLM providers: ${error.message}`)
     }
     
     return data || []
+  }
+
+  async ensureRequiredProvidersActive(): Promise<void> {
+    // Ensure both OpenAI GPT-5 and Google Gemini are active
+    const requiredProviders = [
+      { name: 'OpenAI GPT-5', supports_sources: false },
+      { name: 'Google Gemini', supports_sources: false }
+    ]
+
+    for (const provider of requiredProviders) {
+      // Check if provider exists
+      const { data: existing, error: fetchError } = await this.supabase
+        .from('llm_providers')
+        .select('*')
+        .eq('name', provider.name)
+        .maybeSingle()
+
+      if (fetchError) {
+        console.error(`Error checking provider ${provider.name}:`, fetchError)
+        continue
+      }
+
+      if (!existing) {
+        // Create the provider
+        const { error: createError } = await this.supabase
+          .from('llm_providers')
+          .insert({
+            name: provider.name,
+            supports_sources: provider.supports_sources,
+            is_active: true
+          })
+
+        if (createError) {
+          console.error(`Error creating provider ${provider.name}:`, createError)
+        }
+      } else if (!existing.is_active) {
+        // Activate the provider
+        const { error: updateError } = await this.supabase
+          .from('llm_providers')
+          .update({ is_active: true })
+          .eq('id', existing.id)
+
+        if (updateError) {
+          console.error(`Error activating provider ${provider.name}:`, updateError)
+        }
+      }
+    }
   }
 
   // Analysis Run operations

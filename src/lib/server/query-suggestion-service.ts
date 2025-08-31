@@ -10,7 +10,7 @@ export class ServerQuerySuggestionService {
     const prompt = this.buildPrompt(business)
     
     try {
-      const content = await ServerLLMService.queryLLM('OpenAI GPT-5', 'gpt-5', prompt)
+      const content = await ServerLLMService.queryLLM('Google Gemini', 'gemini-2.5-flash-lite', prompt, 'high')
 
       if (!content) {
         throw new Error('No content received from LLM')
@@ -24,7 +24,7 @@ export class ServerQuerySuggestionService {
   }
 
   private static buildPrompt(business: Business): string {
-    return `Generate 5 realistic search queries that potential customers would use to find a business like "${business.name}".
+    return `Generate 5 realistic search queries that potential customers would use to find the business called "${business.name}".
 
 Business Details:
 - Name: ${business.name}
@@ -53,17 +53,23 @@ LOCATION STRATEGY - CRITICAL:
    - Coffee shops, restaurants, retail: Use specific neighborhoods or districts
    - Professional services, hotels: Can use broader city areas
    - Consider realistic catchment area - a local cafe competes locally, not city-wide
+   - Do not go too granular, avoid overly specific street names or small localities.
 
 10. Vary query length and specificity across the 5 suggestions
 
+11. Figure out what the business is and does, and generate the queries accordingly. 
+12. If you don't know the business or can't find anything about it, use generic queries based on the business type and location.
+13. If your knowledge of the business is different than the Google Types, use your knowledge but ensure it's relevant and accurate.
+
 Examples of PERFECT location usage:
 - "best coffee shops Dublin city center" (natural area name)
-- "top brunch spots Temple Bar Dublin" (specific neighborhood)
+- "Luxury apartment complex near Temple Bar Dublin" (specific neighborhood)
 - "most recommended cafes Grafton Street area" (well-known street/area)
 - "highest rated restaurants Dublin 8" (natural postal district name)
 
 Examples of BAD location usage:
 - "best cafes D08" (postal code - users don't search this way)
+- "Luxury apartments near Kevin Street Dublin" (too narrow)
 - "top restaurants CBD Dublin" (technical term)
 - "best coffee Dublin" (too broad for a local business)
 
@@ -81,11 +87,11 @@ Format your response as JSON with this structure:
 Example for a pizza restaurant in Dublin:
 {
   "suggestions": [
-    "best pizza delivery Temple Bar",
-    "top Italian restaurants Dublin city center",
-    "most recommended pizza places Dublin 2",
+    "best pizza delivery near Temple Bar",
+    "top Italian restaurants in the Dublin city center",
+    "most recommended pizza places in Dublin 2",
     "highest rated pizzerias near Grafton Street",
-    "best takeaway pizza the Liberties Dublin"
+    "best takeaway pizza in the Liberties Dublin"
   ]
 }`
   }

@@ -1,5 +1,6 @@
 import type { LLMProvider } from '../types'
 import { env } from '$env/dynamic/private'
+import { GoogleGenAI } from '@google/genai'
 
 export interface LLMResponse {
   rankedBusinesses: string[]
@@ -11,7 +12,7 @@ export interface LLMResponse {
   totalRequested: number // how many businesses were requested
 }
 
-function withTimeout<T>(promise: Promise<T>, ms = 30000): Promise<T> {
+function withTimeout<T>(promise: Promise<T>, ms = 60000): Promise<T> {
   return new Promise((resolve, reject) => {
     const id = setTimeout(() => reject(new Error('LLM request timed out')), ms)
     promise
@@ -76,14 +77,14 @@ export class ServerLLMService {
   }
 
   // Public method for general LLM queries (server-side only)
-  public static async queryLLM(providerName: string, model: string, prompt: string): Promise<string> {
+  public static async queryLLM(providerName: string, model: string, prompt: string, reasoning: string): Promise<string> {
     try {
       // For now, just use OpenAI as the default for query suggestions
       // You can extend this to support other providers if needed
       switch (providerName) {
         case 'OpenAI GPT-5':
         case 'OpenAI':
-          return await this.callOpenAI(prompt, model)
+          return await this.callOpenAI(prompt, model, reasoning)
         case 'Anthropic Claude':
         case 'Anthropic':
           return await this.callAnthropic(prompt)
@@ -162,14 +163,14 @@ Required guidelines:
   }
 
   // Direct API calls (server-only)
-  private static async callOpenAI(prompt: string, model: string): Promise<string> {
+  private static async callOpenAI(prompt: string, model: string, reasoning: string): Promise<string> {
     const apiKey = env.OPENAI_API_KEY
     if (!apiKey) throw new Error('OpenAI API key not configured')
     
     const payload: Record<string, any> = {
       model: model,
       input: prompt,
-      reasoning: { effort: 'low' }
+      reasoning: { effort: reasoning }
     }
 
     const resp = await withTimeout(
@@ -245,27 +246,19 @@ Required guidelines:
   }
 
   private static async callGemini(prompt: string): Promise<string> {
-    const apiKey = env.GOOGLE_API_KEY
-    if (!apiKey) throw new Error('Google API key not configured')
+    const apiKey = env.GEMINI_API_KEY
+    if (!apiKey) throw new Error('Gemini API key not configured')
+
+    const ai = new GoogleGenAI({ apiKey })
 
     const resp = await withTimeout(
-      fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=${apiKey}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          contents: [{ parts: [{ text: prompt }] }],
-          generationConfig: { maxOutputTokens: 500, temperature: 0.3 }
-        })
+      ai.models.generateContent({
+        model: "gemini-2.0-flash",
+        contents: prompt,
       })
     )
     
-    if (!resp.ok) {
-      const t = await resp.text()
-      throw new Error(`Google error ${resp.status}: ${t}`)
-    }
-    
-    const data = await resp.json()
-    return data?.candidates?.[0]?.content?.parts?.[0]?.text || ''
+    return resp.text || ''
   }
 
   private static async callPerplexity(prompt: string): Promise<string> {
@@ -314,7 +307,7 @@ Required guidelines:
       switch (provider.name) {
         case 'OpenAI GPT-5':
         case 'OpenAI':
-          content = await this.callOpenAI(prompt, 'gpt-5-nano')
+          content = await this.callOpenAI(prompt, 'gpt-5-nano', 'low')
           break
         case 'Anthropic Claude':
         case 'Anthropic':

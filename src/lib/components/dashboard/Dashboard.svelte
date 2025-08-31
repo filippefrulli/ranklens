@@ -35,6 +35,51 @@
   let selectedProvider = $state<LLMProvider | null>(null);
   let weeklyCheck = $state<WeeklyAnalysisCheck>({ canRun: true });
 
+  // Create filtered dashboard data based on selected provider
+  let filteredDashboardData = $derived.by(() => {
+    if (!dashboardData || !selectedProvider) return dashboardData;
+    
+    // Filter analytics to only show data for the selected provider
+    const filteredAnalytics = dashboardData.analytics.map(analytic => {
+      // Filter LLM breakdown to only show selected provider
+      const filteredBreakdown = analytic.llm_breakdown.filter(
+        breakdown => selectedProvider && breakdown.provider_name === selectedProvider.name
+      );
+      
+      // If no data for this provider, return null
+      if (filteredBreakdown.length === 0) {
+        return {
+          ...analytic,
+          average_rank: undefined,
+          total_mentions: 0,
+          llm_breakdown: [],
+          competitors_ranked_higher: []
+        };
+      }
+      
+      // Calculate aggregated stats for this provider only
+      const totalMentions = filteredBreakdown.reduce((sum, b) => sum + b.mention_count, 0);
+      const averageRank = filteredBreakdown.length > 0 
+        ? filteredBreakdown.reduce((sum, b) => sum + (b.average_rank || 0), 0) / filteredBreakdown.length
+        : undefined;
+      
+      return {
+        ...analytic,
+        average_rank: averageRank,
+        total_mentions: totalMentions,
+        llm_breakdown: filteredBreakdown,
+        // For now, keep competitors as-is since they're aggregated across providers
+        // You might want to filter these too if you have provider-specific competitor data
+        competitors_ranked_higher: analytic.competitors_ranked_higher
+      };
+    });
+    
+    return {
+      ...dashboardData,
+      analytics: filteredAnalytics
+    };
+  });
+
   // Modal states
   let showCreateBusiness = $state(false);
   let showGoogleSearch = $state(false);
@@ -514,10 +559,10 @@
           <AnalysisProgressBar progress={analysisProgress} />
         {/if}
 
-        {#if dashboardData}
+        {#if filteredDashboardData}
           <QueryGrid
-            queries={dashboardData.queries}
-            analytics={dashboardData.analytics}
+            queries={filteredDashboardData.queries}
+            analytics={filteredDashboardData.analytics}
             onAddQuery={() => (showAddQuery = true)}
             onGetAISuggestions={() => (showQuerySuggestions = true)}
           />

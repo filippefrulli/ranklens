@@ -13,6 +13,9 @@ export const load: PageServerLoad = async ({ locals, url }) => {
     // Create database service with authenticated context
     const dbService = new ServerDatabaseService(locals.supabase, locals.user.id)
     
+    // Ensure required providers are active
+    await dbService.ensureRequiredProvidersActive()
+    
     // Load all dashboard data on the server
     const business = await dbService.getBusiness()
     if (!business) {

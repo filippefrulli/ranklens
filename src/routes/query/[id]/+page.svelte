@@ -28,7 +28,7 @@
   // Filtered data based on selected provider
   let filteredRankingResults = $derived(() => {
     if (!selectedProvider) return rankingResults
-    return rankingResults.filter(result => result.llm_provider_id === selectedProvider.id)
+    return rankingResults.filter(result => result.llm_provider_id === selectedProvider!.id)
   })
 
   onMount(() => {

@@ -1,5 +1,6 @@
 <script lang="ts">
   import type { LLMProvider, WeeklyAnalysisCheck } from '../../types'
+  import LLMProviderDropdown from '../ui/LLMProviderDropdown.svelte'
   
   export let llmProviders: LLMProvider[]
   export let selectedProvider: LLMProvider | null
@@ -8,25 +9,16 @@
   export let weeklyCheck: WeeklyAnalysisCheck
   export let onAddQuery: () => void
   export let onRunAnalysis: () => void
+  export let onProviderChange: (provider: LLMProvider | null) => void
 </script>
 
 <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
   <!-- LLM Provider Dropdown -->
-  <div class="flex items-center gap-3">
-    <label for="llm-select" class="text-sm font-medium text-gray-700">
-      LLM Provider:
-    </label>
-    <select
-      id="llm-select"
-      bind:value={selectedProvider}
-      class="border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-    >
-      <option value={null}>All Providers</option>
-      {#each llmProviders as provider}
-        <option value={provider}>{provider.name}</option>
-      {/each}
-    </select>
-  </div>
+  <LLMProviderDropdown 
+    providers={llmProviders}
+    selectedProvider={selectedProvider}
+    onProviderChange={onProviderChange}
+  />
 
   <!-- Action Buttons -->
   <div class="flex gap-2">

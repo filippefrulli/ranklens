@@ -1052,6 +1052,24 @@ export class DatabaseService {
   }
 
   static async getCompetitorRankingsByRunAndProvider(queryId: string, analysisRunId: string, providerId: string): Promise<any[]> {
+    // First, get the user's business name for this query
+    const { data: queryData, error: queryError } = await supabase
+      .from('queries')
+      .select(`
+        *,
+        businesses!inner(
+          name
+        )
+      `)
+      .eq('id', queryId)
+      .single()
+
+    if (queryError) {
+      throw new Error(`Failed to fetch query data: ${queryError.message}`)
+    }
+
+    const userBusinessName = queryData.businesses.name.toLowerCase().trim()
+
     // Get ranking attempts for the specific provider and calculate competitor rankings on the fly
     const { data: attempts, error } = await supabase
       .from('ranking_attempts')
@@ -1119,6 +1137,12 @@ export class DatabaseService {
         ? average_rank * (1 + (100 - appearance_rate) / 100)
         : 999
 
+      // Determine if this is the user's business using the same logic as the main method
+      const businessNameLower = business.business_name.toLowerCase().trim()
+      const isUserBusiness = businessNameLower === userBusinessName || 
+                            businessNameLower.includes(userBusinessName) ||
+                            userBusinessName.includes(businessNameLower)
+
       return {
         business_name: business.business_name,
         average_rank,
@@ -1129,7 +1153,7 @@ export class DatabaseService {
         appearance_rate,
         weighted_score,
         llm_providers: [providerId],
-        is_user_business: false // This would need to be determined based on business data
+        is_user_business: isUserBusiness
       }
     })
 

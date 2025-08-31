@@ -21,6 +21,20 @@ export class ServerDatabaseService {
     this.userId = userId
   }
 
+  // Business name normalization utility for consolidation
+  private normalizeBusinessName(businessName: string): string {
+    return businessName
+      .toLowerCase()
+      .trim()
+      // Remove common punctuation
+      .replace(/[.,;:'"!?()]/g, '')
+      // Standardize separators
+      .replace(/\s*-\s*/g, ' ')
+      .replace(/\s*&\s*/g, ' and ')
+      .replace(/\s+/g, ' ')
+      .trim()
+  }
+
   // Create authenticated instance
   static createAuthenticatedClient(accessToken: string): SupabaseClient {
     const supabaseUrl = env.VITE_SUPABASE_URL
@@ -343,7 +357,8 @@ export class ServerDatabaseService {
 
     // Process all businesses mentioned in rankings
     const businessMap = new Map<string, {
-      business_name: string
+      business_name: string // Store the first/canonical name we encounter
+      original_names: string[] // Track all variations we've seen
       ranks: number[]
       llm_providers: string[]
       appearances_count: number
@@ -374,7 +389,7 @@ export class ServerDatabaseService {
         
         parsedRanking.forEach((businessName, index) => {
           const rank = index + 1
-          const businessKey = businessName.trim()
+          const businessKey = this.normalizeBusinessName(businessName) // Use normalized name as key
           const businessNameLower = businessName.toLowerCase().trim()
           
           // Determine if this is the user's business
@@ -384,7 +399,8 @@ export class ServerDatabaseService {
 
           if (!businessMap.has(businessKey)) {
             businessMap.set(businessKey, {
-              business_name: businessName,
+              business_name: businessName, // Store the first name we encounter
+              original_names: [businessName],
               ranks: [],
               llm_providers: [],
               appearances_count: 0,
@@ -395,6 +411,11 @@ export class ServerDatabaseService {
           const business = businessMap.get(businessKey)!
           business.ranks.push(rank)
           business.appearances_count++
+          
+          // Track this variation if we haven't seen it before
+          if (!business.original_names.includes(businessName)) {
+            business.original_names.push(businessName)
+          }
           
           // Add LLM provider if not already included
           if (!business.llm_providers.includes(providerName)) {

@@ -102,12 +102,14 @@ export class ServerLLMService {
     }
   }
 
-  private static buildPrompt(query: string, count: number): string {
+  private static buildPrompt(query: string, userBusinessName: string, count: number): string {
     return `You are a helpful assistant that provides ranked lists of businesses. You must always provide a complete ranked list without asking clarifying questions.
 
 Query: "${query}"
 
 IMPORTANT: Do not ask clarifying questions. Make reasonable assumptions and provide exactly ${count} businesses that best match this query. If the query mentions a location, include businesses in and around that area using your best judgment.
+
+SPECIAL INSTRUCTION: If the business "${userBusinessName}" appears in your ranking, use exactly this name: "${userBusinessName}" (do not use variations, abbreviations, or different formatting).
 
 Format your response as a simple numbered list with just the business names, like:
 
@@ -118,12 +120,12 @@ Format your response as a simple numbered list with just the business names, lik
 
 Required guidelines:
 - Provide exactly ${count} businesses (no more, no less)
-- Use actual business names, not generic descriptions
-- Rank them from best to worst match for the query
-- Include a mix of well-known and local businesses when relevant
-- For location-based queries, interpret broadly to include nearby areas
-- Do not include explanations, questions, or additional text
-- Only provide the numbered list of business names
+- Provide the official, exact google maps business name, nothing else.
+- For each business check what the google maps name is and use that.
+- EXCEPTION: If "${userBusinessName}" appears in the ranking, use exactly "${userBusinessName}" instead of any variation.
+- Rank them from best to worst match for the query.
+- Do not include explanations, questions, or additional text other than the business name.
+- Only provide the numbered list of business names.
 - Make reasonable assumptions if the query is ambiguous`
   }
 
@@ -140,6 +142,8 @@ Required guidelines:
         const businessName = match[1].trim()
         if (businessName && businessName.length > 0) {
           businesses.push(businessName)
+        }else{
+          console.warn("Extracted business name is empty or invalid:", trimmed)
         }
       }
     }
@@ -300,7 +304,7 @@ Required guidelines:
     const startTime = Date.now()
     
     try {
-      const prompt = this.buildPrompt(query, requestCount)
+      const prompt = this.buildPrompt(query, businessName, requestCount)
       let content = ''
       
       // Call appropriate LLM API directly

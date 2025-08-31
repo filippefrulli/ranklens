@@ -551,6 +551,7 @@
       {weeklyCheck}
       onAddQuery={() => (showAddQuery = true)}
       onRunAnalysis={runAnalysis}
+      onProviderChange={(provider) => selectedProvider = provider}
     />
         
         <!-- Analysis Progress Bar -->

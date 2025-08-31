@@ -9,6 +9,7 @@
   import CompetitorRankingsTable from '../../../lib/components/query/CompetitorRankingsTable.svelte'
   import LoadingSpinner from '../../../lib/components/ui/LoadingSpinner.svelte'
   import ErrorMessage from '../../../lib/components/ui/ErrorMessage.svelte'
+  import LLMProviderDropdown from '../../../lib/components/ui/LLMProviderDropdown.svelte'
   import type { Query, RankingAttempt, LLMProvider } from '../../../lib/types'
 
   let query = $state<Query | null>(null)
@@ -17,7 +18,7 @@
   let rankingResults = $state<RankingAttempt[]>([])
   let competitorRankings = $state<any[]>([])
   let llmProviders = $state<LLMProvider[]>([])
-  let selectedProviderId = $state<string | null>(null) // null means "All providers"
+  let selectedProvider = $state<LLMProvider | null>(null) // null means "All providers"
   let loading = $state(false)
   let loadingData = $state(false)
   let error = $state<string | null>(null)
@@ -26,8 +27,8 @@
 
   // Filtered data based on selected provider
   let filteredRankingResults = $derived(() => {
-    if (!selectedProviderId) return rankingResults
-    return rankingResults.filter(result => result.llm_provider_id === selectedProviderId)
+    if (!selectedProvider) return rankingResults
+    return rankingResults.filter(result => result.llm_provider_id === selectedProvider.id)
   })
 
   onMount(() => {
@@ -94,8 +95,8 @@
 
       // Load competitor rankings based on selected provider
       let competitors
-      if (selectedProviderId) {
-        competitors = await DatabaseService.getCompetitorRankingsByRunAndProvider(queryId, runId, selectedProviderId)
+      if (selectedProvider) {
+        competitors = await DatabaseService.getCompetitorRankingsByRunAndProvider(queryId, runId, selectedProvider.id)
       } else {
         competitors = await DatabaseService.getCompetitorRankingsByRun(queryId, runId)
       }
@@ -110,7 +111,8 @@
   }
 
   // When provider selection changes, reload the data
-  async function onProviderChange() {
+  async function onProviderChange(provider: LLMProvider | null) {
+    selectedProvider = provider
     if (selectedRunId) {
       await loadRunData(selectedRunId)
     }
@@ -164,16 +166,12 @@
               <p class="text-sm text-gray-500 mt-1">View results from specific LLM providers or all combined</p>
             </div>
             <div class="w-64">
-              <select 
-                bind:value={selectedProviderId}
-                onchange={onProviderChange}
-                class="block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
-              >
-                <option value={null}>All Providers</option>
-                {#each llmProviders as provider (provider.id)}
-                  <option value={provider.id}>{provider.name}</option>
-                {/each}
-              </select>
+              <LLMProviderDropdown 
+                providers={llmProviders}
+                selectedProvider={selectedProvider}
+                onProviderChange={onProviderChange}
+                showLabel={false}
+              />
             </div>
           </div>
         </div>
@@ -222,7 +220,7 @@
           {:else if selectedRunId}
             <div class="bg-white rounded-lg shadow p-6 flex items-center justify-center">
               <p class="text-gray-500">
-                {selectedProviderId ? 'No LLM results for selected provider and run' : 'No LLM results for selected run'}
+                {selectedProvider ? 'No LLM results for selected provider and run' : 'No LLM results for selected run'}
               </p>
             </div>
           {:else}
@@ -244,7 +242,7 @@
       {:else if selectedRunId}
         <div class="bg-white rounded-lg shadow p-6 text-center">
           <p class="text-gray-500">
-            {selectedProviderId ? 'No competitor rankings found for the selected provider and analysis run.' : 'No competitor rankings found for the selected analysis run.'}
+            {selectedProvider ? 'No competitor rankings found for the selected provider and analysis run.' : 'No competitor rankings found for the selected analysis run.'}
           </p>
         </div>
       {:else if analysisRuns.length === 0}

@@ -19,7 +19,7 @@ The goal of this website, is to allow customers to check how their product or se
 - Use svelte components for reusable UI elements
 
 ## Project Structure
-- `/src/lib/` - Reusable components and utilities
+- `/src/lib/components` - Reusable components and utilities
 - `/src/lib/supabase.ts` - Supabase client configuration
 - `/src/routes/` - SvelteKit routes (pages)
 - Environment variables should be prefixed with `VITE_`
@@ -30,3 +30,5 @@ The goal of this website, is to allow customers to check how their product or se
 - Implement proper loading states for async operations
 - Follow accessibility best practices
 - Use TypeScript interfaces for data models
+- Make sure to use the server side when handling sensitive data or intensive tasks
+- Before making changes that involve more than one file, always create an .md file describing what you are planning to do!

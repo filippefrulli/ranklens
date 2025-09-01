@@ -137,7 +137,7 @@
         <button
           type="button"
           onclick={() => handleProviderSelect(null)}
-          class="flex items-center gap-2 w-full px-3 py-2 text-left hover:bg-gray-50 focus:bg-gray-50 focus:outline-none {selectedProvider === null ? 'bg-blue-50 text-blue-600' : 'text-gray-900'}"
+          class="flex items-center gap-2 w-full px-3 py-2 text-left hover:bg-gray-50 focus:bg-gray-50 focus:outline-none {sizeClasses[size].split(' ')[0]} {selectedProvider === null ? 'bg-blue-50 text-blue-600' : 'text-gray-900'}"
         >
           <img 
             src="/images/providers/all.png" 
@@ -153,7 +153,7 @@
           <button
             type="button"
             onclick={() => handleProviderSelect(provider)}
-            class="flex items-center gap-2 w-full px-3 py-2 text-left hover:bg-gray-50 focus:bg-gray-50 focus:outline-none {selectedProvider?.id === provider.id ? 'bg-blue-50 text-blue-600' : 'text-gray-900'}"
+            class="flex items-center gap-2 w-full px-3 py-2 text-left hover:bg-gray-50 focus:bg-gray-50 focus:outline-none {sizeClasses[size].split(' ')[0]} {selectedProvider?.id === provider.id ? 'bg-blue-50 text-blue-600' : 'text-gray-900'}"
           >
             <img 
               src={getProviderIconPath(provider.name)} 

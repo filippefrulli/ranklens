@@ -17,7 +17,6 @@
   import BusinessRegistration from "./BusinessRegistration.svelte";
   import AddQueryModal from "./AddQueryModal.svelte";
   import CreateBusinessModal from "./CreateBusinessModal.svelte";
-  import WeeklyAnalysisHistory from "./WeeklyAnalysisHistory.svelte";
   import AnalysisProgressBar from "./AnalysisProgressBar.svelte";
   import QuerySuggestionsModal from "./QuerySuggestionsModal.svelte";
 
@@ -566,11 +565,6 @@
             onAddQuery={() => (showAddQuery = true)}
             onGetAISuggestions={() => (showQuerySuggestions = true)}
           />
-          
-          <!-- Weekly Analysis History -->
-          <div class="mt-8">
-            <WeeklyAnalysisHistory businessId={business.id} />
-          </div>
         {/if}
       </div>
     {/if}

@@ -544,39 +544,6 @@ export class DatabaseService {
     }
   }
 
-  static async getWeeklyAnalysisHistory(businessId: string, limit: number = 10): Promise<AnalysisRun[]> {
-    try {
-      const { data, error } = await supabase
-        .from('analysis_runs')
-        .select('*')
-        .eq('business_id', businessId)
-        .order('run_date', { ascending: false })
-        .limit(limit);
-
-      if (error) throw error;
-      return data || [];
-    } catch (error) {
-      console.error('Error fetching analysis history:', error);
-      throw error;
-    }
-  }
-
-  static async getRankingAttemptsForRun(analysisRunId: string): Promise<RankingAttempt[]> {
-    try {
-      const { data, error } = await supabase
-        .from('ranking_attempts')
-        .select('*')
-        .eq('analysis_run_id', analysisRunId)
-        .order('created_at', { ascending: true });
-
-      if (error) throw error;
-      return data || [];
-    } catch (error) {
-      console.error('Error fetching ranking attempts for run:', error);
-      throw error;
-    }
-  }
-
   static async getQueryRankingHistory(queryId: string, limit: number = 10): Promise<import('../types').QueryRankingHistory[]> {
     try {      
       const { data, error } = await supabase

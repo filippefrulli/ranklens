@@ -12,22 +12,27 @@ export class ServerAnalysisService {
 
   // Run complete analysis for a business (with RLS)
   async runAnalysis(businessId: string): Promise<{ success: boolean; analysisRunId?: string; error?: string }> {
+    console.log(`🚀 Starting analysis for business: ${businessId}`)
+    
     try {
       // Validate ownership through RLS
       const isOwner = await this.dbService.validateBusinessOwnership(businessId)
       if (!isOwner) {
+        console.error(`❌ Analysis failed: Unauthorized access to business ${businessId}`)
         return { success: false, error: 'Unauthorized: Business not found or access denied' }
       }
       
       // Get business data (RLS will ensure user can only access their business)
       const business = await this.dbService.getBusiness()
       if (!business) {
+        console.error(`❌ Analysis failed: Business not found for ID ${businessId}`)
         return { success: false, error: 'Business not found' }
       }
 
       // Get queries
       const queries = await this.dbService.getQueriesForBusiness(businessId)
       if (queries.length === 0) {
+        console.error(`❌ Analysis failed: No queries found for business ${business.name}`)
         return { success: false, error: 'No queries found for this business' }
       }
 
@@ -37,12 +42,15 @@ export class ServerAnalysisService {
       // Get active providers
       const providers = await this.dbService.getActiveLLMProviders()
       if (providers.length === 0) {
+        console.error(`❌ Analysis failed: No active LLM providers found`)
         return { success: false, error: 'No active LLM providers found' }
       }
 
       // Create analysis run
       const analysisRun = await this.dbService.createAnalysisRun(businessId, queries.length)
 
+      console.log(`✅ Analysis setup complete for "${business.name}": ${queries.length} queries × ${providers.length} providers × 5 attempts = ${queries.length * providers.length * 5} total LLM calls`)
+      
       // Start the analysis in the background
       this.runAnalysisInBackground(analysisRun, business, queries, providers)
 
@@ -64,9 +72,15 @@ export class ServerAnalysisService {
     queries: Query[],
     providers: LLMProvider[]
   ) {
+    const startTime = Date.now()
+    console.log(`🔄 Background analysis started for "${business.name}" (Run ID: ${analysisRun.id})`)
+    
     try {
       let completedCalls = 0
       const totalCalls = queries.length * providers.length * 5
+      let successfulCalls = 0
+      let failedCalls = 0
+      let sourcesStored = { queries: 0, business: 0 }
 
       // Update total calls in analysis run
       await this.dbService.updateAnalysisRun(analysisRun.id, {
@@ -77,6 +91,7 @@ export class ServerAnalysisService {
         const query = queries[queryIndex]
 
         const rankingAttempts: any[] = []
+        let sourceDataStored = false // Track if we've already stored sources for this query
 
         for (const provider of providers) {
 
@@ -84,6 +99,36 @@ export class ServerAnalysisService {
             try {              
               const result = await ServerLLMService.makeRequest(provider, query.text, business.name, 25)
               completedCalls++
+
+              if (result.success) {
+                successfulCalls++
+              } else {
+                failedCalls++
+              }
+
+              // Store source data if available (only once per query, on first successful result)
+              if (result.success && !sourceDataStored) {
+                try {
+                  // Store query sources if discovered
+                  if (result.querySources && result.querySources.length > 0) {
+                    await this.dbService.storeQuerySources(query.id, result.querySources)
+                    console.log(`📊 Stored ${result.querySources.length} query sources for: ${query.text}`)
+                    sourcesStored.queries++
+                  }
+
+                  // Store business sources if discovered
+                  if (result.businessSources && result.businessSources.length > 0) {
+                    await this.dbService.storeBusinessSources(business.id, result.businessSources)
+                    console.log(`🏢 Stored ${result.businessSources.length} business sources for: ${business.name}`)
+                    sourcesStored.business++
+                  }
+                  
+                  sourceDataStored = true // Mark sources as stored for this query
+                } catch (sourceError) {
+                  console.error(`❌ Failed to store source data for query "${query.text}":`, sourceError instanceof Error ? sourceError.message : sourceError)
+                  // Don't fail the analysis if source storage fails
+                }
+              }
 
               // Save ALL results, whether successful or not
               rankingAttempts.push({
@@ -99,9 +144,14 @@ export class ServerAnalysisService {
 
               // Update progress in database every 5 calls or at the end
               if (completedCalls % 5 === 0 || completedCalls === totalCalls) {
-                await this.dbService.updateAnalysisRun(analysisRun.id, {
-                  completed_llm_calls: completedCalls
-                })
+                try {
+                  await this.dbService.updateAnalysisRun(analysisRun.id, {
+                    completed_llm_calls: completedCalls
+                  })
+                } catch (updateError) {
+                  console.warn(`⚠️ Failed to update progress (${completedCalls}/${totalCalls}):`, updateError instanceof Error ? updateError.message : updateError)
+                  // Continue analysis even if progress update fails
+                }
               }
 
               // Small delay between requests
@@ -128,9 +178,14 @@ export class ServerAnalysisService {
 
               // Update progress even on error
               if (completedCalls % 5 === 0 || completedCalls === totalCalls) {
-                await this.dbService.updateAnalysisRun(analysisRun.id, {
-                  completed_llm_calls: completedCalls
-                })
+                try {
+                  await this.dbService.updateAnalysisRun(analysisRun.id, {
+                    completed_llm_calls: completedCalls
+                  })
+                } catch (updateError) {
+                  console.warn(`⚠️ Failed to update progress after error (${completedCalls}/${totalCalls}):`, updateError instanceof Error ? updateError.message : updateError)
+                  // Continue analysis even if progress update fails
+                }
               }
 
               // Check for auth errors and skip remaining attempts
@@ -154,9 +209,14 @@ export class ServerAnalysisService {
                   })
                 }
                 
-                await this.dbService.updateAnalysisRun(analysisRun.id, {
-                  completed_llm_calls: completedCalls
-                })
+                try {
+                  await this.dbService.updateAnalysisRun(analysisRun.id, {
+                    completed_llm_calls: completedCalls
+                  })
+                } catch (updateError) {
+                  console.warn(`⚠️ Failed to update progress after auth error skip:`, updateError instanceof Error ? updateError.message : updateError)
+                  // Continue analysis even if progress update fails
+                }
                 
                 break
               }
@@ -169,41 +229,77 @@ export class ServerAnalysisService {
 
         // Save ranking attempts for this query
         if (rankingAttempts.length > 0) {
-          await this.dbService.saveRankingAttempts(rankingAttempts)
+          try {
+            await this.dbService.saveRankingAttempts(rankingAttempts)
+          } catch (saveError) {
+            console.warn(`⚠️ Failed to save ranking attempts for query "${query.text}":`, saveError instanceof Error ? saveError.message : saveError)
+            // Continue analysis even if saving attempts fails
+          }
         } else {
           console.warn(`⚠️ No ranking attempts to save for query: ${query.text}`)
         }
 
         // Update completed queries
-        await this.dbService.updateAnalysisRun(analysisRun.id, {
-          completed_queries: queryIndex + 1
-        })
+        try {
+          await this.dbService.updateAnalysisRun(analysisRun.id, {
+            completed_queries: queryIndex + 1
+          })
+        } catch (updateError) {
+          console.warn(`⚠️ Failed to update completed queries count:`, updateError instanceof Error ? updateError.message : updateError)
+          // Continue analysis even if query count update fails
+        }
       }
 
       // Mark analysis as completed
-      await this.dbService.updateAnalysisRun(analysisRun.id, {
-        status: 'completed',
-        completed_queries: queries.length,
-        completed_llm_calls: totalCalls,
-        completed_at: new Date().toISOString()
-      })
+      try {
+        await this.dbService.updateAnalysisRun(analysisRun.id, {
+          status: 'completed',
+          completed_queries: queries.length,
+          completed_llm_calls: totalCalls,
+          completed_at: new Date().toISOString()
+        })
+        console.log('✅ Analysis marked as completed successfully')
+      } catch (completionError) {
+        console.warn(`⚠️ Failed to mark analysis as completed:`, completionError instanceof Error ? completionError.message : completionError)
+        // Analysis data is still collected, just status update failed
+      }
 
       try {
         const competitorResultsCount = await this.dbService.populateCompetitorResultsForAnalysisRun(analysisRun.id)
+        
+        const duration = Math.round((Date.now() - startTime) / 1000)
+        console.log(`🎉 ANALYSIS COMPLETED for "${business.name}" in ${duration}s`)
+        console.log(`📈 Results: ${successfulCalls}/${totalCalls} successful calls, ${failedCalls} failed`)
+        console.log(`📊 Sources: ${sourcesStored.queries} query sources, ${sourcesStored.business} business sources stored`)
+        console.log(`🏆 Competitors: ${competitorResultsCount} competitor results generated`)
+        console.log(`📋 Summary: ${queries.length} queries analyzed across ${providers.length} LLM providers`)
+        
       } catch (competitorError) {
-        console.error('❌ Failed to populate competitor results:', competitorError)
-        // Don't fail the whole analysis if competitor results fail
+        console.error('❌ Failed to populate competitor results:', competitorError instanceof Error ? competitorError.message : competitorError)
+        
+        // Still log completion even if competitor results failed
+        const duration = Math.round((Date.now() - startTime) / 1000)
+        console.log(`🎉 ANALYSIS COMPLETED for "${business.name}" in ${duration}s (competitor results failed)`)
+        console.log(`📈 Results: ${successfulCalls}/${totalCalls} successful calls, ${failedCalls} failed`)
+        console.log(`📊 Sources: ${sourcesStored.queries} query sources, ${sourcesStored.business} business sources stored`)
+        console.log(`📋 Summary: ${queries.length} queries analyzed across ${providers.length} LLM providers`)
       }
 
     } catch (err) {
-      console.error('❌ Background analysis failed:', err)
+      const duration = Math.round((Date.now() - startTime) / 1000)
+      console.error(`💥 ANALYSIS FAILED for "${business.name}" after ${duration}s:`, err instanceof Error ? err.message : err)
       
       // Mark analysis as failed
-      await this.dbService.updateAnalysisRun(analysisRun.id, {
-        status: 'failed',
-        error_message: err instanceof Error ? err.message : 'Unknown error',
-        completed_at: new Date().toISOString()
-      })
+      try {
+        await this.dbService.updateAnalysisRun(analysisRun.id, {
+          status: 'failed',
+          error_message: err instanceof Error ? err.message : 'Unknown error',
+          completed_at: new Date().toISOString()
+        })
+        console.log(`📝 Analysis failure status saved to database`)
+      } catch (failureUpdateError) {
+        console.error(`❌ Failed to mark analysis as failed:`, failureUpdateError instanceof Error ? failureUpdateError.message : failureUpdateError)
+      }
     }
   }
 

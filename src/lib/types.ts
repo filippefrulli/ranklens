@@ -156,3 +156,34 @@ export interface QuerySuggestion {
   accepted?: boolean
   rejected?: boolean
 }
+
+// Source Analysis Types
+export interface SourceInfo {
+  url: string
+  platform: string // e.g., "TripAdvisor", "Google Reviews", "Yelp"
+  description: string
+  importance: 'high' | 'medium' | 'low'
+  category: string // e.g., "Review Platform", "Business Directory", "Social Media"
+}
+
+export interface QuerySources {
+  id: string
+  query_id: string
+  sources: SourceInfo[]
+  last_updated: string
+  created_at: string
+}
+
+export interface BusinessSources {
+  id: string
+  business_id: string
+  sources: SourceInfo[]
+  last_updated: string
+  created_at: string
+}
+
+export interface BlindSpotAnalysis {
+  missing_platforms: SourceInfo[] // In query sources but not business sources
+  underutilized_platforms: SourceInfo[] // In business sources but not query sources  
+  opportunities: SourceInfo[] // Suggested new platforms
+}

@@ -10,6 +10,8 @@ export interface LLMResponse {
   success: boolean
   error?: string
   totalRequested: number // how many businesses were requested
+  querySources?: import('../types').SourceInfo[] // Sources used for ranking
+  businessSources?: import('../types').SourceInfo[] // Sources for user's business
 }
 
 function withTimeout<T>(promise: Promise<T>, ms = 60000): Promise<T> {
@@ -192,6 +194,12 @@ Required guidelines:
   private static async standardizeBusinessNames(businessNames: string[], userBusinessName: string): Promise<string[]> {
     if (businessNames.length === 0) return businessNames
 
+    // Skip standardization if we have too many names to avoid overwhelming the API
+    if (businessNames.length > 50) {
+      console.log('Skipping Gemini standardization for large list, using original names')
+      return businessNames
+    }
+
     try {
       const prompt = `You are a business name standardization assistant. Your task is to convert business names to their official Google Maps names and eliminate duplicates.
 
@@ -221,13 +229,25 @@ Return format: Just the unique standardized business names, one per line, with d
       // We might get fewer results than we sent if Gemini removed duplicates/invalid businesses
       // This is expected and desirable
       if (standardizedNames.length > 0) {
+        console.log(`✅ Gemini standardization successful: ${businessNames.length} → ${standardizedNames.length} names`)
         return standardizedNames
       } else {
-        console.warn('Gemini standardization returned no results, using original names')
+        console.warn('⚠️ Gemini standardization returned no results, using original names')
         return businessNames
       }
-    } catch (error) {
-      console.warn('Failed to standardize business names with Gemini, using original names:', error)
+    } catch (error: any) {
+      // Handle different types of errors with appropriate logging
+      if (error?.status === 503 || error?.message?.includes('overloaded')) {
+        console.warn('⚠️ Gemini API temporarily overloaded, using original business names')
+      } else if (error?.status === 429) {
+        console.warn('⚠️ Gemini API rate limit exceeded, using original business names')
+      } else if (error?.status === 401 || error?.message?.includes('API key')) {
+        console.warn('⚠️ Gemini API authentication failed, using original business names')
+      } else {
+        console.warn('⚠️ Gemini standardization failed with unexpected error, using original names:', error?.message || error)
+      }
+      
+      // Always fall back to original names to ensure the ranking continues
       return businessNames
     }
   }
@@ -343,10 +363,8 @@ Return format: Just the unique standardized business names, one per line, with d
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({
-          model: 'llama-3.1-sonar-small-128k-online',
-          messages: [{ role: 'user', content: prompt }],
-          max_tokens: 500,
-          temperature: 0.3
+          model: 'sonar',
+          messages: [{ role: 'user', content: prompt }]
         })
       })
     )
@@ -379,9 +397,11 @@ Return format: Just the unique standardized business names, one per line, with d
     provider: LLMProvider,
     query: string,
     businessName: string,
-    requestCount: number = 25
+    requestCount: number = 25,
+    includeSourceAnalysis: boolean = true
   ): Promise<LLMResponse> {
     const startTime = Date.now()
+    console.log(`🤖 ${provider.name} request: "${query}" for "${businessName}"`)
     
     try {
       const prompt = this.buildPrompt(query, businessName, requestCount)
@@ -421,17 +441,58 @@ Return format: Just the unique standardized business names, one per line, with d
       
       // Truncate the results to only include businesses up to the limit
       const rankedBusinesses = standardizedBusinesses.slice(0, truncationLimit)
+
+      // Discover sources if requested (async operations)
+      let querySources: import('../types').SourceInfo[] | undefined
+      let businessSources: import('../types').SourceInfo[] | undefined
+
+      if (includeSourceAnalysis) {
+        try {
+          // Import the source discovery service dynamically to avoid circular dependencies
+          const { SourceDiscoveryService } = await import('./source-discovery-service')
+          
+          // Run both source discovery operations in parallel
+          const [querySourcesResult, businessSourcesResult] = await Promise.allSettled([
+            SourceDiscoveryService.discoverQuerySources(query),
+            SourceDiscoveryService.discoverBusinessSources(businessName)
+          ])
+
+          querySources = querySourcesResult.status === 'fulfilled' ? querySourcesResult.value : []
+          businessSources = businessSourcesResult.status === 'fulfilled' ? businessSourcesResult.value : []
+
+          if (querySourcesResult.status === 'rejected') {
+            console.warn('Failed to discover query sources:', querySourcesResult.reason)
+          }
+          if (businessSourcesResult.status === 'rejected') {
+            console.warn('Failed to discover business sources:', businessSourcesResult.reason)
+          }
+        } catch (error) {
+          console.warn('Source discovery failed:', error)
+          // Continue without source analysis rather than failing the whole request
+        }
+      }
+      
+      const responseTime = Date.now() - startTime
+      console.log(`✅ ${provider.name} success: Found ${rankedBusinesses.length} businesses, ${businessName} rank ${foundResult.rank || 'not found'} (${responseTime}ms)`)
+      if (querySources && businessSources) {
+        console.log(`📊 Sources discovered: ${querySources.length} query sources, ${businessSources.length} business sources`)
+      }
       
       return {
         rankedBusinesses,
         foundBusinessRank: foundResult.rank,
         foundBusinessName: foundResult.foundName,
-        responseTimeMs: Date.now() - startTime,
+        responseTimeMs: responseTime,
         success: true,
-        totalRequested: requestCount
+        totalRequested: requestCount,
+        querySources,
+        businessSources
       }
       
     } catch (err) {
+      const responseTime = Date.now() - startTime
+      console.error(`❌ ${provider.name} failed: ${err instanceof Error ? err.message : err} (${responseTime}ms)`)
+      
       return {
         rankedBusinesses: [],
         foundBusinessRank: null,

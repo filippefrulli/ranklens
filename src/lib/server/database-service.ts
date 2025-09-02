@@ -167,25 +167,25 @@ export class ServerDatabaseService {
 
   // Analysis Run operations
   async createAnalysisRun(businessId: string, totalQueries: number): Promise<AnalysisRun> {
+    console.log(`📊 Creating analysis run for business ${businessId} with ${totalQueries} queries`)
+    
     const { data, error } = await this.supabase
       .from('analysis_runs')
       .insert([{
         business_id: businessId,
         run_date: new Date().toISOString().split('T')[0],
-        status: 'running',
         total_queries: totalQueries,
-        completed_queries: 0,
-        total_llm_calls: totalQueries * 5, // Estimate: 5 attempts per query per active provider
-        completed_llm_calls: 0,
         started_at: new Date().toISOString()
       }])
       .select()
       .single()
 
     if (error) {
+      console.error(`❌ Failed to create analysis run for business ${businessId}:`, error.message)
       throw new Error(`Failed to create analysis run: ${error.message}`)
     }
     
+    console.log(`✅ Analysis run created: ${data.id}`)
     return data
   }
 
@@ -486,8 +486,117 @@ export class ServerDatabaseService {
     }
 
     const insertedCount = insertedData?.length || 0
+    console.log(`✅ Competitor results populated: ${insertedCount} competitor entries created for analysis run ${analysisRunId}`)
     
     return insertedCount
+  }
+
+  // Store or update query sources
+  async storeQuerySources(queryId: string, sources: import('../types').SourceInfo[]): Promise<void> {
+    try {
+      // First, delete existing sources for this query
+      await this.supabase
+        .from('query_sources')
+        .delete()
+        .eq('query_id', queryId)
+
+      // Insert new sources
+      if (sources.length > 0) {
+        const { error } = await this.supabase
+          .from('query_sources')
+          .insert({
+            query_id: queryId,
+            sources: sources,
+            last_updated: new Date().toISOString()
+          })
+
+        if (error) {
+          console.error('❌ Error storing query sources:', error)
+          throw new Error(`Failed to store query sources: ${error.message}`)
+        }
+      }
+    } catch (error) {
+      console.error('❌ Error in storeQuerySources:', error)
+      throw error
+    }
+  }
+
+  // Store or update business sources
+  async storeBusinessSources(businessId: string, sources: import('../types').SourceInfo[]): Promise<void> {
+    try {
+      // First, delete existing sources for this business
+      await this.supabase
+        .from('business_sources')
+        .delete()
+        .eq('business_id', businessId)
+
+      // Insert new sources
+      if (sources.length > 0) {
+        const { error } = await this.supabase
+          .from('business_sources')
+          .insert({
+            business_id: businessId,
+            sources: sources,
+            last_updated: new Date().toISOString()
+          })
+
+        if (error) {
+          console.error('❌ Error storing business sources:', error)
+          throw new Error(`Failed to store business sources: ${error.message}`)
+        }
+      }
+    } catch (error) {
+      console.error('❌ Error in storeBusinessSources:', error)
+      throw error
+    }
+  }
+
+  // Get query sources
+  async getQuerySources(queryId: string): Promise<import('../types').QuerySources | null> {
+    try {
+      const { data, error } = await this.supabase
+        .from('query_sources')
+        .select('*')
+        .eq('query_id', queryId)
+        .order('last_updated', { ascending: false })
+        .limit(1)
+        .single()
+
+      if (error) {
+        if (error.code === 'PGRST116') return null // No rows returned
+        console.error('❌ Error fetching query sources:', error)
+        throw new Error(`Failed to fetch query sources: ${error.message}`)
+      }
+
+      return data
+    } catch (error) {
+      console.error('❌ Error in getQuerySources:', error)
+      return null
+    }
+  }
+
+  // Get business sources
+  async getBusinessSources(businessId: string): Promise<import('../types').BusinessSources | null> {
+    try {
+      const { data, error } = await this.supabase
+        .from('business_sources')
+        .select('*')
+        .eq('business_id', businessId)
+        .order('last_updated', { ascending: false })
+        .limit(1)
+        .single()
+
+      if (error) {
+        if (error.code === 'PGRST116') return null // No rows returned
+        console.error('❌ Error fetching business sources:', error)
+        throw new Error(`Failed to fetch business sources: ${error.message}`)
+      }
+
+      return data
+    } catch (error) {
+      console.error('❌ Error in getBusinessSources:', error)
+      return null
+    }
   }
 
   // Calculate truncation limit based on user business rank

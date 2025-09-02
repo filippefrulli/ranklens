@@ -10,6 +10,20 @@
     <div class="flex justify-between items-center h-16">
       <div class="flex items-center">
         <h1 class="text-2xl font-bold text-gray-900">RankLens</h1>
+        <nav class="ml-8 flex space-x-4">
+          <a 
+            href="/" 
+            class="text-gray-600 hover:text-gray-900 px-3 py-2 rounded-md text-sm font-medium"
+          >
+            Dashboard
+          </a>
+          <a 
+            href="/sources" 
+            class="text-gray-600 hover:text-gray-900 px-3 py-2 rounded-md text-sm font-medium"
+          >
+            Sources
+          </a>
+        </nav>
       </div>
 
       {#if user}

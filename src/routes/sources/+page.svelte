@@ -86,6 +86,39 @@
   const selectedQuerySources = $derived(
     selectedQueryId ? data.querySources.find(qs => qs.query_id === selectedQueryId) : null
   )
+
+  // Calculate recommended actions - platforms that appear in queries but not for business
+  const recommendedActions = $derived(() => {
+    if (!data.businessSources || data.querySources.length === 0) {
+      return []
+    }
+
+    const businessPlatforms = new Set(data.businessSources.sources.map(s => s.platform.toLowerCase()))
+    
+    const allMissingPlatforms = data.querySources.flatMap(qs => {
+      return qs.sources.filter(source => 
+        !businessPlatforms.has(source.platform.toLowerCase())
+      ).map(source => ({
+        ...source,
+        queryText: data.queries.find(q => q.id === qs.query_id)?.text || 'Unknown Query'
+      }))
+    })
+    
+    // Remove duplicates and sort by importance
+    const uniquePlatforms = allMissingPlatforms.reduce((acc, current) => {
+      const exists = acc.find(item => item.platform.toLowerCase() === current.platform.toLowerCase())
+      if (!exists) {
+        acc.push(current)
+      }
+      return acc
+    }, [] as typeof allMissingPlatforms)
+    
+    // Sort by importance (high first)
+    return uniquePlatforms.sort((a, b) => {
+      const importanceOrder = { 'high': 0, 'medium': 1, 'low': 2 }
+      return importanceOrder[a.importance] - importanceOrder[b.importance]
+    })
+  })
 </script>
 
 <svelte:head>
@@ -111,6 +144,77 @@
         </a>
       </div>
     </div>
+
+    <!-- Recommended Actions Section -->
+    {#if data.businessSources && data.querySources.length > 0}
+      <div class="mb-8">
+        <div class="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-lg p-6">
+          <div class="flex items-start">
+            <div class="flex-shrink-0">
+              <div class="flex items-center justify-center w-8 h-8 bg-blue-100 rounded-full">
+                <span class="text-blue-600 font-bold">🎯</span>
+              </div>
+            </div>
+            <div class="ml-3 flex-1">
+              <h2 class="text-lg font-semibold text-blue-900 mb-2">Recommended Actions</h2>
+              <p class="text-sm text-blue-700 mb-4">
+                Based on your source analysis, here are the top priorities to improve your rankings:
+              </p>
+              
+              {#if recommendedActions().length > 0}
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {#each recommendedActions().slice(0, 6) as opportunity}
+                    <div class="bg-white border border-blue-200 rounded-lg p-4 hover:shadow-md transition-shadow">
+                      <div class="flex items-start justify-between mb-2">
+                        <div class="flex items-center gap-2">
+                          <span class="text-lg">{getCategoryIcon(opportunity.category)}</span>
+                          <h3 class="font-medium text-sm text-gray-900">{opportunity.platform}</h3>
+                        </div>
+                        <span class="inline-flex px-2 py-1 text-xs font-medium rounded-full bg-red-100 text-red-800">
+                          High Priority
+                        </span>
+                      </div>
+                      <p class="text-xs text-gray-600 mb-3">{opportunity.description}</p>
+                      <div class="flex items-center justify-between">
+                        <span class="text-xs text-blue-600 font-medium">
+                          Missing from rankings
+                        </span>
+                        <a 
+                          href={opportunity.url} 
+                          target="_blank" 
+                          rel="noopener noreferrer"
+                          class="inline-flex items-center px-3 py-1 text-xs font-medium text-white bg-blue-600 rounded hover:bg-blue-700 transition-colors"
+                        >
+                          Create Profile →
+                        </a>
+                      </div>
+                    </div>
+                  {/each}
+                </div>
+                
+                {#if recommendedActions().length > 6}
+                  <div class="mt-4 text-center">
+                    <p class="text-sm text-blue-700">
+                      + {recommendedActions().length - 6} more opportunities available below
+                    </p>
+                  </div>
+                {/if}
+              {:else}
+                <div class="bg-white border border-green-200 rounded-lg p-4">
+                  <div class="flex items-center">
+                    <span class="text-green-500 text-lg mr-2">✅</span>
+                    <div>
+                      <h3 class="font-medium text-green-900">Excellent Coverage!</h3>
+                      <p class="text-sm text-green-700">Your business is well-represented across all high-priority platforms.</p>
+                    </div>
+                  </div>
+                </div>
+              {/if}
+            </div>
+          </div>
+        </div>
+      </div>
+    {/if}
 
     <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
       <!-- Left Column: Business Sources -->

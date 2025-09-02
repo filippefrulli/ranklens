@@ -232,17 +232,26 @@
   }
 
   async function checkForRunningAnalysis() {
+    console.log("🔍 checkForRunningAnalysis called");
+    
     if (!business?.id) {
+      console.log("🔍 No business ID, skipping check");
       return;
     }
 
     try {      
+      console.log("🔍 Checking analysis status for business:", business.id);
+      
       const response = await AuthService.makeAuthenticatedRequest(`/api/analysis-status?businessId=${business.id}`);
       const data = await response.json();
+      
+      console.log("🔍 Analysis status response:", data);
       
       const { runningAnalysis: activeAnalysis } = data;
       
       if (activeAnalysis) {
+        console.log("🔍 Found running analysis:", activeAnalysis);
+        
         runningAnalysis = true;
         
         // Calculate progress based on completed vs total calls
@@ -256,14 +265,18 @@
           currentQuery: 'Resuming analysis...',
           currentProvider: 'Checking status...'
         };
+        
+        console.log("🔍 Set runningAnalysis to:", runningAnalysis);
+        console.log("🔍 Set analysisProgress to:", analysisProgress);
 
         // Start polling for updates
         startAnalysisPolling();
       } else {
+        console.log("🔍 No running analysis found");
         runningAnalysis = false;
       }
     } catch (err) {
-      console.error('Error checking for running analysis:', err);
+      console.error('❌ Error checking for running analysis:', err);
     }
   }
 
@@ -290,7 +303,7 @@
           // Refresh dashboard data to show new results
           await loadDashboardData();
           await checkWeeklyAnalysis();
-        } else {
+        } else if (currentAnalysis.status === 'pending' || currentAnalysis.status === 'running') {
           // Update progress
           const completed = currentAnalysis.completed_llm_calls || 0;
           const total = currentAnalysis.total_llm_calls || 1;
@@ -443,6 +456,8 @@
   }
 
   async function runAnalysis() {
+    console.log("🚀 runAnalysis called");
+    
     if (!dashboardData?.business) {
       console.error("❌ No business found in dashboard data");
       error = "No business found";
@@ -465,8 +480,11 @@
     }
 
     try {
+      console.log("🚀 Setting runningAnalysis to true");
       runningAnalysis = true;
       error = null;
+      
+      console.log("🚀 runningAnalysis is now:", runningAnalysis);
 
       // Set initial progress state
       analysisProgress = {
@@ -476,6 +494,10 @@
         currentQuery: 'Starting analysis...',
         currentProvider: 'Initializing...'
       };
+      
+      console.log("🚀 Progress state set:", analysisProgress);
+
+      console.log("🚀 Making API call to /api/run-analysis");
 
       // Call the server-side analysis endpoint
       const response = await AuthService.makeAuthenticatedRequest('/api/run-analysis', {
@@ -485,11 +507,17 @@
         })
       });
 
+      console.log("🚀 API response received:", response.status, response.statusText);
+
       const result = await response.json();
+      
+      console.log("🚀 API result:", result);
 
       if (!response.ok) {
         throw new Error(result.error || 'Failed to start analysis');
       }
+
+      console.log("🚀 Analysis started successfully");
 
       // Update progress to show analysis is running
       analysisProgress = {
@@ -497,6 +525,8 @@
         currentQuery: 'Analysis running on server...',
         currentProvider: 'Multiple providers'
       };
+
+      console.log("🚀 Starting polling");
 
       // Start polling for progress updates
       startAnalysisPolling();
@@ -515,6 +545,8 @@
         currentProvider: ''
       };
     }
+    
+    console.log("🚀 runAnalysis function completed, runningAnalysis:", runningAnalysis);
   }
 
   async function signOut() {

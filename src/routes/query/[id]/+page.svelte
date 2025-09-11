@@ -3,7 +3,6 @@
   import { goto } from '$app/navigation'
   import { onMount } from 'svelte'
   import { DatabaseService } from '../../../lib/services/database-service'
-  import { user } from '../../../lib/services/auth-service'
   import QueryResultHeader from '../../../lib/components/query/QueryResultHeader.svelte'
   import RankingResultsByLLMTable from '../../../lib/components/query/RankingResultsByLLMTable.svelte'
   import CompetitorRankingsTable from '../../../lib/components/query/CompetitorRankingsTable.svelte'

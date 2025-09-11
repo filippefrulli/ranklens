@@ -1,6 +1,5 @@
 <script lang="ts">
   import type { PageData, ActionData } from './$types'
-  import { user } from '../lib/services/auth-service'
   import LoginForm from '../lib/components/auth/LoginForm.svelte'
   import Dashboard from '../lib/components/dashboard/Dashboard.svelte'
 

@@ -1,24 +1,91 @@
 <script lang="ts">
-  import { onMount } from 'svelte'
-  import '../app.css'
-  import { AuthService, user, loading as authLoading } from '../lib/services/auth-service'
+  import { onNavigate, invalidate } from '$app/navigation';
+  import { page } from '$app/stores';
+  import { onMount } from 'svelte';
+  import "../app.css";
+  import Footer from '$lib/components/layout/Footer.svelte';
+  import Navigation from '$lib/components/layout/Navigation.svelte';
+  import type { Session, SupabaseClient, User } from '@supabase/supabase-js';
 
-  onMount(async () => {
-    // Initialize authentication when the app loads
-    await AuthService.initialize()
-  })
+  let { children, data } = $props<{
+    children: any;
+    data: { 
+      session: Session | null;
+      supabase: SupabaseClient;
+    };
+  }>();
+
+  let { session, supabase } = $derived(data);
+
+  onNavigate((navigation) => {
+    if (!document.startViewTransition) return;
+
+    return new Promise((resolve) => {
+      document.startViewTransition(async () => {
+        resolve();
+        await navigation.complete;
+      });
+    });
+  });
+
+  onMount(() => {
+    // Set up auth state change listener
+    const { data: authData } = supabase.auth.onAuthStateChange(async (event: string, newSession: Session | null) => {
+      // Only proceed if session state actually changed
+      if (newSession?.expires_at !== session?.expires_at) {
+        // Validate the session by getting the user
+        const { data: { user }, error } = await supabase.auth.getUser();
+        
+        if (!error && user) {
+          // Session is valid, invalidate auth cache
+          invalidate('supabase:auth');
+        } else if (error) {
+          // Session is invalid, clear it
+          invalidate('supabase:auth');
+        }
+      }
+    });
+
+    // Cleanup auth listener on unmount
+    return () => authData.subscription.unsubscribe();
+  });
 </script>
 
-<!-- Loading state while initializing auth -->
-{#if $authLoading}
-  <div class="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center">
-    <div class="text-center">
-      <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
-      <h2 class="text-xl font-semibold text-gray-800">Loading RankLens...</h2>
-      <p class="text-gray-600 mt-2">Initializing authentication...</p>
-    </div>
-  </div>
-{:else}
-  <!-- Main application content -->
-  <slot />
-{/if}
+<svelte:head>
+  <title>{'site.title'}</title>
+  <meta name="description" content="{'site.description'}" />
+</svelte:head>
+
+<style>
+  @keyframes fade-in {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  
+  @keyframes fade-out {
+    from { opacity: 1; transform: translateY(0); }
+    to { opacity: 0; transform: translateY(-10px); }
+  }
+  
+  ::view-transition-old(root) {
+    animation: fade-out 0.2s ease-out;
+  }
+  
+  ::view-transition-new(root) {
+    animation: fade-in 0.3s ease-in;
+  }
+
+  main {
+    view-transition-name: main-content;
+  }
+</style>
+
+<div class="min-h-screen flex flex-col bg-white">
+  <Navigation session={session} />
+
+  <main class="flex-1">
+    {@render children()}
+  </main>
+
+  <Footer />
+</div>

@@ -96,7 +96,6 @@
       if (selectedProvider) {
         competitors = competitors.filter(competitor => 
           competitor.llm_providers && 
-          competitor.llm_providers.length === 1 && 
           competitor.llm_providers.includes(selectedProvider!.name)
         )
       } else {

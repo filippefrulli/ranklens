@@ -1,8 +1,9 @@
 <script lang="ts">
+  import { enhance } from '$app/forms';
+
   export let show: boolean;
   export let loading: boolean;
   export let newQuery: string;
-  export let onSubmit: () => void;
   export let onClose: () => void;
   export let isAIGenerated: boolean = false;
 </script>
@@ -23,15 +24,30 @@
       {/if}
 
       <form
-        onsubmit={(e) => {
-          e.preventDefault();
-          onSubmit();
+        method="POST"
+        action="?/addQuery"
+        use:enhance={({ formData }) => {
+          loading = true;
+          
+          return async ({ result, update }) => {
+            loading = false;
+            
+            if (result.type === 'success') {
+              newQuery = '';
+              onClose();
+              await update();
+            } else if (result.type === 'failure' && result.data) {
+              // Handle validation errors - could show error in modal
+              console.error('Form validation error:', result.data);
+            }
+          };
         }}
         class="space-y-4"
       >
         <div>
           <textarea
             id="query-text"
+            name="query"
             bind:value={newQuery}
             required
             rows="3"

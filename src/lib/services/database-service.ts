@@ -132,6 +132,43 @@ export class DatabaseService {
     return data || []
   }
 
+  // Create a new query for a business
+  async createQuery(queryData: {
+    business_id: string
+    text: string
+  }): Promise<Query> {
+    // Get the next order index
+    const { data: existingQueries } = await this.supabase
+      .from('queries')
+      .select('order_index')
+      .eq('business_id', queryData.business_id)
+      .order('order_index', { ascending: false })
+      .limit(1)
+
+    const nextOrderIndex = existingQueries && existingQueries.length > 0 
+      ? existingQueries[0].order_index + 1 
+      : 0
+
+    const { data, error } = await this.supabase
+      .from('queries')
+      .insert([
+        {
+          business_id: queryData.business_id,
+          text: queryData.text,
+          order_index: nextOrderIndex
+        }
+      ])
+      .select()
+      .single()
+    
+    if (error) {
+      console.error('Error creating query:', error)
+      throw new Error(`Failed to create query: ${error.message}`)
+    }
+    
+    return data
+  }
+
     // LLM Provider operations
   async getActiveLLMProviders(): Promise<LLMProvider[]> {
     const { data, error } = await this.supabase

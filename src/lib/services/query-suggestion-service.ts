@@ -235,11 +235,11 @@ Target customers: ${research.targetAudience}
 Requirements:
 1. Use business research to make queries realistic and relevant
 2. Mix 3 SHORT queries (6-8 words) + 2 DETAILED queries (10-15 words)
-3. Use conversational language: "I need...", "Can you recommend...", "What are the best..."
+3. Use conversational language: "I need help finding...", "Can you recommend...", "What are the best..."
 4. Include price positioning (${research.priceRange}) and popular amenities
-5. Vary locations: some with "${mainCity}", some without, avoid repeating same area
-6. Every query should be about a single thing, meaning ask for a hotel or a restaurant, never hotels or restaurants in the plural.
-7. Every query should always include a location reference.
+5. Vary locations: some with "${mainCity}", some with an area in that city, or other way but always have some type of location reference.
+6. Every query should be about a SINGLE thing, meaning ask for a hotel or a restaurant, never hotels or restaurants in the plural.
+7. Every query should ALWAYS include a location reference like a city, area, or neighborhood.
 
 Examples:
 SHORT: "I need luxury hotels in Dublin", "Can you recommend budget accommodation?"

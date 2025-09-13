@@ -133,11 +133,6 @@
     showCreateBusiness = true;
   }
 
-  function handleAddQuery(event: Event) {
-    // Form submission will be handled by SvelteKit form action
-    // The form data is already bound to the form inputs
-  }
-
   // Query suggestions handlers
   function acceptQuerySuggestion(queryText: string) {
     newQuery = queryText;
@@ -460,13 +455,10 @@
         {loading}
         {newQuery}
         isAIGenerated={isAIGeneratedQuery}
-        onSubmit={() => {
-          // Handle form submission via form action
-          handleAddQuery(new Event("submit"));
-        }}
         onClose={() => {
           showAddQuery = false;
           isAIGeneratedQuery = false;
+          newQuery = "";
         }}
       />
     {/if}

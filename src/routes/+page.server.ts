@@ -136,5 +136,52 @@ export const actions: Actions = {
       console.error('Error generating query suggestions:', err)
       return fail(500, { error: 'Failed to generate query suggestions' })
     }
+  },
+
+  // Add query action
+  addQuery: async ({ locals, request }) => {
+    if (!locals.user || !locals.supabase) {
+      return fail(401, { error: 'Unauthorized' })
+    }
+
+    const formData = await request.formData()
+    const queryText = formData.get('query') as string
+
+    if (!queryText || queryText.trim().length === 0) {
+      return fail(400, { error: 'Query text is required' })
+    }
+
+    try {
+      const dbService = new DatabaseService(locals.supabase, locals.user.id)
+      const business = await dbService.getBusiness()
+      
+      if (!business) {
+        return fail(404, { error: 'Business not found' })
+      }
+
+      // Check if query already exists for this business
+      const existingQueries = await dbService.getQueriesForBusiness(business.id)
+      const duplicateQuery = existingQueries.find(q => 
+        q.text.toLowerCase().trim() === queryText.toLowerCase().trim()
+      )
+
+      if (duplicateQuery) {
+        return fail(400, { error: 'This query already exists' })
+      }
+
+      const query = await dbService.createQuery({
+        business_id: business.id,
+        text: queryText.trim()
+      })
+
+      return { 
+        success: true,
+        query
+      }
+
+    } catch (err) {
+      console.error('Error adding query:', err)
+      return fail(500, { error: 'Failed to add query' })
+    }
   }
 }

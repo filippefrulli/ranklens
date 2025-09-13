@@ -317,6 +317,9 @@ export class DatabaseService {
 
   // Weekly analysis check
   async checkWeeklyAnalysis(businessId: string): Promise<WeeklyAnalysisCheck> {
+    // DEVELOPMENT MODE: Always allow analysis runs
+    // TODO: Re-enable weekly limits for production
+    
     // Get the start of current week (Monday)
     const now = new Date()
     const currentWeekStart = new Date(now)
@@ -337,7 +340,8 @@ export class DatabaseService {
       console.error('Error checking weekly analysis:', error)
     }
 
-    const canRun = !currentWeekRun
+    // DEVELOPMENT: Always allow runs regardless of weekly limit
+    const canRun = true // Changed from: !currentWeekRun
     const nextWeekStart = new Date(currentWeekStart)
     nextWeekStart.setDate(currentWeekStart.getDate() + 7)
 

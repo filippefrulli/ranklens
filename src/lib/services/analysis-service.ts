@@ -80,7 +80,6 @@ export class AnalysisService {
       const totalCalls = queries.length * providers.length * 5
       let successfulCalls = 0
       let failedCalls = 0
-      let sourcesStored = { queries: 0, business: 0 }
 
       // Update total calls in analysis run
       await this.dbService.updateAnalysisRun(analysisRun.id, {
@@ -91,7 +90,6 @@ export class AnalysisService {
         const query = queries[queryIndex]
 
         const rankingAttempts: any[] = []
-        let sourceDataStored = false // Track if we've already stored sources for this query
 
         for (const provider of providers) {
 
@@ -104,30 +102,6 @@ export class AnalysisService {
                 successfulCalls++
               } else {
                 failedCalls++
-              }
-
-              // Store source data if available (only once per query, on first successful result)
-              if (result.success && !sourceDataStored) {
-                try {
-                  // Store query sources if discovered
-                  if (result.querySources && result.querySources.length > 0) {
-                    await this.dbService.storeQuerySources(query.id, result.querySources)
-                    console.log(`📊 Stored ${result.querySources.length} query sources for: ${query.text}`)
-                    sourcesStored.queries++
-                  }
-
-                  // Store business sources if discovered
-                  if (result.businessSources && result.businessSources.length > 0) {
-                    await this.dbService.storeBusinessSources(business.id, result.businessSources)
-                    console.log(`🏢 Stored ${result.businessSources.length} business sources for: ${business.name}`)
-                    sourcesStored.business++
-                  }
-                  
-                  sourceDataStored = true // Mark sources as stored for this query
-                } catch (sourceError) {
-                  console.error(`❌ Failed to store source data for query "${query.text}":`, sourceError instanceof Error ? sourceError.message : sourceError)
-                  // Don't fail the analysis if source storage fails
-                }
               }
 
               // Save ALL results, whether successful or not
@@ -270,7 +244,6 @@ export class AnalysisService {
         const duration = Math.round((Date.now() - startTime) / 1000)
         console.log(`🎉 ANALYSIS COMPLETED for "${business.name}" in ${duration}s`)
         console.log(`📈 Results: ${successfulCalls}/${totalCalls} successful calls, ${failedCalls} failed`)
-        console.log(`📊 Sources: ${sourcesStored.queries} query sources, ${sourcesStored.business} business sources stored`)
         console.log(`🏆 Competitors: ${competitorResultsCount} competitor results generated`)
         console.log(`📋 Summary: ${queries.length} queries analyzed across ${providers.length} LLM providers`)
         
@@ -281,7 +254,6 @@ export class AnalysisService {
         const duration = Math.round((Date.now() - startTime) / 1000)
         console.log(`🎉 ANALYSIS COMPLETED for "${business.name}" in ${duration}s (competitor results failed)`)
         console.log(`📈 Results: ${successfulCalls}/${totalCalls} successful calls, ${failedCalls} failed`)
-        console.log(`📊 Sources: ${sourcesStored.queries} query sources, ${sourcesStored.business} business sources stored`)
         console.log(`📋 Summary: ${queries.length} queries analyzed across ${providers.length} LLM providers`)
       }
 

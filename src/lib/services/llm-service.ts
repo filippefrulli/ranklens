@@ -10,8 +10,6 @@ export interface LLMResponse {
   success: boolean
   error?: string
   totalRequested: number // how many businesses were requested
-  querySources?: import('../types').SourceInfo[] // Sources used for ranking
-  businessSources?: import('../types').SourceInfo[] // Sources for user's business
 }
 
 function withTimeout<T>(promise: Promise<T>, ms = 60000): Promise<T> {
@@ -397,8 +395,7 @@ Return format: Just the unique standardized business names, one per line, with d
     provider: LLMProvider,
     query: string,
     businessName: string,
-    requestCount: number = 25,
-    includeSourceAnalysis: boolean = true
+    requestCount: number = 25
   ): Promise<LLMResponse> {
     const startTime = Date.now()
     console.log(`🤖 ${provider.name} request: "${query}" for "${businessName}"`)
@@ -442,41 +439,8 @@ Return format: Just the unique standardized business names, one per line, with d
       // Truncate the results to only include businesses up to the limit
       const rankedBusinesses = standardizedBusinesses.slice(0, truncationLimit)
 
-      // Discover sources if requested (async operations)
-      let querySources: import('../types').SourceInfo[] | undefined
-      let businessSources: import('../types').SourceInfo[] | undefined
-
-      if (includeSourceAnalysis) {
-        try {
-          // Import the source discovery service dynamically to avoid circular dependencies
-          const { SourceDiscoveryService } = await import('../server/source-discovery-service')
-          
-          // Run both source discovery operations in parallel
-          const [querySourcesResult, businessSourcesResult] = await Promise.allSettled([
-            SourceDiscoveryService.discoverQuerySources(query),
-            SourceDiscoveryService.discoverBusinessSources(businessName)
-          ])
-
-          querySources = querySourcesResult.status === 'fulfilled' ? querySourcesResult.value : []
-          businessSources = businessSourcesResult.status === 'fulfilled' ? businessSourcesResult.value : []
-
-          if (querySourcesResult.status === 'rejected') {
-            console.warn('Failed to discover query sources:', querySourcesResult.reason)
-          }
-          if (businessSourcesResult.status === 'rejected') {
-            console.warn('Failed to discover business sources:', businessSourcesResult.reason)
-          }
-        } catch (error) {
-          console.warn('Source discovery failed:', error)
-          // Continue without source analysis rather than failing the whole request
-        }
-      }
-      
       const responseTime = Date.now() - startTime
       console.log(`✅ ${provider.name} success: Found ${rankedBusinesses.length} businesses, ${businessName} rank ${foundResult.rank || 'not found'} (${responseTime}ms)`)
-      if (querySources && businessSources) {
-        console.log(`📊 Sources discovered: ${querySources.length} query sources, ${businessSources.length} business sources`)
-      }
       
       return {
         rankedBusinesses,
@@ -484,9 +448,7 @@ Return format: Just the unique standardized business names, one per line, with d
         foundBusinessName: foundResult.foundName,
         responseTimeMs: responseTime,
         success: true,
-        totalRequested: requestCount,
-        querySources,
-        businessSources
+        totalRequested: requestCount
       }
       
     } catch (err) {

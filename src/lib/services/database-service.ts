@@ -204,8 +204,8 @@ export class DatabaseService {
   async ensureRequiredProvidersActive(): Promise<void> {
     // Ensure both OpenAI GPT-5 and Google Gemini are active
     const requiredProviders = [
-      { name: 'OpenAI GPT-5', supports_sources: false },
-      { name: 'Google Gemini', supports_sources: false }
+      { name: 'OpenAI GPT-5' },
+      { name: 'Google Gemini' }
     ]
 
     for (const provider of requiredProviders) {
@@ -227,7 +227,6 @@ export class DatabaseService {
           .from('llm_providers')
           .insert({
             name: provider.name,
-            supports_sources: provider.supports_sources,
             is_active: true
           })
 
@@ -572,114 +571,6 @@ export class DatabaseService {
     console.log(`✅ Competitor results populated: ${insertedCount} competitor entries created for analysis run ${analysisRunId}`)
     
     return insertedCount
-  }
-
-  // Store or update query sources
-  async storeQuerySources(queryId: string, sources: import('../types').SourceInfo[]): Promise<void> {
-    try {
-      // First, delete existing sources for this query
-      await this.supabase
-        .from('query_sources')
-        .delete()
-        .eq('query_id', queryId)
-
-      // Insert new sources
-      if (sources.length > 0) {
-        const { error } = await this.supabase
-          .from('query_sources')
-          .insert({
-            query_id: queryId,
-            sources: sources,
-            last_updated: new Date().toISOString()
-          })
-
-        if (error) {
-          console.error('❌ Error storing query sources:', error)
-          throw new Error(`Failed to store query sources: ${error.message}`)
-        }
-      }
-    } catch (error) {
-      console.error('❌ Error in storeQuerySources:', error)
-      throw error
-    }
-  }
-
-  // Store or update business sources
-  async storeBusinessSources(businessId: string, sources: import('../types').SourceInfo[]): Promise<void> {
-    try {
-      // First, delete existing sources for this business
-      await this.supabase
-        .from('business_sources')
-        .delete()
-        .eq('business_id', businessId)
-
-      // Insert new sources
-      if (sources.length > 0) {
-        const { error } = await this.supabase
-          .from('business_sources')
-          .insert({
-            business_id: businessId,
-            sources: sources,
-            last_updated: new Date().toISOString()
-          })
-
-        if (error) {
-          console.error('❌ Error storing business sources:', error)
-          throw new Error(`Failed to store business sources: ${error.message}`)
-        }
-      }
-    } catch (error) {
-      console.error('❌ Error in storeBusinessSources:', error)
-      throw error
-    }
-  }
-
-  // Get query sources
-  async getQuerySources(queryId: string): Promise<import('../types').QuerySources | null> {
-    try {
-      const { data, error } = await this.supabase
-        .from('query_sources')
-        .select('*')
-        .eq('query_id', queryId)
-        .order('last_updated', { ascending: false })
-        .limit(1)
-        .single()
-
-      if (error) {
-        if (error.code === 'PGRST116') return null // No rows returned
-        console.error('❌ Error fetching query sources:', error)
-        throw new Error(`Failed to fetch query sources: ${error.message}`)
-      }
-
-      return data
-    } catch (error) {
-      console.error('❌ Error in getQuerySources:', error)
-      return null
-    }
-  }
-
-  // Get business sources
-  async getBusinessSources(businessId: string): Promise<import('../types').BusinessSources | null> {
-    try {
-      const { data, error } = await this.supabase
-        .from('business_sources')
-        .select('*')
-        .eq('business_id', businessId)
-        .order('last_updated', { ascending: false })
-        .limit(1)
-        .single()
-
-      if (error) {
-        if (error.code === 'PGRST116') return null // No rows returned
-        console.error('❌ Error fetching business sources:', error)
-        throw new Error(`Failed to fetch business sources: ${error.message}`)
-      }
-
-      return data
-    } catch (error) {
-      console.error('❌ Error in getBusinessSources:', error)
-      return null
-    }
   }
 
   // Calculate truncation limit based on user business rank

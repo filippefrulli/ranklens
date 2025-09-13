@@ -132,6 +132,22 @@ export class DatabaseService {
     return data || []
   }
 
+  // Get a single query by ID
+  async getQuery(queryId: string): Promise<Query | null> {
+    const { data, error } = await this.supabase
+      .from('queries')
+      .select('*')
+      .eq('id', queryId)
+      .single()
+    
+    if (error) {
+      console.error('Error fetching query:', error)
+      return null
+    }
+    
+    return data
+  }
+
   // Create a new query for a business
   async createQuery(queryData: {
     business_id: string

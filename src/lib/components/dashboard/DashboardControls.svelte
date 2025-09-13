@@ -25,8 +25,9 @@
   <div class="flex gap-2">
     <button
       onclick={onAddQuery}
-      class="bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium py-2 px-4 rounded-md transition-colors cursor-pointer"
+      class="text-black border border-gray-400 text-sm font-medium py-2 px-4 rounded-md cursor-pointer inline-flex items-center gap-2"
     >
+      <span>+</span>
       Add Query
     </button>
 
@@ -37,7 +38,7 @@
           disabled={!weeklyCheck.canRun || runningAnalysis}
           class="text-sm font-medium py-2 px-4 rounded-md transition-colors cursor-pointer
             {weeklyCheck.canRun && !runningAnalysis
-              ? 'bg-green-600 hover:bg-green-700 text-white'
+              ? 'bg-black hover:bg-gray-700 text-white'
               : 'bg-gray-300 text-gray-500 cursor-not-allowed'}"
         >
           {runningAnalysis ? "Running Analysis..." : "Run Weekly Analysis"}

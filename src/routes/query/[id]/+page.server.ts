@@ -15,14 +15,17 @@ export const load: PageServerLoad = async ({ locals, params }) => {
   }
 
   try {
-    // Get query details with authenticated supabase client
-    const queryData = await DatabaseService.getQuery(supabase, queryId)
+    // Create database service with authenticated context
+    const dbService = new DatabaseService(supabase, user.id)
+    
+    // Get query details
+    const queryData = await dbService.getQuery(queryId)
     if (!queryData) {
       throw error(404, 'Query not found')
     }
 
     // Verify access - check if the query belongs to the user's business
-    const business = await DatabaseService.getBusiness(supabase, user.id)
+    const business = await dbService.getBusiness()
     if (!business || queryData.business_id !== business.id) {
       throw error(403, 'Access denied')
     }
@@ -39,7 +42,7 @@ export const load: PageServerLoad = async ({ locals, params }) => {
     }
 
     // Get LLM providers
-    const llmProviders = await DatabaseService.getLLMProviders(supabase)
+    const llmProviders = await dbService.getActiveLLMProviders()
 
     return {
       query: queryData,

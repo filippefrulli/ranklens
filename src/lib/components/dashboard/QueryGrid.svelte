@@ -66,7 +66,7 @@
     </div>
   </div>
 {:else}
-  <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+  <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-8">
     {#each queries as query}
       {@const queryAnalytics = analytics.find((a) => a.query_id === query.id)}
       {@const queryHistory = queryHistories.get(query.id) || []}

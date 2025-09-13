@@ -26,7 +26,7 @@
   }
 </script>
 
-<div class="bg-white rounded-lg shadow-md border border-gray-200 p-6">
+<div class="bg-white rounded-lg border border-gray-800 p-6">
   <!-- Header with Query Text and View Details Button -->
   <div class="flex justify-between items-start mb-4">
     <h3 class="text-lg font-bold text-gray-900 line-clamp-2 flex-1 pr-4">

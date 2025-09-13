@@ -1,5 +1,5 @@
 import type { PageServerLoad, Actions } from './$types'
-import { fail } from '@sveltejs/kit'
+import { fail, redirect } from '@sveltejs/kit'
 import { DatabaseService } from '$lib/services/database-service'
 import { QuerySuggestionService } from '$lib/services/query-suggestion-service'
 import { AnalysisService } from '$lib/services/analysis-service'
@@ -93,9 +93,15 @@ export const actions: Actions = {
         google_primary_type_display: googlePrimaryTypeDisplay
       })
 
-      return { success: true, business }
+      // Redirect to home page with clean URL after successful creation
+      throw redirect(303, '/')
 
     } catch (err) {
+      // If it's our redirect, re-throw it
+      if (err instanceof Response && err.status === 303) {
+        throw err
+      }
+      
       console.error('Error creating business:', err)
       return fail(500, { error: 'Failed to create business' })
     }

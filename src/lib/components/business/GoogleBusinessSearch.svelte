@@ -29,10 +29,9 @@
 
   interface Props {
     onBusinessSelected: (business: SelectedBusiness) => void
-    onCancel: () => void
   }
 
-  let { onBusinessSelected, onCancel }: Props = $props()
+  let { onBusinessSelected }: Props = $props()
 
   let searchQuery = $state('')
   let searchResults = $state<GooglePlacesResult[]>([])
@@ -237,13 +236,4 @@
       </div>
     </div>
   {/if}
-
-  <div class="flex justify-end space-x-3 pt-4">
-    <button
-      onclick={onCancel}
-      class="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-md transition-colors cursor-pointer"
-    >
-      Cancel
-    </button>
-  </div>
 </div>

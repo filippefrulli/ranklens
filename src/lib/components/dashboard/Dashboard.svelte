@@ -148,35 +148,19 @@
     return [];
   }
 
-  // Progress monitoring (for real-time updates during analysis)
+  // Progress monitoring - handled server-side with periodic refresh
+  // TODO: Implement server-sent events or WebSocket for real-time updates
   function monitorAnalysisProgress() {
     if (!business || !runningAnalysis) return;
     
-    const checkInterval = setInterval(async () => {
-      try {
-        // This should use a server-side API endpoint
-        const response = await fetch(`/api/analysis-status?businessId=${business.id}`);
-        if (response.ok) {
-          const data = await response.json();
-          
-          if (data.status === 'completed') {
-            clearInterval(checkInterval);
-            // Reload page to get updated data
-            window.location.reload();
-          } else if (data.status === 'error') {
-            clearInterval(checkInterval);
-            error = data.error || 'Analysis failed';
-          } else {
-            analysisProgress = data.progress || analysisProgress;
-          }
-        }
-      } catch (err) {
-        console.error('Error monitoring analysis:', err);
-        clearInterval(checkInterval);
+    // Periodically refresh data by reloading the page
+    // This ensures we get updated analysis status from server-side load function
+    const checkInterval = setInterval(() => {
+      if (typeof window !== 'undefined') {
+        window.location.reload();
       }
-    }, 2000);
+    }, 10000); // Check every 10 seconds
 
-    // Return cleanup function
     return () => clearInterval(checkInterval);
   }
 
@@ -188,22 +172,12 @@
     }
   });
 
-  // Weekly check monitoring
+  // Weekly check should be handled server-side in the load function
+  // Remove client-side weekly check polling
   async function checkWeeklyAnalysis() {
-    if (!business) return;
-    
-    try {
-      const response = await fetch(`/api/weekly-check?businessId=${business.id}`);
-      if (response.ok) {
-        const data = await response.json();
-        if (data.needsAnalysis) {
-          // Reload page to trigger analysis
-          window.location.reload();
-        }
-      }
-    } catch (err) {
-      console.error('Error checking weekly analysis:', err);
-    }
+    // This logic should be moved to +page.server.ts load function
+    // For now, we'll remove the client-side check
+    console.log('Weekly analysis check should be handled server-side');
   }
 
   // UI helper functions
@@ -331,7 +305,7 @@
               <h3 class="text-lg font-semibold text-gray-900">Find Your Business</h3>
               <button
                 onclick={() => (showGoogleSearch = false)}
-                class="text-gray-400 hover:text-gray-600 transition-colors"
+                class="text-gray-400 hover:text-gray-600 transition-colors cursor-pointer"
                 aria-label="Close modal"
               >
                 <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -341,7 +315,6 @@
             </div>
             <GoogleBusinessSearch
               onBusinessSelected={handleBusinessSelected}
-              onCancel={() => (showGoogleSearch = false)}
             />
           </div>
         </div>

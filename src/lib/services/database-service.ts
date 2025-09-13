@@ -416,6 +416,7 @@ export class DatabaseService {
       .select(`
         *,
         llm_providers!inner(
+          id,
           name
         )
       `)
@@ -624,29 +625,30 @@ export class DatabaseService {
     // Convert to competitor results and insert
     const competitorResults: any[] = []
     
-    // Create one aggregate record for each business (using standardized business map)
+    // Create individual records for each provider that ranked each business
     Array.from(standardizedBusinessMap.values()).forEach(business => {
-      // Create an aggregate record across all providers
-      const allRanks = business.ranks
-      const averageRank = allRanks.reduce((sum, rank) => sum + rank, 0) / allRanks.length
-      const bestRank = Math.min(...allRanks)
-      const worstRank = Math.max(...allRanks)
-      const appearanceRate = (business.appearances_count / attempts.length) * 100
-      const weightedScore = averageRank * (3.0 - 2.5 * (appearanceRate / 100))
+      business.ranksByProvider.forEach((ranks, providerName) => {
+        const averageRank = ranks.reduce((sum, rank) => sum + rank, 0) / ranks.length
+        const bestRank = Math.min(...ranks)
+        const worstRank = Math.max(...ranks)
+        const providerAttempts = attempts.filter(attempt => attempt.llm_providers?.name === providerName).length
+        const appearanceRate = (ranks.length / providerAttempts) * 100
+        const weightedScore = averageRank * (3.0 - 2.5 * (appearanceRate / 100))
 
-      competitorResults.push({
-        query_id: queryId,
-        analysis_run_id: analysisRunId,
-        business_name: business.business_name,
-        average_rank: Number(averageRank.toFixed(2)),
-        best_rank: bestRank,
-        worst_rank: worstRank,
-        appearances_count: business.appearances_count,
-        total_attempts: attempts.length,
-        weighted_score: Number(weightedScore.toFixed(2)),
-        llm_providers: business.llm_providers, // All providers that ranked this business
-        raw_ranks: business.ranks,
-        is_user_business: business.is_user_business
+        competitorResults.push({
+          query_id: queryId,
+          analysis_run_id: analysisRunId,
+          business_name: business.business_name,
+          average_rank: Number(averageRank.toFixed(2)),
+          best_rank: bestRank,
+          worst_rank: worstRank,
+          appearances_count: ranks.length,
+          total_attempts: providerAttempts,
+          weighted_score: Number(weightedScore.toFixed(2)),
+          llm_providers: [providerName], // Array with single provider name
+          raw_ranks: ranks,
+          is_user_business: business.is_user_business
+        })
       })
     })
 
@@ -658,7 +660,7 @@ export class DatabaseService {
     }
 
     // Log a sample of the results for debugging
-    console.log('📝 Sample competitor results:', competitorResults.slice(0, 3))
+    console.log('📝 Sample competitor results:', JSON.stringify(competitorResults.slice(0, 1), null, 2))
 
     // Insert all competitor results
     const { data: insertedData, error: insertError } = await this.supabase

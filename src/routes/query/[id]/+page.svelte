@@ -99,17 +99,54 @@
           competitor.llm_providers.includes(selectedProvider!.name)
         )
       } else {
-        // When no provider is selected, show only records that include all providers for each business
-        // Group by business name and show the record with the most providers
+        // When no provider is selected, we need to aggregate the data
+        // Group by business name and calculate aggregate statistics
         const businessGroups = new Map()
+        
         competitors.forEach(competitor => {
           const businessName = competitor.business_name
-          if (!businessGroups.has(businessName) || 
-              competitor.llm_providers.length > businessGroups.get(businessName).llm_providers.length) {
-            businessGroups.set(businessName, competitor)
+          if (!businessGroups.has(businessName)) {
+            businessGroups.set(businessName, {
+              ...competitor,
+              allRanks: [...competitor.raw_ranks],
+              allProviders: [...competitor.llm_providers],
+              totalAppearances: competitor.appearances_count,
+              totalProviderAttempts: competitor.total_attempts
+            })
+          } else {
+            const existing = businessGroups.get(businessName)
+            existing.allRanks.push(...competitor.raw_ranks)
+            // Merge providers array without duplicates
+            competitor.llm_providers.forEach((provider: string) => {
+              if (!existing.allProviders.includes(provider)) {
+                existing.allProviders.push(provider)
+              }
+            })
+            existing.totalAppearances += competitor.appearances_count
+            existing.totalProviderAttempts += competitor.total_attempts
           }
         })
-        competitors = Array.from(businessGroups.values())
+        
+        // Calculate aggregate statistics for each business
+        competitors = Array.from(businessGroups.values()).map(business => {
+          const averageRank = business.allRanks.reduce((sum: number, rank: number) => sum + rank, 0) / business.allRanks.length
+          const bestRank = Math.min(...business.allRanks)
+          const worstRank = Math.max(...business.allRanks)
+          const appearanceRate = (business.totalAppearances / business.totalProviderAttempts) * 100
+          const weightedScore = averageRank * (3.0 - 2.5 * (appearanceRate / 100))
+          
+          return {
+            ...business,
+            average_rank: Number(averageRank.toFixed(2)),
+            best_rank: bestRank,
+            worst_rank: worstRank,
+            appearances_count: business.totalAppearances,
+            total_attempts: business.totalProviderAttempts,
+            weighted_score: Number(weightedScore.toFixed(2)),
+            llm_providers: business.allProviders,
+            raw_ranks: business.allRanks
+          }
+        })
       }
       
       competitorRankings = competitors

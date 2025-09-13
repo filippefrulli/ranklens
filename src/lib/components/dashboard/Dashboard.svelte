@@ -285,9 +285,13 @@
                       <button
                         type="button"
                         onclick={() => acceptQuerySuggestion(suggestion.text)}
-                        class="px-3 py-1 bg-blue-600 text-white text-sm rounded hover:bg-blue-700 transition-colors cursor-pointer"
+                        class="flex items-center justify-center w-8 h-8 bg-gray-900 text-white rounded-full hover:bg-gray-800 transition-colors cursor-pointer"
+                        title="Add Query"
+                        aria-label="Add Query"
                       >
-                        Add Query
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path>
+                        </svg>
                       </button>
                     </div>
                   </div>

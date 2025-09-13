@@ -153,6 +153,7 @@ export interface DashboardData {
 
 export interface QuerySuggestion {
   text: string
+  reasoning?: string
   accepted?: boolean
   rejected?: boolean
 }

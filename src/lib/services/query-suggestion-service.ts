@@ -5,11 +5,25 @@ interface QuerySuggestion {
   text: string
 }
 
+interface BusinessResearch {
+  category: string
+  priceRange: string
+  keyAmenities: string[]
+  targetAudience: string
+  uniqueFeatures: string[]
+  businessType: string
+}
+
 export class QuerySuggestionService {
   static async generateQuerySuggestions(business: Business): Promise<QuerySuggestion[]> {
-    const prompt = this.buildPrompt(business)
-    
     try {
+      // First, research the business to understand its characteristics
+      console.log(`Researching business: ${business.name}`)
+      const research = await this.researchBusiness(business)
+      console.log('Business research results:', research)
+      
+      // Then generate suggestions based on the research
+      const prompt = this.buildPrompt(business, research)
       const content = await LLMService.queryLLM('Google Gemini', 'gemini-2.5-flash-lite', prompt, 'high')
 
       if (!content) {
@@ -23,79 +37,168 @@ export class QuerySuggestionService {
     }
   }
 
-  private static buildPrompt(business: Business): string {
-    return `Generate 5 natural, conversational queries that potential customers would ask an AI assistant when looking for the business called "${business.name}" or similar services.
+  private static async researchBusiness(business: Business): Promise<BusinessResearch> {
+    const researchPrompt = `Research and analyze the business "${business.name}" to understand its characteristics and positioning.
 
 Business Details:
 - Name: ${business.name}
-- City: ${business.city || 'Not specified'}
+- Location: ${business.city || 'Not specified'}
 - Business Type: ${business.google_primary_type_display || 'Not specified'}
 - Google Types: ${business.google_types ? JSON.stringify(business.google_types) : 'Not specified'}
 
-CRITICAL REQUIREMENTS - NATURAL LANGUAGE STYLE:
-1. Write queries as if someone is talking to an AI assistant conversationally
-2. Use first-person language ("I am looking for", "I need", "I want", "Can you recommend")
-3. Include context and specific needs/preferences when relevant
-4. Queries should be complete sentences, not keyword searches
-5. Make them sound natural and human-like, as people would actually speak
+Please analyze this business and provide insights about:
 
-QUERY STRUCTURE GUIDELINES:
-6. Start with conversational phrases like:
-   - "I am looking for..."
-   - "I need help finding..."
-   - "Can you recommend..."
-   - "I want to find..."
-   - "What are the best options for..."
-   - "I'm searching for..."
+1. CATEGORY & POSITIONING: Is this a luxury, mid-range, budget, boutique, chain, independent business?
+2. PRICE RANGE: Likely pricing tier (budget, affordable, mid-range, upscale, luxury)
+3. KEY AMENITIES: What amenities/features would this type of business likely offer?
+4. TARGET AUDIENCE: Who are the typical customers (business travelers, families, couples, tourists, locals)?
+5. UNIQUE FEATURES: What might make this business stand out or be special?
+6. BUSINESS TYPE: More specific classification beyond the Google type
 
-7. Include specific context when relevant:
-   - Occasion: "for a date night", "for a business meeting", "for my family"
-   - Group size: "for a couple", "for a group of friends", "for my team"
-   - Specific needs: "with outdoor seating", "that delivers", "open late"
-   - Purpose: "for a special celebration", "for lunch", "for weekend brunch"
+Use your knowledge about businesses with similar names, locations, and types to make educated inferences.
 
-8. Use natural location references:
-   - "in Dublin city center"
-   - "near Temple Bar"
-   - "in the Dublin area"
-   - "around Grafton Street"
-   - "in Dublin 8" or "the Liberties"
+Format your response as JSON:
+{
+  "category": "specific category like 'boutique hotel', 'budget accommodation', 'luxury resort'",
+  "priceRange": "budget|affordable|mid-range|upscale|luxury",
+  "keyAmenities": ["amenity1", "amenity2", "amenity3"],
+  "targetAudience": "description of typical customers",
+  "uniqueFeatures": ["feature1", "feature2"],
+  "businessType": "more specific business type"
+}`
 
-9. Vary the query styles across the 5 suggestions:
-   - Mix different starting phrases
-   - Include different contexts/occasions
-   - Vary specificity levels
-   - Some with specific needs, some more general
+    try {
+      console.log('Sending research request to LLM...')
+      const researchContent = await LLMService.queryLLM('Google Gemini', 'gemini-2.5-flash-lite', researchPrompt, 'high')
+      
+      if (!researchContent) {
+        throw new Error('No research content received')
+      }
 
-10. Ensure queries would generate ranked lists when asked to AI
-11. Focus on services/experiences that match the business type
-12. Make them sound like real customer requests
+      console.log('Raw research response:', researchContent)
+      return this.parseBusinessResearch(researchContent)
+    } catch (error) {
+      console.error('Error researching business:', error)
+      console.log('Using fallback research based on business type')
+      
+      // Fallback research based on business type
+      return this.createFallbackResearch(business)
+    }
+  }
 
-Examples for different business types:
+  private static parseBusinessResearch(content: string): BusinessResearch {
+    try {
+      const cleanContent = content.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim()
+      const parsed = JSON.parse(cleanContent)
+      
+      return {
+        category: parsed.category || 'general business',
+        priceRange: parsed.priceRange || 'mid-range',
+        keyAmenities: Array.isArray(parsed.keyAmenities) ? parsed.keyAmenities : [],
+        targetAudience: parsed.targetAudience || 'general customers',
+        uniqueFeatures: Array.isArray(parsed.uniqueFeatures) ? parsed.uniqueFeatures : [],
+        businessType: parsed.businessType || 'service business'
+      }
+    } catch (error) {
+      console.error('Error parsing business research:', error)
+      return {
+        category: 'general business',
+        priceRange: 'mid-range',
+        keyAmenities: [],
+        targetAudience: 'general customers',
+        uniqueFeatures: [],
+        businessType: 'service business'
+      }
+    }
+  }
 
-For a tour company:
-- "I am looking for a fun Dublin city tour for a couple visiting for the weekend"
-- "Can you recommend the best guided walking tours in Dublin city center?"
-- "I need help finding an interesting historical tour of Dublin for my family"
+  private static createFallbackResearch(business: Business): BusinessResearch {
+    const businessType = business.google_primary_type_display?.toLowerCase() || ''
+    
+    if (businessType.includes('hotel') || businessType.includes('accommodation') || businessType.includes('lodging')) {
+      return {
+        category: 'hotel',
+        priceRange: 'mid-range',
+        keyAmenities: ['wifi', 'breakfast', 'parking', 'concierge'],
+        targetAudience: 'travelers and tourists',
+        uniqueFeatures: ['comfortable rooms', 'good location'],
+        businessType: 'accommodation'
+      }
+    }
+    
+    if (businessType.includes('restaurant') || businessType.includes('dining')) {
+      return {
+        category: 'restaurant',
+        priceRange: 'mid-range',
+        keyAmenities: ['dine-in', 'takeout', 'reservations'],
+        targetAudience: 'diners and food lovers',
+        uniqueFeatures: ['quality food', 'good service'],
+        businessType: 'dining'
+      }
+    }
+    
+    return {
+      category: 'general business',
+      priceRange: 'mid-range',
+      keyAmenities: [],
+      targetAudience: 'general customers',
+      uniqueFeatures: [],
+      businessType: 'service business'
+    }
+  }
 
-For a restaurant:
-- "I want to find a great Italian restaurant in Temple Bar for a date night"
-- "What are the best pizza places near Grafton Street that deliver?"
-- "I'm looking for a cozy restaurant in Dublin 8 for a business lunch"
+  private static extractMainCity(cityValue: string): string {
+    if (!cityValue) return 'the area'
+    
+    // Handle Dublin postal codes (D01, D02, etc.)
+    if (cityValue.match(/^D\d{1,2}$/i)) {
+      return 'Dublin'
+    }
+    
+    // Handle "City, County" format
+    if (cityValue.includes(',')) {
+      return cityValue.split(',')[0].trim()
+    }
+    
+    // Handle postal codes or area codes at the end
+    const withoutPostcode = cityValue.replace(/\s+\w{1,3}\s*\d+\w*$/i, '').trim()
+    if (withoutPostcode.length > 0) {
+      return withoutPostcode
+    }
+    
+    return cityValue
+  }
 
-For a coffee shop:
-- "I need a good coffee shop in Dublin city center with wifi for working"
-- "Can you recommend the best cafes around Trinity College for studying?"
-- "I'm searching for a great brunch spot in the Liberties area"
+  private static buildPrompt(business: Business, research: BusinessResearch): string {
+    // Extract the main city from postal code or detailed location
+    const mainCity = this.extractMainCity(business.city || '')
+    
+    return `Generate 5 natural queries that customers would ask an AI assistant when looking for "${business.name}" or similar services.
 
-Format your response as JSON with this structure:
+Business: ${business.name} in ${mainCity}
+Type: ${research.category} (${research.priceRange})
+Key amenities: ${research.keyAmenities.slice(0, 3).join(', ')}
+Target customers: ${research.targetAudience}
+
+Requirements:
+1. Use business research to make queries realistic and relevant
+2. Mix 3 SHORT queries (6-8 words) + 2 DETAILED queries (10-15 words)
+3. Use conversational language: "I need...", "Can you recommend...", "What are the best..."
+4. Include price positioning (${research.priceRange}) and popular amenities
+5. Vary locations: some with "${mainCity}", some without, avoid repeating same area
+
+Examples:
+SHORT: "I need luxury hotels in Dublin", "Can you recommend budget accommodation?"
+DETAILED: "I'm looking for family hotels with pool in Dublin", "I need affordable accommodation for business trip"
+
+Format as JSON:
 {
   "suggestions": [
-    "conversational query text 1",
-    "conversational query text 2", 
-    "conversational query text 3",
-    "conversational query text 4",
-    "conversational query text 5"
+    "query 1",
+    "query 2", 
+    "query 3",
+    "query 4",
+    "query 5"
   ]
 }`
   }

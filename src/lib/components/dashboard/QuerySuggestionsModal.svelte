@@ -143,7 +143,7 @@
                     </button>
                     <button
                       onclick={() => acceptQuery(index)}
-                      class="px-3 py-1 bg-blue-600 text-white text-sm rounded hover:bg-blue-700 transition-colors"
+                      class="px-3 py-1 bg-blue-600 text-white text-sm rounded hover:bg-blue-700 transition-colors pointer-cursor"
                     >
                       Add Query
                     </button>

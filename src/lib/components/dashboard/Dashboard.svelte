@@ -9,6 +9,7 @@
     QueryRankingHistory,
     AnalysisRun
   } from "../../types";
+  import { enhance } from '$app/forms';
   import GoogleBusinessSearch from "../business/GoogleBusinessSearch.svelte";
   import BusinessNameBar from "./BusinessNameBar.svelte";
   import DashboardControls from "./DashboardControls.svelte";
@@ -17,7 +18,6 @@
   import AddQueryModal from "./AddQueryModal.svelte";
   import CreateBusinessModal from "./CreateBusinessModal.svelte";
   import AnalysisProgressBar from "./AnalysisProgressBar.svelte";
-  import QuerySuggestionsModal from "./QuerySuggestionsModal.svelte";
 
   interface Props {
     form?: any
@@ -28,6 +28,7 @@
     weeklyCheck?: WeeklyAnalysisCheck | null
     runningAnalysis?: AnalysisRun | null
     llmProviders?: LLMProvider[]
+    querySuggestions?: string[]
     needsOnboarding?: boolean
     error?: string | null
   }
@@ -41,6 +42,7 @@
     weeklyCheck = null,
     runningAnalysis = null,
     llmProviders = [],
+    querySuggestions: serverSuggestions = [],
     needsOnboarding = false,
     error = null
   }: Props = $props()
@@ -54,6 +56,14 @@
   let showGoogleSearch = $state(false);
   let showAddQuery = $state(false);
   let showQuerySuggestions = $state(false);
+  let isAIGeneratedQuery = $state(false);
+
+  // Query suggestions state
+  let querySuggestions = $state<QuerySuggestion[]>(
+    serverSuggestions.map(text => ({ text, reasoning: '' }))
+  );
+  let loadingSuggestions = $state(false);
+  let suggestionError = $state<string | null>(null);
 
   // Progress tracking
   let analysisProgress = $state({
@@ -139,13 +149,15 @@
   function handleAcceptQuerySuggestion(queryText: string) {
     newQuery = queryText;
     showQuerySuggestions = false;
+    isAIGeneratedQuery = true;
     showAddQuery = true;
   }
 
-  // TODO: Convert to server-side function or form action
-  async function generateQuerySuggestions(): Promise<QuerySuggestion[]> {
-    console.warn('generateQuerySuggestions: Should be moved to server-side');
-    return [];
+  // Query suggestions handlers
+  function acceptQuerySuggestion(queryText: string) {
+    newQuery = queryText;
+    isAIGeneratedQuery = true;
+    showAddQuery = true;
   }
 
   // Progress monitoring - handled server-side with periodic refresh
@@ -201,7 +213,10 @@
         hasQueries={queries.length > 0}
         runningAnalysis={!!runningAnalysis}
         weeklyCheck={weeklyCheck || { canRun: false, lastRunDate: new Date().toISOString() }}
-        onAddQuery={() => (showAddQuery = true)}
+        onAddQuery={() => {
+          isAIGeneratedQuery = false;
+          showAddQuery = true;
+        }}
         onRunAnalysis={() => {
           // This will be handled by a form action
           const form = document.createElement('form');
@@ -231,19 +246,140 @@
           queries={filteredDashboardData.queries}
           analytics={[]} 
           queryHistories={new Map(Object.entries(queryHistories))}
-          onAddQuery={() => (showAddQuery = true)}
+          onAddQuery={() => {
+            isAIGeneratedQuery = false;
+            showAddQuery = true;
+          }}
           onGetAISuggestions={() => (showQuerySuggestions = true)}
         />
       {:else}
         <div class="text-center py-12">
-          <p class="text-gray-500 mb-4">No queries added yet</p>
-          <button
-            type="button"
-            class="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700"
-            onclick={() => (showAddQuery = true)}
-          >
-            Add Your First Query
-          </button>
+          <h3 class="text-lg font-semibold text-gray-900 mb-4">Get Started with AI-Generated Query Suggestions</h3>          
+          {#if suggestionError}
+            <div class="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg max-w-md mx-auto">
+              <p class="text-red-700 text-sm">{suggestionError}</p>
+            </div>
+          {/if}
+          
+          {#if loadingSuggestions}
+            <div class="space-y-4">
+              <div class="flex items-center justify-center">
+                <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+                <span class="ml-3 text-gray-600">Generating AI suggestions...</span>
+              </div>
+              <p class="text-sm text-gray-500">This may take a few moments</p>
+            </div>
+          {:else if querySuggestions.length > 0}
+            <div class="max-w-2xl mx-auto">
+              <h4 class="text-md font-medium text-gray-900 mb-4">Suggested Queries for {business?.name}</h4>
+              <div class="space-y-3">
+                {#each querySuggestions as suggestion, index}
+                  <div class="flex items-center justify-between p-4 bg-blue-50 rounded-lg border border-blue-200">
+                    <div class="flex-1 text-left">
+                      <p class="font-medium text-gray-900">{suggestion.text}</p>
+                      {#if suggestion.reasoning}
+                        <p class="text-sm text-gray-600 mt-1">{suggestion.reasoning}</p>
+                      {/if}
+                    </div>
+                    <div class="flex space-x-2 ml-4">
+                      <button
+                        type="button"
+                        onclick={() => acceptQuerySuggestion(suggestion.text)}
+                        class="px-3 py-1 bg-blue-600 text-white text-sm rounded hover:bg-blue-700 transition-colors cursor-pointer"
+                      >
+                        Add Query
+                      </button>
+                    </div>
+                  </div>
+                {/each}
+              </div>
+              <div class="mt-6 space-x-4">
+                <form 
+                  method="POST" 
+                  action="?/generateQuerySuggestions"
+                  style="display: inline;"
+                  use:enhance={({ formData }) => {
+                    loadingSuggestions = true;
+                    suggestionError = null;
+                    
+                    return async ({ result, update }) => {
+                      loadingSuggestions = false;
+                      
+                      if (result.type === 'success' && result.data && 'suggestions' in result.data) {
+                        const suggestions = (result.data as { suggestions: string[] }).suggestions;
+                        querySuggestions = suggestions.map((text: string) => ({ text, reasoning: '' }));
+                      } else if (result.type === 'failure' && result.data && 'error' in result.data) {
+                        suggestionError = (result.data as { error: string }).error || 'Failed to generate suggestions';
+                      } else {
+                        suggestionError = 'Failed to generate suggestions';
+                      }
+                    };
+                  }}
+                >
+                  <button
+                    type="submit"
+                    disabled={loadingSuggestions}
+                    class="bg-gray-100 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-200 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {loadingSuggestions ? 'Generating...' : 'Generate More'}
+                  </button>
+                </form>
+                <button
+                  type="button"
+                  onclick={() => {
+                    isAIGeneratedQuery = false;
+                    showAddQuery = true;
+                  }}
+                  class="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors"
+                >
+                  Add Custom Query
+                </button>
+              </div>
+            </div>
+          {:else}
+            <div class="space-y-4">
+              <form 
+                method="POST" 
+                action="?/generateQuerySuggestions"
+                use:enhance={({ formData }) => {
+                  loadingSuggestions = true;
+                  suggestionError = null;
+                  
+                  return async ({ result, update }) => {
+                    loadingSuggestions = false;
+                    
+                    if (result.type === 'success' && result.data && 'suggestions' in result.data) {
+                      const suggestions = (result.data as { suggestions: string[] }).suggestions;
+                      querySuggestions = suggestions.map((text: string) => ({ text, reasoning: '' }));
+                    } else if (result.type === 'failure' && result.data && 'error' in result.data) {
+                      suggestionError = (result.data as { error: string }).error || 'Failed to generate suggestions';
+                    } else {
+                      suggestionError = 'Failed to generate suggestions';
+                    }
+                  };
+                }}
+              >
+                <button
+                  type="submit"
+                  disabled={loadingSuggestions}
+                  class="bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700 transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
+                >
+                  {loadingSuggestions ? 'Generating...' : 'Get AI Suggestions'}
+                </button>
+              </form>
+              <p class="text-sm text-gray-500">Or</p>
+              <button
+                type="button"
+                onclick={() => {
+                  isAIGeneratedQuery = false;
+                  showAddQuery = true;
+                }}
+                class="bg-gray-100 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-200 transition-colors"
+              >
+                Add Query Manually
+              </button>
+            </div>
+          {/if}
         </div>
       {/if}
     </main>
@@ -270,22 +406,20 @@
         show={showAddQuery}
         loading={loading}
         newQuery={newQuery}
+        isAIGenerated={isAIGeneratedQuery}
         onSubmit={() => {
           // Handle form submission via form action
           handleAddQuery(new Event('submit'));
         }}
-        onClose={() => (showAddQuery = false)}
+        onClose={() => {
+          showAddQuery = false;
+          isAIGeneratedQuery = false;
+        }}
       />
     {/if}
 
     {#if showQuerySuggestions}
-      <QuerySuggestionsModal
-        show={showQuerySuggestions}
-        {business}
-        onAcceptQuery={handleAcceptQuerySuggestion}
-        onClose={() => (showQuerySuggestions = false)}
-        generateSuggestions={generateQuerySuggestions}
-      />
+      <!-- QuerySuggestionsModal is deprecated - using inline suggestions now -->
     {/if}
   </div>
 {:else if user && needsOnboarding}

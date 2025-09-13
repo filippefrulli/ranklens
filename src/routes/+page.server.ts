@@ -32,6 +32,9 @@ export const load: PageServerLoad = async ({ locals }) => {
     const weeklyCheck = await dbService.checkWeeklyAnalysis(business.id)
     const llmProviders = await dbService.getActiveLLMProviders()
     
+    // Don't auto-generate suggestions - let user trigger them manually
+    const querySuggestions: string[] = []
+    
     // Load query histories for each query
     const queryHistories: Record<string, any[]> = {}
     for (const query of queries) {
@@ -54,7 +57,8 @@ export const load: PageServerLoad = async ({ locals }) => {
       queryHistories,
       weeklyCheck,
       runningAnalysis,
-      llmProviders
+      llmProviders,
+      querySuggestions
     }
   } catch (err) {
     console.error('Error loading dashboard data:', err)
@@ -69,21 +73,25 @@ export const load: PageServerLoad = async ({ locals }) => {
 export const actions: Actions = {
   // Create business action
   createBusiness: async ({ locals, request }) => {
+    console.log('createBusiness action called')
+    
     if (!locals.user || !locals.supabase) {
       return fail(401, { error: 'Unauthorized' })
     }
 
+    const formData = await request.formData()
+    const name = formData.get('name') as string
+    const googlePlaceId = formData.get('google_place_id') as string
+    const city = formData.get('city') as string
+    const googlePrimaryTypeDisplay = formData.get('google_primary_type_display') as string
+
+    console.log('Creating business:', { name, googlePlaceId, city, googlePrimaryTypeDisplay })
+
+    if (!name || !googlePlaceId) {
+      return fail(400, { error: 'Business name and Google Place ID are required' })
+    }
+
     try {
-      const formData = await request.formData()
-      const name = formData.get('name') as string
-      const googlePlaceId = formData.get('google_place_id') as string
-      const city = formData.get('city') as string
-      const googlePrimaryTypeDisplay = formData.get('google_primary_type_display') as string
-
-      if (!name || !googlePlaceId) {
-        return fail(400, { error: 'Business name and Google Place ID are required' })
-      }
-
       const dbService = new DatabaseService(locals.supabase, locals.user.id)
       
       const business = await dbService.createBusiness({
@@ -93,18 +101,15 @@ export const actions: Actions = {
         google_primary_type_display: googlePrimaryTypeDisplay
       })
 
-      // Redirect to home page with clean URL after successful creation
-      throw redirect(303, '/')
-
-    } catch (err) {
-      // If it's our redirect, re-throw it
-      if (err instanceof Response && err.status === 303) {
-        throw err
-      }
+      console.log('Business created successfully, redirecting...')
       
+    } catch (err) {
       console.error('Error creating business:', err)
       return fail(500, { error: 'Failed to create business' })
     }
+
+    // Redirect to home page with clean URL after successful creation
+    throw redirect(303, '/')
   },
 
   // Generate query suggestions action

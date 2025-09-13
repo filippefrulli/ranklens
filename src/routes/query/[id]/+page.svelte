@@ -152,27 +152,13 @@
         </button>
       </div>
     {:else if query}
-      <QueryResultHeader {query} {goBack} />
-      
-      <!-- LLM Provider Filter -->
-      {#if llmProviders.length > 0}
-        <div class="bg-white rounded-lg shadow p-6 mb-6">
-          <div class="flex items-center justify-between">
-            <div>
-              <h3 class="text-lg font-medium text-gray-900">Filter by LLM Provider</h3>
-              <p class="text-sm text-gray-500 mt-1">View results from specific LLM providers or all combined</p>
-            </div>
-            <div class="w-64">
-              <LLMProviderDropdown 
-                providers={llmProviders}
-                selectedProvider={selectedProvider}
-                onProviderChange={onProviderChange}
-                showLabel={false}
-              />
-            </div>
-          </div>
-        </div>
-      {/if}
+      <QueryResultHeader 
+        {query} 
+        {goBack} 
+        {llmProviders}
+        {selectedProvider}
+        {onProviderChange}
+      />
       
       <!-- Analysis Run Selector and LLM Results side by side -->
       {#if analysisRuns.length > 0}

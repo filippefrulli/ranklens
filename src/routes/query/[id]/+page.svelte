@@ -78,33 +78,25 @@
 
       rankingResults = rankings || []
 
-      // Load competitor rankings based on selected provider
-      let competitors
+      // Load competitor rankings
+      const { data: competitorData, error: competitorError } = await supabase
+        .from('competitor_results')
+        .select('*')
+        .eq('query_id', queryId)
+        .eq('analysis_run_id', runId)
+        .order('average_rank', { ascending: true })
+
+      if (competitorError) {
+        throw new Error(`Failed to fetch competitor rankings: ${competitorError.message}`)
+      }
+      
+      let competitors = competitorData || []
+      
+      // Filter by selected provider if one is selected
       if (selectedProvider) {
-        const { data: competitorData, error: competitorError } = await supabase
-          .from('competitor_rankings')
-          .select('*')
-          .eq('query_id', queryId)
-          .eq('analysis_run_id', runId)
-          .eq('llm_provider_id', selectedProvider.id)
-          .order('rank', { ascending: true })
-
-        if (competitorError) {
-          throw new Error(`Failed to fetch competitor rankings: ${competitorError.message}`)
-        }
-        competitors = competitorData || []
-      } else {
-        const { data: competitorData, error: competitorError } = await supabase
-          .from('competitor_rankings')
-          .select('*')
-          .eq('query_id', queryId)
-          .eq('analysis_run_id', runId)
-          .order('rank', { ascending: true })
-
-        if (competitorError) {
-          throw new Error(`Failed to fetch competitor rankings: ${competitorError.message}`)
-        }
-        competitors = competitorData || []
+        competitors = competitors.filter(competitor => 
+          competitor.llm_providers && competitor.llm_providers.includes(selectedProvider!.name)
+        )
       }
       
       competitorRankings = competitors

@@ -183,5 +183,53 @@ export const actions: Actions = {
       console.error('Error adding query:', err)
       return fail(500, { error: 'Failed to add query' })
     }
+  },
+
+  // Run weekly analysis action
+  runAnalysis: async ({ locals, request }) => {
+    if (!locals.user || !locals.supabase) {
+      return fail(401, { error: 'Unauthorized' })
+    }
+
+    const formData = await request.formData()
+    const businessId = formData.get('businessId') as string
+
+    if (!businessId) {
+      return fail(400, { error: 'Business ID is required' })
+    }
+
+    try {
+      const dbService = new DatabaseService(locals.supabase, locals.user.id)
+      const business = await dbService.getBusiness()
+      
+      if (!business || business.id !== businessId) {
+        return fail(404, { error: 'Business not found or access denied' })
+      }
+
+      // Check if analysis can be run (weekly check)
+      const weeklyCheck = await dbService.checkWeeklyAnalysis(business.id)
+      if (!weeklyCheck.canRun) {
+        return fail(400, { 
+          error: `Analysis was already run this week. Next run available: ${weeklyCheck.nextAllowedDate ? new Date(weeklyCheck.nextAllowedDate).toLocaleDateString() : 'next week'}` 
+        })
+      }
+
+      // Start the analysis
+      const analysisService = new AnalysisService(locals.supabase, locals.user.id)
+      const result = await analysisService.runAnalysis(business.id)
+
+      if (!result.success) {
+        return fail(500, { error: result.error || 'Failed to start analysis' })
+      }
+
+      return { 
+        success: true,
+        analysisRunId: result.analysisRunId
+      }
+
+    } catch (err) {
+      console.error('Error running analysis:', err)
+      return fail(500, { error: 'Failed to run analysis' })
+    }
   }
 }

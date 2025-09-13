@@ -193,7 +193,7 @@
           showAddQuery = true;
         }}
         onRunAnalysis={() => {
-          // This will be handled by a form action
+          // Create and submit form for analysis
           const form = document.createElement("form");
           form.method = "POST";
           form.action = "?/runAnalysis";

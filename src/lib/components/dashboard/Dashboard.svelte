@@ -324,10 +324,28 @@
 
     <!-- Modals for onboarding -->
     {#if showGoogleSearch}
-      <GoogleBusinessSearch
-        onBusinessSelected={handleBusinessSelected}
-        onCancel={() => (showGoogleSearch = false)}
-      />
+      <div class="fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center p-4 z-50">
+        <div class="bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-[80vh] overflow-y-auto">
+          <div class="p-6">
+            <div class="flex items-center justify-between mb-4">
+              <h3 class="text-lg font-semibold text-gray-900">Find Your Business</h3>
+              <button
+                onclick={() => (showGoogleSearch = false)}
+                class="text-gray-400 hover:text-gray-600 transition-colors"
+                aria-label="Close modal"
+              >
+                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                </svg>
+              </button>
+            </div>
+            <GoogleBusinessSearch
+              onBusinessSelected={handleBusinessSelected}
+              onCancel={() => (showGoogleSearch = false)}
+            />
+          </div>
+        </div>
+      </div>
     {/if}
 
     {#if showCreateBusiness}
@@ -335,7 +353,6 @@
         show={showCreateBusiness}
         loading={loading}
         business={newBusiness}
-        onSubmit={() => handleCreateBusiness(new Event('submit'))}
         onBackToSearch={() => {
           showCreateBusiness = false;
           showGoogleSearch = true;

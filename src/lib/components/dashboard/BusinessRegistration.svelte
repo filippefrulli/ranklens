@@ -4,13 +4,13 @@
 
 <section class="py-16">
   <div class="max-w-xl mx-auto px-6 text-center">
-    <h1 class="text-4xl font-extrabold tracking-tight text-gray-900">Welcome to RankLens</h1>
-    <p class="mt-3 text-lg text-gray-600">Check how your business ranks across AI assistants.</p>
+    <h1 class="text-4xl font-extrabold tracking-tight text-gray-900">Welcome!</h1>
+    <p class="mt-3 text-lg text-gray-600">Let's start by connecting your business.</p>
 
     <div class="mt-8 flex flex-col items-center gap-3">
       <button
         on:click={onSearchForBusiness}
-        class="inline-flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 px-6 rounded-lg shadow-md transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2"
+        class="inline-flex items-center gap-2 bg-black cursor-pointer text-white font-semibold py-3 px-6 rounded-lg shadow-md transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2"
         aria-label="Find your business on Google Maps"
       >
         <svg class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
@@ -18,7 +18,6 @@
         </svg>
         Find your business
       </button>
-      <p class="text-sm text-gray-500">Start by finding your business</p>
     </div>
   </div>
 </section>

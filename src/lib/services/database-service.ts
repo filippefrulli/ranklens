@@ -72,6 +72,35 @@ export class DatabaseService {
     return data
   }
 
+  // Create a new business for the authenticated user
+  async createBusiness(businessData: {
+    name: string
+    google_place_id: string
+    city: string
+    google_primary_type_display?: string
+  }): Promise<Business> {
+    const { data, error } = await this.supabase
+      .from('businesses')
+      .insert([
+        {
+          user_id: this.userId,
+          name: businessData.name,
+          google_place_id: businessData.google_place_id,
+          city: businessData.city,
+          google_primary_type_display: businessData.google_primary_type_display
+        }
+      ])
+      .select()
+      .single()
+    
+    if (error) {
+      console.error('Error creating business:', error)
+      throw new Error(`Failed to create business: ${error.message}`)
+    }
+    
+    return data
+  }
+
   // Validate business ownership (RLS will enforce this automatically)
   async validateBusinessOwnership(businessId: string): Promise<boolean> {
     const { data, error } = await this.supabase

@@ -67,6 +67,40 @@ export const load: PageServerLoad = async ({ locals }) => {
 }
 
 export const actions: Actions = {
+  // Create business action
+  createBusiness: async ({ locals, request }) => {
+    if (!locals.user || !locals.supabase) {
+      return fail(401, { error: 'Unauthorized' })
+    }
+
+    try {
+      const formData = await request.formData()
+      const name = formData.get('name') as string
+      const googlePlaceId = formData.get('google_place_id') as string
+      const city = formData.get('city') as string
+      const googlePrimaryTypeDisplay = formData.get('google_primary_type_display') as string
+
+      if (!name || !googlePlaceId) {
+        return fail(400, { error: 'Business name and Google Place ID are required' })
+      }
+
+      const dbService = new DatabaseService(locals.supabase, locals.user.id)
+      
+      const business = await dbService.createBusiness({
+        name,
+        google_place_id: googlePlaceId,
+        city,
+        google_primary_type_display: googlePrimaryTypeDisplay
+      })
+
+      return { success: true, business }
+
+    } catch (err) {
+      console.error('Error creating business:', err)
+      return fail(500, { error: 'Failed to create business' })
+    }
+  },
+
   // Generate query suggestions action
   generateQuerySuggestions: async ({ locals, request }) => {
     if (!locals.user || !locals.supabase) {

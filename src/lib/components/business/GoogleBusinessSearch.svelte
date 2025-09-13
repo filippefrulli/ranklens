@@ -174,9 +174,6 @@
   <div bind:this={mapDiv} style="display: none;"></div>
 
   <div>
-    <label for="business-search" class="block text-sm font-medium text-gray-700 mb-2">
-      Search for your business
-    </label>
     <div class="flex space-x-2">
       <input
         id="business-search"

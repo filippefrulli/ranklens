@@ -24,9 +24,9 @@
   // Redirect if already authenticated
   onMount(async () => {
     const {
-      data: { session },
-    } = await supabase.auth.getSession();
-    if (session?.user) {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (user) {
       goto("/");
     }
   });

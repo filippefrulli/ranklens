@@ -52,8 +52,8 @@
 </script>
 
 <svelte:head>
-  <title>{'site.title'}</title>
-  <meta name="description" content="{'site.description'}" />
+  <title>RankLens</title>
+  <meta name="description" content="Track your business rankings across AI assistants." />
 </svelte:head>
 
 <style>

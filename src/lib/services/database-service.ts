@@ -11,6 +11,7 @@ import type {
   WeeklyAnalysisCheck,
   QueryRankingHistory
 } from '../types'
+import { BusinessNameStandardizationService } from './business-name-standardization-service'
 
 // Unified database service with authenticated Supabase client (respects RLS)
 export class DatabaseService {
@@ -528,36 +529,104 @@ export class DatabaseService {
       }
     })
 
+    console.log(`📊 Business map contains ${businessMap.size} unique businesses`)
+    
+    // If no businesses found, return early
+    if (businessMap.size === 0) {
+      console.log('⚠️ No businesses found in rankings, skipping competitor results processing')
+      return 0
+    }
+
+    // Standardize business names using LLM before processing results
+    console.log('📝 Standardizing business names...')
+    const allBusinessNames = Array.from(businessMap.keys())
+    console.log(`Found ${allBusinessNames.length} unique business names to standardize:`, allBusinessNames.map(key => businessMap.get(key)!.business_name))
+    
+    let standardizations
+    try {
+      standardizations = await BusinessNameStandardizationService.standardizeBusinessNames(
+        allBusinessNames.map(key => businessMap.get(key)!.business_name)
+      )
+      console.log('✅ Standardization completed:', standardizations)
+    } catch (error) {
+      console.error('❌ Standardization failed:', error)
+      // Fallback: use original names
+      standardizations = allBusinessNames.map(key => ({
+        originalName: businessMap.get(key)!.business_name,
+        standardizedName: businessMap.get(key)!.business_name,
+        confidence: 'low' as const
+      }))
+    }
+    
+    // Create a mapping from original names to standardized names
+    const nameStandardizationMap = new Map<string, string>()
+    for (const standardization of standardizations) {
+      nameStandardizationMap.set(standardization.originalName, standardization.standardizedName)
+    }
+    
+    // Apply standardization to business map
+    const standardizedBusinessMap = new Map<string, {
+      business_name: string
+      original_names: string[]
+      ranks: number[]
+      llm_providers: string[]
+      appearances_count: number
+      is_user_business: boolean
+      ranksByProvider: Map<string, number[]>
+    }>()
+    
+    for (const [key, business] of businessMap) {
+      const standardizedName = nameStandardizationMap.get(business.business_name) || business.business_name
+      const standardizedKey = this.normalizeBusinessName(standardizedName)
+      
+      if (!standardizedBusinessMap.has(standardizedKey)) {
+        standardizedBusinessMap.set(standardizedKey, {
+          business_name: standardizedName,
+          original_names: [...business.original_names],
+          ranks: [...business.ranks],
+          llm_providers: [...business.llm_providers],
+          appearances_count: business.appearances_count,
+          is_user_business: business.is_user_business,
+          ranksByProvider: new Map(business.ranksByProvider)
+        })
+      } else {
+        // Merge with existing standardized business
+        const existing = standardizedBusinessMap.get(standardizedKey)!
+        existing.original_names.push(...business.original_names)
+        existing.ranks.push(...business.ranks)
+        existing.appearances_count += business.appearances_count
+        
+        // Merge LLM providers
+        for (const provider of business.llm_providers) {
+          if (!existing.llm_providers.includes(provider)) {
+            existing.llm_providers.push(provider)
+          }
+        }
+        
+        // Merge ranks by provider
+        for (const [provider, ranks] of business.ranksByProvider) {
+          if (!existing.ranksByProvider.has(provider)) {
+            existing.ranksByProvider.set(provider, [...ranks])
+          } else {
+            existing.ranksByProvider.get(provider)!.push(...ranks)
+          }
+        }
+        
+        // If any version was user business, mark as user business
+        if (business.is_user_business) {
+          existing.is_user_business = true
+        }
+      }
+    }
+    
+    console.log(`✅ Standardized ${businessMap.size} names into ${standardizedBusinessMap.size} unique businesses`)
+
     // Convert to competitor results and insert
     const competitorResults: any[] = []
     
-    // Create records for each business
-    Array.from(businessMap.values()).forEach(business => {
-      // Create a record for each provider that ranked this business
-      business.ranksByProvider.forEach((ranks, provider) => {
-        const averageRank = ranks.reduce((sum, rank) => sum + rank, 0) / ranks.length
-        const bestRank = Math.min(...ranks)
-        const worstRank = Math.max(...ranks)
-        const appearanceRate = (ranks.length / attempts.length) * 100
-        const weightedScore = averageRank * (3.0 - 2.5 * (appearanceRate / 100))
-
-        competitorResults.push({
-          query_id: queryId,
-          analysis_run_id: analysisRunId,
-          business_name: business.business_name,
-          average_rank: Number(averageRank.toFixed(2)),
-          best_rank: bestRank,
-          worst_rank: worstRank,
-          appearances_count: ranks.length,
-          total_attempts: attempts.length,
-          weighted_score: Number(weightedScore.toFixed(2)),
-          llm_providers: [provider], // Single provider per record
-          raw_ranks: ranks,
-          is_user_business: business.is_user_business
-        })
-      })
-      
-      // Also create an "All Providers" aggregate record
+    // Create one aggregate record for each business (using standardized business map)
+    Array.from(standardizedBusinessMap.values()).forEach(business => {
+      // Create an aggregate record across all providers
       const allRanks = business.ranks
       const averageRank = allRanks.reduce((sum, rank) => sum + rank, 0) / allRanks.length
       const bestRank = Math.min(...allRanks)
@@ -575,15 +644,21 @@ export class DatabaseService {
         appearances_count: business.appearances_count,
         total_attempts: attempts.length,
         weighted_score: Number(weightedScore.toFixed(2)),
-        llm_providers: business.llm_providers, // All providers
+        llm_providers: business.llm_providers, // All providers that ranked this business
         raw_ranks: business.ranks,
         is_user_business: business.is_user_business
       })
     })
 
+    console.log(`📊 Created ${competitorResults.length} competitor result records`)
+    
     if (competitorResults.length === 0) {
+      console.log('⚠️ No competitor results created')
       return 0
     }
+
+    // Log a sample of the results for debugging
+    console.log('📝 Sample competitor results:', competitorResults.slice(0, 3))
 
     // Insert all competitor results
     const { data: insertedData, error: insertError } = await this.supabase

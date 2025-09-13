@@ -1,5 +1,7 @@
 <script lang="ts">
-  export let rankingResults: any[]
+  import { getRankBadgeClass, formatRank } from '../../utils/ranking-utils'
+  
+  export let results: any[]
 
   function formatLLMName(llmName: string): string {
     if (!llmName) return 'Unknown Provider'
@@ -33,13 +35,6 @@
     }
   }
 
-  function getRankBadgeClass(rank: number | null | undefined): string {
-    if (rank === null || rank === undefined) return 'bg-gray-100 text-gray-800'
-    if (rank <= 3) return 'bg-green-100 text-green-800'
-    if (rank <= 7) return 'bg-yellow-100 text-yellow-800'
-    return 'bg-red-100 text-red-800'
-  }
-
   function getStatus(result: any): string {
     if (!result.success) return 'error'
     if (result.target_business_rank !== null) return 'found'
@@ -61,7 +56,7 @@
     </p>
   </div>
 
-  {#if rankingResults.length === 0}
+  {#if results.length === 0}
     <div class="p-6 text-center">
       <div class="text-gray-400 mb-4">
         <svg class="mx-auto h-12 w-12" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -88,7 +83,7 @@
           </tr>
         </thead>
         <tbody class="bg-white divide-y divide-gray-200">
-          {#each rankingResults as result}
+          {#each results as result}
             <tr class="hover:bg-gray-50">
               <td class="px-6 py-4 whitespace-nowrap">
                 <div class="text-sm font-medium text-gray-900">
@@ -103,7 +98,7 @@
               <td class="px-6 py-4 whitespace-nowrap">
                 {#if result.target_business_rank !== null}
                   <span class="inline-flex px-2 py-1 text-xs font-semibold rounded-full {getRankBadgeClass(result.target_business_rank)}">
-                    #{result.target_business_rank}
+                    {formatRank(result.target_business_rank)}
                   </span>
                 {:else}
                   <span class="text-gray-400 text-sm">—</span>

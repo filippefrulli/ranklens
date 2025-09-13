@@ -95,8 +95,22 @@
       // Filter by selected provider if one is selected
       if (selectedProvider) {
         competitors = competitors.filter(competitor => 
-          competitor.llm_providers && competitor.llm_providers.includes(selectedProvider!.name)
+          competitor.llm_providers && 
+          competitor.llm_providers.length === 1 && 
+          competitor.llm_providers.includes(selectedProvider!.name)
         )
+      } else {
+        // When no provider is selected, show only records that include all providers for each business
+        // Group by business name and show the record with the most providers
+        const businessGroups = new Map()
+        competitors.forEach(competitor => {
+          const businessName = competitor.business_name
+          if (!businessGroups.has(businessName) || 
+              competitor.llm_providers.length > businessGroups.get(businessName).llm_providers.length) {
+            businessGroups.set(businessName, competitor)
+          }
+        })
+        competitors = Array.from(businessGroups.values())
       }
       
       competitorRankings = competitors

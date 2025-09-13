@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { getRankBadgeClass, formatRank } from '../../utils/ranking-utils'
+  
   export let rankingResults: any[]
 
   function formatLLMName(llmName: string): string {
@@ -74,12 +76,6 @@
     return `${Math.round((successful / total) * 100)}%`
   }
 
-  function getRankBadgeClass(rank: number): string {
-    if (rank <= 3) return 'bg-green-100 text-green-800'
-    if (rank <= 7) return 'bg-yellow-100 text-yellow-800'
-    return 'bg-red-100 text-red-800'
-  }
-
   $: aggregatedResults = aggregateResultsByLLM(rankingResults)
 </script>
 
@@ -139,8 +135,8 @@
               </td>
               <td class="px-6 py-4 whitespace-nowrap">
                 {#if llm.averageRank !== null}
-                  <span class="inline-flex px-2 py-1 text-xs font-semibold rounded-full {getRankBadgeClass(Math.round(llm.averageRank))}">
-                    #{Math.round(llm.averageRank * 10) / 10}
+                  <span class="inline-flex px-2 py-1 text-xs font-semibold rounded-full {getRankBadgeClass(llm.averageRank)}">
+                    {formatRank(llm.averageRank)}
                   </span>
                 {:else}
                   <span class="text-gray-400 text-sm">—</span>
@@ -149,7 +145,7 @@
               <td class="px-6 py-4 whitespace-nowrap">
                 {#if llm.bestRank !== null}
                   <span class="inline-flex px-2 py-1 text-xs font-semibold rounded-full {getRankBadgeClass(llm.bestRank)}">
-                    #{llm.bestRank}
+                    {formatRank(llm.bestRank)}
                   </span>
                 {:else}
                   <span class="text-gray-400 text-sm">—</span>

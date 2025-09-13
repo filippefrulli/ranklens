@@ -1,11 +1,7 @@
 <script lang="ts">
+  import { getRankBadgeClass, formatRank } from '../../utils/ranking-utils'
+  
   export let competitorRankings: any[]
-
-  function getRankBadgeClass(rank: number): string {
-    if (rank <= 3) return 'bg-green-100 text-green-800'
-    if (rank <= 7) return 'bg-yellow-100 text-yellow-800'
-    return 'bg-red-100 text-red-800'
-  }
 
   function getAppearancePercentage(appearances: number, totalAttempts: number): string {
     return ((appearances / totalAttempts) * 100).toFixed(1)
@@ -87,7 +83,7 @@
               </td>
               <td class="px-6 py-4 whitespace-nowrap">
                 <span class="inline-flex px-2 py-1 text-xs font-semibold rounded-full {getRankBadgeClass(competitor.average_rank)}">
-                  #{competitor.average_rank?.toFixed(1) || 'N/A'}
+                  {formatRank(competitor.average_rank)}
                 </span>
               </td>
               <td class="px-6 py-4 whitespace-nowrap">

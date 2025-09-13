@@ -449,6 +449,7 @@ export class DatabaseService {
       llm_providers: string[]
       appearances_count: number
       is_user_business: boolean
+      ranksByProvider: Map<string, number[]> // Track ranks per provider
     }>()
 
     // Extract businesses from all attempts
@@ -473,19 +474,10 @@ export class DatabaseService {
 
         const providerName = attempt.llm_providers?.name || 'Unknown'
         
-        // First, find user business rank to determine truncation limit
-        let userBusinessRank: number | null = null
-        for (let i = 0; i < parsedRanking.length; i++) {
-          const businessNameLower = parsedRanking[i].toLowerCase().trim()
-          if (businessNameLower === userBusinessName || 
-              businessNameLower.includes(userBusinessName) ||
-              userBusinessName.includes(businessNameLower)) {
-            userBusinessRank = i + 1
-            break
-          }
-        }
+        // Use the stored target_business_rank instead of recalculating from truncated list
+        const userBusinessRank = attempt.target_business_rank
         
-        // Calculate truncation limit
+        // Calculate truncation limit using the original rank
         const truncationLimit = this.calculateTruncationLimit(userBusinessRank, parsedRanking.length)
         
         // Only process businesses up to the truncation limit
@@ -496,10 +488,8 @@ export class DatabaseService {
           const businessKey = this.normalizeBusinessName(businessName) // Use normalized name as key
           const businessNameLower = businessName.toLowerCase().trim()
           
-          // Determine if this is the user's business
-          const isUserBusiness = businessNameLower === userBusinessName || 
-                                businessNameLower.includes(userBusinessName) ||
-                                userBusinessName.includes(businessNameLower)
+          // Determine if this is the user's business - use the stored rank for accuracy
+          const isUserBusiness = userBusinessRank !== null && rank === userBusinessRank
 
           if (!businessMap.has(businessKey)) {
             businessMap.set(businessKey, {
@@ -508,13 +498,20 @@ export class DatabaseService {
               ranks: [],
               llm_providers: [],
               appearances_count: 0,
-              is_user_business: isUserBusiness
+              is_user_business: isUserBusiness,
+              ranksByProvider: new Map()
             })
           }
 
           const business = businessMap.get(businessKey)!
           business.ranks.push(rank)
           business.appearances_count++
+          
+          // Track ranks by provider
+          if (!business.ranksByProvider.has(providerName)) {
+            business.ranksByProvider.set(providerName, [])
+          }
+          business.ranksByProvider.get(providerName)!.push(rank)
           
           // Track this variation if we haven't seen it before
           if (!business.original_names.includes(businessName)) {
@@ -532,15 +529,43 @@ export class DatabaseService {
     })
 
     // Convert to competitor results and insert
-    const competitorResults = Array.from(businessMap.values()).map(business => {
-      const averageRank = business.ranks.reduce((sum, rank) => sum + rank, 0) / business.ranks.length
-      const bestRank = Math.min(...business.ranks)
-      const worstRank = Math.max(...business.ranks)
+    const competitorResults: any[] = []
+    
+    // Create records for each business
+    Array.from(businessMap.values()).forEach(business => {
+      // Create a record for each provider that ranked this business
+      business.ranksByProvider.forEach((ranks, provider) => {
+        const averageRank = ranks.reduce((sum, rank) => sum + rank, 0) / ranks.length
+        const bestRank = Math.min(...ranks)
+        const worstRank = Math.max(...ranks)
+        const appearanceRate = (ranks.length / attempts.length) * 100
+        const weightedScore = averageRank * (3.0 - 2.5 * (appearanceRate / 100))
+
+        competitorResults.push({
+          query_id: queryId,
+          analysis_run_id: analysisRunId,
+          business_name: business.business_name,
+          average_rank: Number(averageRank.toFixed(2)),
+          best_rank: bestRank,
+          worst_rank: worstRank,
+          appearances_count: ranks.length,
+          total_attempts: attempts.length,
+          weighted_score: Number(weightedScore.toFixed(2)),
+          llm_providers: [provider], // Single provider per record
+          raw_ranks: ranks,
+          is_user_business: business.is_user_business
+        })
+      })
+      
+      // Also create an "All Providers" aggregate record
+      const allRanks = business.ranks
+      const averageRank = allRanks.reduce((sum, rank) => sum + rank, 0) / allRanks.length
+      const bestRank = Math.min(...allRanks)
+      const worstRank = Math.max(...allRanks)
       const appearanceRate = (business.appearances_count / attempts.length) * 100
-      // Increased consistency weight: multiplier ranges from 0.5 (100% appearance) to 3.0 (0% appearance)
       const weightedScore = averageRank * (3.0 - 2.5 * (appearanceRate / 100))
 
-      return {
+      competitorResults.push({
         query_id: queryId,
         analysis_run_id: analysisRunId,
         business_name: business.business_name,
@@ -549,12 +574,11 @@ export class DatabaseService {
         worst_rank: worstRank,
         appearances_count: business.appearances_count,
         total_attempts: attempts.length,
-        // appearance_rate is a generated column - don't include it in insert
         weighted_score: Number(weightedScore.toFixed(2)),
-        llm_providers: business.llm_providers,
+        llm_providers: business.llm_providers, // All providers
         raw_ranks: business.ranks,
         is_user_business: business.is_user_business
-      }
+      })
     })
 
     if (competitorResults.length === 0) {

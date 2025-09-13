@@ -1,16 +1,16 @@
 import type { Business } from '../types'
-import { ServerLLMService } from './llm-service'
+import { LLMService } from './llm-service'
 
 interface QuerySuggestion {
   text: string
 }
 
-export class ServerQuerySuggestionService {
+export class QuerySuggestionService {
   static async generateQuerySuggestions(business: Business): Promise<QuerySuggestion[]> {
     const prompt = this.buildPrompt(business)
     
     try {
-      const content = await ServerLLMService.queryLLM('Google Gemini', 'gemini-2.5-flash-lite', prompt, 'high')
+      const content = await LLMService.queryLLM('Google Gemini', 'gemini-2.5-flash-lite', prompt, 'high')
 
       if (!content) {
         throw new Error('No content received from LLM')

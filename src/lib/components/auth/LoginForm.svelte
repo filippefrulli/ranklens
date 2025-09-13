@@ -1,5 +1,12 @@
 <script lang="ts">
-  import { AuthService } from '../../services/auth-service'
+  import { goto } from '$app/navigation'
+  import type { SupabaseClient } from '@supabase/supabase-js'
+  
+  interface Props {
+    supabase: SupabaseClient
+  }
+  
+  const { supabase }: Props = $props()
   
   let email = $state('')
   let password = $state('')
@@ -10,10 +17,20 @@
 
   async function handleGoogleAuth() {
     error = null
-    const result = await AuthService.signInWithGoogle()
     
-    if (result.error) {
-      error = (result.error as any)?.message || 'Authentication failed'
+    try {
+      const { error } = await supabase.auth.signInWithOAuth({
+        provider: 'google',
+        options: {
+          redirectTo: `${window.location.origin}/auth/callback`
+        }
+      })
+      
+      if (error) {
+        throw error
+      }
+    } catch (err: any) {
+      error = err?.message || 'Authentication failed'
     }
   }
 
@@ -29,20 +46,29 @@
     try {
       let result
       if (mode === 'signin') {
-        result = await AuthService.signInWithEmail(email, password)
+        result = await supabase.auth.signInWithPassword({
+          email,
+          password
+        })
       } else {
-        result = await AuthService.signUpWithEmail(email, password)
+        result = await supabase.auth.signUp({
+          email,
+          password
+        })
       }
 
       if (result.error) {
-        error = (result.error as any)?.message || 'Authentication failed'
+        error = result.error.message || 'Authentication failed'
       } else if (mode === 'signup') {
         error = null
         // Show success message for signup
         alert('Check your email for a confirmation link!')
+      } else {
+        // Successful sign in, redirect to home (SSR will handle user state)
+        goto('/')
       }
-    } catch (err) {
-      error = 'An unexpected error occurred'
+    } catch (err: any) {
+      error = err?.message || 'An unexpected error occurred'
     } finally {
       loading = false
     }
@@ -57,16 +83,22 @@
     loading = true
     error = null
 
-    const result = await AuthService.resetPassword(email)
-    
-    if (result.error) {
-      error = (result.error as any)?.message || 'Password reset failed'
-    } else {
-      alert('Password reset link sent to your email!')
-      showForgotPassword = false
+    try {
+      const { error } = await supabase.auth.resetPasswordForEmail(email, {
+        redirectTo: `${window.location.origin}/reset-password`
+      })
+      
+      if (error) {
+        throw error
+      } else {
+        alert('Password reset link sent to your email!')
+        showForgotPassword = false
+      }
+    } catch (err: any) {
+      error = err?.message || 'Password reset failed'
+    } finally {
+      loading = false
     }
-    
-    loading = false
   }
 </script>
 

@@ -1,7 +1,7 @@
 import type { PageServerLoad, Actions } from './$types'
 import { fail } from '@sveltejs/kit'
-import { ServerDatabaseService } from '$lib/server/database-service'
-import { ServerQuerySuggestionService } from '$lib/server/query-suggestion-service'
+import { DatabaseService } from '$lib/services/database-service'
+import { QuerySuggestionService } from '$lib/services/query-suggestion-service'
 
 export const actions: Actions = {
   // Generate query suggestions action
@@ -11,14 +11,14 @@ export const actions: Actions = {
     }
 
     try {
-      const dbService = new ServerDatabaseService(locals.supabase, locals.user.id)
+      const dbService = new DatabaseService(locals.supabase, locals.user.id)
       const business = await dbService.getBusiness()
       
       if (!business) {
         return fail(404, { error: 'Business not found' })
       }
 
-      const suggestions = await ServerQuerySuggestionService.generateQuerySuggestions(business)
+      const suggestions = await QuerySuggestionService.generateQuerySuggestions(business)
 
       return { 
         suggestions: suggestions.map(s => s.text) // Return just the text array

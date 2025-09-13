@@ -1,6 +1,6 @@
 import { error, json } from '@sveltejs/kit'
 import type { RequestHandler } from './$types'
-import { ServerAnalysisService } from '$lib/server/analysis-service'
+import { AnalysisService } from '$lib/services/analysis-service'
 
 export const POST: RequestHandler = async ({ request, locals }) => {
   // Check authentication
@@ -16,7 +16,7 @@ export const POST: RequestHandler = async ({ request, locals }) => {
     }
 
     // Create analysis service with authenticated user context
-    const analysisService = new ServerAnalysisService(locals.supabase, locals.user.id)
+    const analysisService = new AnalysisService(locals.supabase, locals.user.id)
     
     // Run analysis (RLS will ensure user can only analyze their own business)
     const result = await analysisService.runAnalysis(businessId)

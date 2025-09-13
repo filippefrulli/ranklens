@@ -2,7 +2,7 @@
   import { page } from '$app/stores'
   import { goto } from '$app/navigation'
   import { onMount } from 'svelte'
-  import { DatabaseService } from '../../../lib/services/database-service'
+  import type { PageData } from './$types'
   import QueryResultHeader from '../../../lib/components/query/QueryResultHeader.svelte'
   import RankingResultsByLLMTable from '../../../lib/components/query/RankingResultsByLLMTable.svelte'
   import CompetitorRankingsTable from '../../../lib/components/query/CompetitorRankingsTable.svelte'
@@ -11,12 +11,22 @@
   import LLMProviderDropdown from '../../../lib/components/ui/LLMProviderDropdown.svelte'
   import type { Query, RankingAttempt, LLMProvider } from '../../../lib/types'
 
-  let query = $state<Query | null>(null)
-  let analysisRuns = $state<{id: string, created_at: string}[]>([])
+  interface Props {
+    data: PageData
+  }
+
+  let { data }: Props = $props()
+
+  // Get user and query data from server-side load
+  const user = $derived(data.user)
+  const supabase = $derived(data.supabase)
+
+  let query = $state<Query | null>(data.query)
+  let analysisRuns = $state<{id: string, created_at: string}[]>(data.analysisRuns)
   let selectedRunId = $state<string | null>(null)
   let rankingResults = $state<RankingAttempt[]>([])
   let competitorRankings = $state<any[]>([])
-  let llmProviders = $state<LLMProvider[]>([])
+  let llmProviders = $state<LLMProvider[]>(data.llmProviders)
   let selectedProvider = $state<LLMProvider | null>(null) // null means "All providers"
   let loading = $state(false)
   let loadingData = $state(false)
@@ -31,56 +41,12 @@
   })
 
   onMount(() => {
-    if ($user && queryId) {
-      loadInitialData()
+    // Data is already loaded from server, just select the latest run if available
+    if (analysisRuns.length > 0) {
+      selectedRunId = analysisRuns[0].id
+      loadRunData(analysisRuns[0].id)
     }
   })
-
-  async function loadInitialData() {
-    if (!queryId || !$user) return
-    
-    try {
-      loading = true
-      error = null
-
-      // Get query details
-      const queryData = await DatabaseService.getQuery(queryId)
-      if (!queryData) {
-        error = 'Query not found'
-        return
-      }
-
-      // Verify access
-      const business = await DatabaseService.getBusiness($user.id)
-      if (!business || queryData.business_id !== business.id) {
-        error = 'Access denied'
-        return
-      }
-
-      query = queryData
-
-      // Get analysis runs and LLM providers
-      const [runs, providers] = await Promise.all([
-        DatabaseService.getQueryAnalysisRuns(queryId),
-        DatabaseService.getLLMProviders()
-      ])
-      
-      analysisRuns = runs
-      llmProviders = providers
-      
-      // Select the latest run by default
-      if (runs.length > 0) {
-        selectedRunId = runs[0].id
-        await loadRunData(runs[0].id)
-      }
-
-    } catch (err: any) {
-      console.error('� Error loading initial data:', err)
-      error = err.message || 'Failed to load data'
-    } finally {
-      loading = false
-    }
-  }
 
   async function loadRunData(runId: string) {
     if (!queryId || !runId) return
@@ -88,17 +54,59 @@
     try {
       loadingData = true
 
-      // Load ranking results for this specific run
-      const rankings = await DatabaseService.getQueryRankingResultsByRun(queryId, runId)
-      rankingResults = rankings
+      // Load ranking results for this specific run using direct supabase calls
+      const { data: rankings, error: rankingsError } = await supabase
+        .from('ranking_attempts')
+        .select(`
+          *,
+          analysis_runs!inner(
+            id,
+            created_at
+          ),
+          llm_providers!inner(
+            id,
+            name
+          )
+        `)
+        .eq('query_id', queryId)
+        .eq('analysis_run_id', runId)
+        .order('created_at', { ascending: false })
+
+      if (rankingsError) {
+        throw new Error(`Failed to fetch ranking results: ${rankingsError.message}`)
+      }
+
+      rankingResults = rankings || []
 
       // Load competitor rankings based on selected provider
       let competitors
       if (selectedProvider) {
-        competitors = await DatabaseService.getCompetitorRankingsByRunAndProvider(queryId, runId, selectedProvider.id)
+        const { data: competitorData, error: competitorError } = await supabase
+          .from('competitor_rankings')
+          .select('*')
+          .eq('query_id', queryId)
+          .eq('analysis_run_id', runId)
+          .eq('llm_provider_id', selectedProvider.id)
+          .order('rank', { ascending: true })
+
+        if (competitorError) {
+          throw new Error(`Failed to fetch competitor rankings: ${competitorError.message}`)
+        }
+        competitors = competitorData || []
       } else {
-        competitors = await DatabaseService.getCompetitorRankingsByRun(queryId, runId)
+        const { data: competitorData, error: competitorError } = await supabase
+          .from('competitor_rankings')
+          .select('*')
+          .eq('query_id', queryId)
+          .eq('analysis_run_id', runId)
+          .order('rank', { ascending: true })
+
+        if (competitorError) {
+          throw new Error(`Failed to fetch competitor rankings: ${competitorError.message}`)
+        }
+        competitors = competitorData || []
       }
+      
       competitorRankings = competitors
 
     } catch (err: any) {
@@ -141,9 +149,7 @@
 
 <div class="min-h-screen bg-gray-50 py-8">
   <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-    {#if loading}
-      <LoadingSpinner message="Loading query results..." />
-    {:else if error}
+    {#if error}
       <ErrorMessage {error} onDismiss={() => error = null} />
       <div class="mt-4">
         <button 

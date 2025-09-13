@@ -1,6 +1,5 @@
 <script lang="ts">
   import { onNavigate, invalidate } from '$app/navigation';
-  import { page } from '$app/stores';
   import { onMount } from 'svelte';
   import "../app.css";
   import Footer from '$lib/components/layout/Footer.svelte';
@@ -11,6 +10,7 @@
     children: any;
     data: { 
       session: Session | null;
+      user: User | null;
       supabase: SupabaseClient;
     };
   }>();

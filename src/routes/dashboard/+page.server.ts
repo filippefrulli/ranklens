@@ -1,7 +1,7 @@
 import type { PageServerLoad, Actions } from './$types'
-import { redirect, fail } from '@sveltejs/kit'
-import { ServerDatabaseService } from '$lib/server/database-service'
-import { ServerAnalysisService } from '$lib/server/analysis-service'
+import { error, fail, redirect } from '@sveltejs/kit'
+import { DatabaseService } from '$lib/services/database-service'
+import { AnalysisService } from '$lib/services/analysis-service'
 
 export const load: PageServerLoad = async ({ locals, url }) => {
   // Ensure user is authenticated
@@ -11,7 +11,7 @@ export const load: PageServerLoad = async ({ locals, url }) => {
 
   try {
     // Create database service with authenticated context
-    const dbService = new ServerDatabaseService(locals.supabase, locals.user.id)
+    const dbService = new DatabaseService(locals.supabase, locals.user.id)
     
     // Ensure required providers are active
     await dbService.ensureRequiredProvidersActive()
@@ -25,13 +25,25 @@ export const load: PageServerLoad = async ({ locals, url }) => {
     const queries = await dbService.getQueriesForBusiness(business.id)
     const weeklyCheck = await dbService.checkWeeklyAnalysis(business.id)
     
+    // Load query histories for each query
+    const queryHistories: Record<string, any[]> = {}
+    for (const query of queries) {
+      try {
+        queryHistories[query.id] = await dbService.getQueryRankingHistory(query.id, 10)
+      } catch (error) {
+        console.error(`Failed to load history for query ${query.id}:`, error)
+        queryHistories[query.id] = []
+      }
+    }
+    
     // Create analysis service to get status
-    const analysisService = new ServerAnalysisService(locals.supabase, locals.user.id)
+    const analysisService = new AnalysisService(locals.supabase, locals.user.id)
     const runningAnalysis = await analysisService.getAnalysisStatus(business.id)
 
     return {
       business,
       queries,
+      queryHistories,
       weeklyCheck,
       runningAnalysis,
       user: locals.user
@@ -50,7 +62,7 @@ export const actions: Actions = {
     }
 
     try {
-      const dbService = new ServerDatabaseService(locals.supabase, locals.user.id)
+      const dbService = new DatabaseService(locals.supabase, locals.user.id)
       const business = await dbService.getBusiness()
       if (!business) {
         return fail(404, { error: 'Business not found' })
@@ -63,7 +75,7 @@ export const actions: Actions = {
       }
 
       // Start the analysis
-      const analysisService = new ServerAnalysisService(locals.supabase, locals.user.id)
+      const analysisService = new AnalysisService(locals.supabase, locals.user.id)
       const result = await analysisService.runAnalysis(business.id)
       
       if (!result.success) {
@@ -92,13 +104,13 @@ export const actions: Actions = {
         return fail(400, { error: 'Query text is required' })
       }
 
-      const dbService = new ServerDatabaseService(locals.supabase, locals.user.id)
+      const dbService = new DatabaseService(locals.supabase, locals.user.id)
       const business = await dbService.getBusiness()
       if (!business) {
         return fail(404, { error: 'Business not found' })
       }
 
-      // Add query logic here (you'll need to implement this in ServerDatabaseService)
+      // Add query logic here (you'll need to implement this in DatabaseService)
       // await dbService.addQuery(business.id, queryText.trim())
 
       return { success: true }

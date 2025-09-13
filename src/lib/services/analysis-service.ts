@@ -1,13 +1,13 @@
-import { ServerLLMService } from './llm-service'
-import { ServerDatabaseService } from './database-service'
+import { LLMService } from './llm-service'
+import { DatabaseService } from './database-service'
 import type { Business, Query, LLMProvider, AnalysisRun } from '../types'
 import type { SupabaseClient } from '@supabase/supabase-js'
 
-export class ServerAnalysisService {
-  private dbService: ServerDatabaseService
+export class AnalysisService {
+  private dbService: DatabaseService
 
   constructor(supabase: SupabaseClient, userId: string) {
-    this.dbService = new ServerDatabaseService(supabase, userId)
+    this.dbService = new DatabaseService(supabase, userId)
   }
 
   // Run complete analysis for a business (with RLS)
@@ -97,7 +97,7 @@ export class ServerAnalysisService {
 
           for (let attemptNum = 1; attemptNum <= 5; attemptNum++) {
             try {              
-              const result = await ServerLLMService.makeRequest(provider, query.text, business.name, 25)
+              const result = await LLMService.makeRequest(provider, query.text, business.name, 25)
               completedCalls++
 
               if (result.success) {

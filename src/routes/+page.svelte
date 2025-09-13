@@ -11,16 +11,19 @@
   let { data, form }: Props = $props()
   let showDemo = $state(true)
 
+  // Get user from layout data
+  const user = $derived(data.user)
+
   // Reactive navigation based on auth state
   $effect(() => {
-    if ($user && showDemo) {
+    if (user && showDemo) {
       // If user is authenticated and we're showing demo, redirect to dashboard
       showDemo = false
     }
   })
 </script>
 
-{#if !$user && showDemo}
+{#if !user && showDemo}
   <!-- Landing Page for Unauthenticated Users -->
   <main class="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100">
     <!-- Header -->
@@ -132,9 +135,9 @@
     </div>
   </main>
 
-{:else if !$user}
+{:else if !user}
   <!-- Login Form for Unauthenticated Users -->
-  <LoginForm />
+  <LoginForm supabase={data.supabase} />
 
 {:else}
   <!-- Dashboard Application for Authenticated Users -->

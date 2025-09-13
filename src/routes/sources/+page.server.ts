@@ -1,6 +1,7 @@
 import type { PageServerLoad } from './$types'
+import { fail } from '@sveltejs/kit'
+import { DatabaseService } from '$lib/services/database-service'
 import { error } from '@sveltejs/kit'
-import { ServerDatabaseService } from '$lib/server/database-service'
 import type { QuerySources } from '$lib/types'
 
 export const load: PageServerLoad = async ({ locals }) => {
@@ -9,7 +10,7 @@ export const load: PageServerLoad = async ({ locals }) => {
   }
 
   try {
-    const dbService = new ServerDatabaseService(locals.supabase, locals.user.id)
+    const dbService = new DatabaseService(locals.supabase, locals.user.id)
     
     // Get the user's business
     const business = await dbService.getBusiness()

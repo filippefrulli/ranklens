@@ -1,7 +1,6 @@
 <script lang="ts">
   import { onMount } from "svelte";
   import { DatabaseService } from "../../services/database-service";
-  import { AuthService, user } from "../../services/auth-service";
   import type {
     Business,
     DashboardData,

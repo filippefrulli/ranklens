@@ -29,7 +29,7 @@ function withTimeout<T>(promise: Promise<T>, ms = 60000): Promise<T> {
   })
 }
 
-export class ServerLLMService {
+export class LLMService {
   // Fuzzy matching utility to find business in results
   private static fuzzyMatch(target: string, candidate: string): number {
     const targetLower = target.toLowerCase().trim()
@@ -449,7 +449,7 @@ Return format: Just the unique standardized business names, one per line, with d
       if (includeSourceAnalysis) {
         try {
           // Import the source discovery service dynamically to avoid circular dependencies
-          const { SourceDiscoveryService } = await import('./source-discovery-service')
+          const { SourceDiscoveryService } = await import('../server/source-discovery-service')
           
           // Run both source discovery operations in parallel
           const [querySourcesResult, businessSourcesResult] = await Promise.allSettled([

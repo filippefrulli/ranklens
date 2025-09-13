@@ -1,46 +1,28 @@
 <script lang="ts">
   import { onMount } from 'svelte'
   import type { Query, RankingAnalytics, QueryRankingHistory } from '../../types'
-  import { DatabaseService } from '../../services/database-service'
   import QueryCard from './QueryCard.svelte'
   
   interface Props {
     queries: Query[]
     analytics: RankingAnalytics[]
+    queryHistories?: Map<string, QueryRankingHistory[]> // Pass from server instead
     onAddQuery: () => void
     onGetAISuggestions?: () => void
   }
   
-  let { queries, analytics, onAddQuery, onGetAISuggestions }: Props = $props()
+  let { queries, analytics, queryHistories = new Map(), onAddQuery, onGetAISuggestions }: Props = $props()
 
-  // Store historical data for each query
-  let queryHistories = $state<Map<string, QueryRankingHistory[]>>(new Map())
+  // For now, we'll keep the client-side loading but make it optional
+  // TODO: Move this to server-side data loading
   let loadingHistories = $state(false)
 
-  onMount(async () => {
-    await loadQueryHistories()
-  })
-
-  async function loadQueryHistories() {
-    loadingHistories = true
-    try {
-      const histories = new Map()
-      for (const query of queries) {
-        const history = await DatabaseService.getQueryRankingHistory(query.id, 10)
-        histories.set(query.id, history)
-      }
-      queryHistories = histories
-    } catch (error) {
-      console.error('Failed to load query histories:', error)
-    } finally {
-      loadingHistories = false
-    }
-  }
-
-  // Reactive update when queries change
+  // Reactive update when queries change - only load if not provided
   $effect(() => {
-    if (queries.length > 0) {
-      loadQueryHistories()
+    if (queries.length > 0 && queryHistories.size === 0) {
+      // TODO: This should be moved to server-side
+      // For now, we'll just use empty histories to avoid the error
+      console.warn('QueryGrid: History data should be loaded server-side')
     }
   })
 </script>

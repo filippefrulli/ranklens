@@ -24,7 +24,7 @@
       return []
     }
 
-    const businessPlatforms = new Set(data.businessSources.sources.map(s => s.platform.toLowerCase()))
+    const businessPlatforms = new Set(data.businessSources.sources.map((s: SourceInfo) => s.platform.toLowerCase()))
     
     const missingPlatforms = selectedQuerySources.sources.filter(source => 
       !businessPlatforms.has(source.platform.toLowerCase())

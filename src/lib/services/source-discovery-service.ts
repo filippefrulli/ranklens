@@ -1,5 +1,5 @@
 import type { SourceInfo } from '../types'
-import { ServerLLMService } from './llm-service'
+import { LLMService } from './llm-service'
 
 export class SourceDiscoveryService {
   
@@ -38,7 +38,7 @@ Example categories:
 - Local Listings: City websites, tourism boards
 - Other: Industry-specific platforms, news sites`
 
-      const content = await ServerLLMService.queryLLM('Perplexity', 'sonar-pro', prompt, 'medium')
+      const content = await LLMService.queryLLM('Perplexity', 'sonar-pro', prompt, 'medium')
       
       const sources = this.parseSourceResponse(content)
       console.log(`✅ Query source discovery completed: Found ${sources.length} sources for "${query}"`)
@@ -79,7 +79,7 @@ Include sources like:
 - Local tourism/business websites
 - News mentions or features`
 
-      const content = await ServerLLMService.queryLLM('Perplexity', 'sonar-pro', prompt, 'medium')
+      const content = await LLMService.queryLLM('Perplexity', 'sonar-pro', prompt, 'medium')
       
       const sources = this.parseSourceResponse(content)
       console.log(`✅ Business source discovery completed: Found ${sources.length} sources for "${businessName}"`)

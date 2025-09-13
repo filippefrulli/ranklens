@@ -1,48 +1,56 @@
 <script lang="ts">
   import type { PageData, ActionData } from './$types'
-  import LoginForm from '../lib/components/auth/LoginForm.svelte'
+  import type { User } from '@supabase/supabase-js'
+  import type { 
+    Business, 
+    Query, 
+    QueryRankingHistory, 
+    WeeklyAnalysisCheck, 
+    AnalysisRun, 
+    LLMProvider 
+  } from '$lib/types'
   import Dashboard from '../lib/components/dashboard/Dashboard.svelte'
 
+  interface DashboardData {
+    user: User | null
+    business?: Business | null
+    queries?: Query[]
+    queryHistories?: Record<string, QueryRankingHistory[]>
+    weeklyCheck?: WeeklyAnalysisCheck | null
+    runningAnalysis?: AnalysisRun | null
+    llmProviders?: LLMProvider[]
+    needsOnboarding?: boolean
+    error?: string | null
+  }
+
   interface Props {
-    data: PageData
+    data: PageData & DashboardData
     form: ActionData
   }
 
   let { data, form }: Props = $props()
-  let showDemo = $state(true)
 
   // Get user from layout data
   const user = $derived(data.user)
-
-  // Reactive navigation based on auth state
-  $effect(() => {
-    if (user && showDemo) {
-      // If user is authenticated and we're showing demo, redirect to dashboard
-      showDemo = false
-    }
-  })
 </script>
 
-{#if !user && showDemo}
+{#if user}
+  <!-- Dashboard Application for Authenticated Users -->
+  <Dashboard 
+    {form} 
+    user={data.user}
+    business={data.business ?? null}
+    queries={data.queries ?? []}
+    queryHistories={data.queryHistories ?? {}}
+    weeklyCheck={data.weeklyCheck ?? null}
+    runningAnalysis={data.runningAnalysis ?? null}
+    llmProviders={data.llmProviders ?? []}
+    needsOnboarding={data.needsOnboarding ?? false}
+    error={data.error ?? null}
+  />
+{:else}
   <!-- Landing Page for Unauthenticated Users -->
   <main class="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100">
-    <!-- Header -->
-    <header class="bg-white shadow-sm">
-      <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div class="flex justify-between items-center h-16">
-          <h1 class="text-2xl font-bold text-gray-900">RankLens</h1>
-          <div class="space-x-2">
-            <button 
-              onclick={() => showDemo = false}
-              class="bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 px-4 rounded-lg transition-colors cursor-pointer"
-            >
-              Sign In
-            </button>
-          </div>
-        </div>
-      </div>
-    </header>
-
     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-16">
       <div class="text-center mb-16">
         <h1 class="text-5xl font-bold text-gray-900 mb-6">
@@ -54,12 +62,12 @@
         </p>
         
         <div class="flex justify-center space-x-4">
-          <button 
-            onclick={() => showDemo = false}
+          <a 
+            href="/signin"
             class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-8 rounded-lg shadow-lg transform hover:scale-105 transition-all duration-200 cursor-pointer"
           >
             Get Started
-          </button>
+          </a>
           <a 
             href="#features" 
             class="bg-white hover:bg-gray-50 text-blue-600 font-bold py-3 px-8 rounded-lg shadow-lg border-2 border-blue-600 transform hover:scale-105 transition-all duration-200 cursor-pointer"
@@ -134,12 +142,4 @@
       </div>
     </div>
   </main>
-
-{:else if !user}
-  <!-- Login Form for Unauthenticated Users -->
-  <LoginForm supabase={data.supabase} />
-
-{:else}
-  <!-- Dashboard Application for Authenticated Users -->
-  <Dashboard {form} />
 {/if}

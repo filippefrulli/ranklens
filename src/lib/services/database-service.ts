@@ -537,7 +537,8 @@ export class DatabaseService {
       const bestRank = Math.min(...business.ranks)
       const worstRank = Math.max(...business.ranks)
       const appearanceRate = (business.appearances_count / attempts.length) * 100
-      const weightedScore = averageRank * (2.0 - (appearanceRate / 100))
+      // Increased consistency weight: multiplier ranges from 0.5 (100% appearance) to 3.0 (0% appearance)
+      const weightedScore = averageRank * (3.0 - 2.5 * (appearanceRate / 100))
 
       return {
         query_id: queryId,

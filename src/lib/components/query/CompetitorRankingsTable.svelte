@@ -76,11 +76,6 @@
                   <div class="ml-4">
                     <div class="text-sm {competitor.is_user_business ? 'text-blue-900 font-semibold' : 'text-gray-900 font-medium'}">
                       {competitor.business_name}
-                      {#if competitor.is_user_business}
-                        <span class="ml-2 inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold bg-blue-600 text-white">
-                          Your Business
-                        </span>
-                      {/if}
                     </div>
                   </div>
                 </div>
@@ -96,8 +91,8 @@
                 </span>
               </td>
               <td class="px-6 py-4 whitespace-nowrap">
-                <span class="inline-flex px-2 py-1 text-xs font-medium rounded-full {getConsistencyBadge(competitor.appearance_rate || competitor.appearances_count / competitor.total_attempts).class}">
-                  {getConsistencyBadge(competitor.appearance_rate || competitor.appearances_count / competitor.total_attempts).text}
+                <span class="inline-flex px-2 py-1 text-xs font-medium rounded-full {getConsistencyBadge(competitor.appearances_count / competitor.total_attempts).class}">
+                  {getConsistencyBadge(competitor.appearances_count / competitor.total_attempts).text}
                 </span>
               </td>
               <td class="px-6 py-4 whitespace-nowrap">
@@ -129,7 +124,7 @@
           A business appearing in 100% of attempts at rank #15 scores better than one appearing once at rank #14.
         </p>
         <p class="text-xs text-gray-500 mt-1">
-          Formula: Weighted Score = Average Rank × (2 - Appearance Rate). Lower scores indicate stronger competitors.
+          Formula: Weighted Score = Average Rank × (3 - 2.5 × Appearance Rate). Lower scores indicate stronger competitors with high consistency being heavily rewarded.
         </p>
       </div>
     {/if}

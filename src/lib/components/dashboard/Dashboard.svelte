@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { User } from '@supabase/supabase-js';
+  import type { User } from "@supabase/supabase-js";
   import type {
     Business,
     LLMProvider,
@@ -7,9 +7,9 @@
     QuerySuggestion,
     Query,
     QueryRankingHistory,
-    AnalysisRun
+    AnalysisRun,
   } from "../../types";
-  import { enhance } from '$app/forms';
+  import { enhance } from "$app/forms";
   import GoogleBusinessSearch from "../business/GoogleBusinessSearch.svelte";
   import BusinessNameBar from "./BusinessNameBar.svelte";
   import DashboardControls from "./DashboardControls.svelte";
@@ -20,32 +20,32 @@
   import AnalysisProgressBar from "./AnalysisProgressBar.svelte";
 
   interface Props {
-    form?: any
-    user: User | null
-    business: Business | null
-    queries?: Query[]
-    queryHistories?: Record<string, QueryRankingHistory[]>
-    weeklyCheck?: WeeklyAnalysisCheck | null
-    runningAnalysis?: AnalysisRun | null
-    llmProviders?: LLMProvider[]
-    querySuggestions?: string[]
-    needsOnboarding?: boolean
-    error?: string | null
+    form?: any;
+    user: User | null;
+    business: Business | null;
+    queries?: Query[];
+    queryHistories?: Record<string, QueryRankingHistory[]>;
+    weeklyCheck?: WeeklyAnalysisCheck | null;
+    runningAnalysis?: AnalysisRun | null;
+    llmProviders?: LLMProvider[];
+    querySuggestions?: string[];
+    needsOnboarding?: boolean;
+    error?: string | null;
   }
 
-  let { 
+  let {
     form,
-    user, 
-    business, 
-    queries = [], 
+    user,
+    business,
+    queries = [],
     queryHistories = {},
     weeklyCheck = null,
     runningAnalysis = null,
     llmProviders = [],
     querySuggestions: serverSuggestions = [],
     needsOnboarding = false,
-    error = null
-  }: Props = $props()
+    error = null,
+  }: Props = $props();
 
   // UI state
   let loading = $state(false);
@@ -60,7 +60,7 @@
 
   // Query suggestions state
   let querySuggestions = $state<QuerySuggestion[]>(
-    serverSuggestions.map(text => ({ text, reasoning: '' }))
+    serverSuggestions.map((text) => ({ text, reasoning: "" }))
   );
   let loadingSuggestions = $state(false);
   let suggestionError = $state<string | null>(null);
@@ -70,8 +70,8 @@
     currentStep: 0,
     totalSteps: 0,
     percentage: 0,
-    currentQuery: '',
-    currentProvider: ''
+    currentQuery: "",
+    currentProvider: "",
   });
 
   // Form data
@@ -88,22 +88,24 @@
   // Create dashboard data from server props
   let dashboardData = $derived.by(() => {
     if (!business || !queries) return null;
-    
+
     return {
       business,
       queries,
       analytics: [], // TODO: Load analytics from server
-      queryHistories: Object.entries(queryHistories).map(([queryId, history]) => ({
-        query_id: queryId,
-        history
-      }))
+      queryHistories: Object.entries(queryHistories).map(
+        ([queryId, history]) => ({
+          query_id: queryId,
+          history,
+        })
+      ),
     };
   });
 
   // Create filtered dashboard data based on selected provider
   let filteredDashboardData = $derived.by(() => {
     if (!dashboardData || !selectedProvider) return dashboardData;
-    
+
     // For now, return unfiltered data since analytics are empty
     // This will be properly implemented when analytics are loaded from server
     return dashboardData;
@@ -131,26 +133,9 @@
     showCreateBusiness = true;
   }
 
-  // Form submission handlers (these will submit to form actions)
-  function handleCreateBusiness(event: Event) {
-    // Form submission will be handled by SvelteKit form action
-    // The form data is already bound to the form inputs
-  }
-
   function handleAddQuery(event: Event) {
     // Form submission will be handled by SvelteKit form action
     // The form data is already bound to the form inputs
-  }
-
-  function handleRunAnalysis(event: Event) {
-    // Form submission will be handled by SvelteKit form action
-  }
-
-  function handleAcceptQuerySuggestion(queryText: string) {
-    newQuery = queryText;
-    showQuerySuggestions = false;
-    isAIGeneratedQuery = true;
-    showAddQuery = true;
   }
 
   // Query suggestions handlers
@@ -164,11 +149,11 @@
   // TODO: Implement server-sent events or WebSocket for real-time updates
   function monitorAnalysisProgress() {
     if (!business || !runningAnalysis) return;
-    
+
     // Periodically refresh data by reloading the page
     // This ensures we get updated analysis status from server-side load function
     const checkInterval = setInterval(() => {
-      if (typeof window !== 'undefined') {
+      if (typeof window !== "undefined") {
         window.location.reload();
       }
     }, 10000); // Check every 10 seconds
@@ -184,14 +169,6 @@
     }
   });
 
-  // Weekly check should be handled server-side in the load function
-  // Remove client-side weekly check polling
-  async function checkWeeklyAnalysis() {
-    // This logic should be moved to +page.server.ts load function
-    // For now, we'll remove the client-side check
-    console.log('Weekly analysis check should be handled server-side');
-  }
-
   // UI helper functions
   function dismissError() {
     error = null;
@@ -206,29 +183,32 @@
   <div class="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50">
     <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
       <BusinessNameBar {business} />
-      
+
       <DashboardControls
         {llmProviders}
         {selectedProvider}
         hasQueries={queries.length > 0}
         runningAnalysis={!!runningAnalysis}
-        weeklyCheck={weeklyCheck || { canRun: false, lastRunDate: new Date().toISOString() }}
+        weeklyCheck={weeklyCheck || {
+          canRun: false,
+          lastRunDate: new Date().toISOString(),
+        }}
         onAddQuery={() => {
           isAIGeneratedQuery = false;
           showAddQuery = true;
         }}
         onRunAnalysis={() => {
           // This will be handled by a form action
-          const form = document.createElement('form');
-          form.method = 'POST';
-          form.action = '?/runAnalysis';
-          form.style.display = 'none';
-          
-          const businessIdInput = document.createElement('input');
-          businessIdInput.name = 'businessId';
+          const form = document.createElement("form");
+          form.method = "POST";
+          form.action = "?/runAnalysis";
+          form.style.display = "none";
+
+          const businessIdInput = document.createElement("input");
+          businessIdInput.name = "businessId";
           businessIdInput.value = business.id;
           form.appendChild(businessIdInput);
-          
+
           document.body.appendChild(form);
           form.submit();
         }}
@@ -236,15 +216,13 @@
       />
 
       {#if runningAnalysis}
-        <AnalysisProgressBar
-          progress={analysisProgress}
-        />
+        <AnalysisProgressBar progress={analysisProgress} />
       {/if}
 
       {#if filteredDashboardData?.queries && filteredDashboardData.queries.length > 0}
         <QueryGrid
           queries={filteredDashboardData.queries}
-          analytics={[]} 
+          analytics={[]}
           queryHistories={new Map(Object.entries(queryHistories))}
           onAddQuery={() => {
             isAIGeneratedQuery = false;
@@ -254,31 +232,44 @@
         />
       {:else}
         <div class="text-center py-12">
-          <h3 class="text-lg font-semibold text-gray-900 mb-4">Get Started with AI-Generated Query Suggestions</h3>          
+          <h3 class="text-lg font-semibold text-gray-900 mb-4">
+            Let's start by creating the queries you want to track
+          </h3>
           {#if suggestionError}
-            <div class="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg max-w-md mx-auto">
+            <div
+              class="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg max-w-md mx-auto"
+            >
               <p class="text-red-700 text-sm">{suggestionError}</p>
             </div>
           {/if}
-          
+
           {#if loadingSuggestions}
             <div class="space-y-4">
               <div class="flex items-center justify-center">
-                <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
-                <span class="ml-3 text-gray-600">Generating AI suggestions...</span>
+                <div
+                  class="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"
+                ></div>
+                <span class="ml-3 text-gray-600"
+                  >Generating AI suggestions...</span
+                >
               </div>
-              <p class="text-sm text-gray-500">This may take a few moments</p>
+              <p class="text-sm mt-4 text-gray-500">
+                This may take a few moments
+              </p>
             </div>
           {:else if querySuggestions.length > 0}
             <div class="max-w-2xl mx-auto">
-              <h4 class="text-md font-medium text-gray-900 mb-4">Suggested Queries for {business?.name}</h4>
               <div class="space-y-3">
                 {#each querySuggestions as suggestion, index}
-                  <div class="flex items-center justify-between p-4 bg-blue-50 rounded-lg border border-blue-200">
+                  <div
+                    class="flex items-center justify-between p-4 bg-blue-50 rounded-lg border border-blue-200"
+                  >
                     <div class="flex-1 text-left">
                       <p class="font-medium text-gray-900">{suggestion.text}</p>
                       {#if suggestion.reasoning}
-                        <p class="text-sm text-gray-600 mt-1">{suggestion.reasoning}</p>
+                        <p class="text-sm text-gray-600 mt-1">
+                          {suggestion.reasoning}
+                        </p>
                       {/if}
                     </div>
                     <div class="flex space-x-2 ml-4">
@@ -289,8 +280,18 @@
                         title="Add Query"
                         aria-label="Add Query"
                       >
-                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path>
+                        <svg
+                          class="w-4 h-4"
+                          fill="none"
+                          stroke="currentColor"
+                          viewBox="0 0 24 24"
+                        >
+                          <path
+                            stroke-linecap="round"
+                            stroke-linejoin="round"
+                            stroke-width="2"
+                            d="M12 4v16m8-8H4"
+                          ></path>
                         </svg>
                       </button>
                     </div>
@@ -298,24 +299,39 @@
                 {/each}
               </div>
               <div class="mt-6 space-x-4">
-                <form 
-                  method="POST" 
+                <form
+                  method="POST"
                   action="?/generateQuerySuggestions"
                   style="display: inline;"
                   use:enhance={({ formData }) => {
                     loadingSuggestions = true;
                     suggestionError = null;
-                    
+
                     return async ({ result, update }) => {
                       loadingSuggestions = false;
-                      
-                      if (result.type === 'success' && result.data && 'suggestions' in result.data) {
-                        const suggestions = (result.data as { suggestions: string[] }).suggestions;
-                        querySuggestions = suggestions.map((text: string) => ({ text, reasoning: '' }));
-                      } else if (result.type === 'failure' && result.data && 'error' in result.data) {
-                        suggestionError = (result.data as { error: string }).error || 'Failed to generate suggestions';
+
+                      if (
+                        result.type === "success" &&
+                        result.data &&
+                        "suggestions" in result.data
+                      ) {
+                        const suggestions = (
+                          result.data as { suggestions: string[] }
+                        ).suggestions;
+                        querySuggestions = suggestions.map((text: string) => ({
+                          text,
+                          reasoning: "",
+                        }));
+                      } else if (
+                        result.type === "failure" &&
+                        result.data &&
+                        "error" in result.data
+                      ) {
+                        suggestionError =
+                          (result.data as { error: string }).error ||
+                          "Failed to generate suggestions";
                       } else {
-                        suggestionError = 'Failed to generate suggestions';
+                        suggestionError = "Failed to generate suggestions";
                       }
                     };
                   }}
@@ -323,9 +339,22 @@
                   <button
                     type="submit"
                     disabled={loadingSuggestions}
-                    class="bg-gray-100 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-200 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    class="text-black px-4 py-2 rounded-lg border border-gray-400 disabled:opacity-50 inline-flex items-center gap-2 cursor-pointer"
                   >
-                    {loadingSuggestions ? 'Generating...' : 'Generate More'}
+                    <svg
+                      class="w-4 h-4"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                        stroke-width="2"
+                        d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+                      ></path>
+                    </svg>
+                    {loadingSuggestions ? "Generating..." : "Generate More"}
                   </button>
                 </form>
                 <button
@@ -334,31 +363,47 @@
                     isAIGeneratedQuery = false;
                     showAddQuery = true;
                   }}
-                  class="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors"
+                  class="bg-blue-700 text-white px-4 py-2 rounded-lg hover:bg-blue-800 transition-colors inline-flex items-center gap-2 cursor-pointer"
                 >
+                  <span>+</span>
                   Add Custom Query
                 </button>
               </div>
             </div>
           {:else}
             <div class="space-y-4">
-              <form 
-                method="POST" 
+              <form
+                method="POST"
                 action="?/generateQuerySuggestions"
                 use:enhance={({ formData }) => {
                   loadingSuggestions = true;
                   suggestionError = null;
-                  
+
                   return async ({ result, update }) => {
                     loadingSuggestions = false;
-                    
-                    if (result.type === 'success' && result.data && 'suggestions' in result.data) {
-                      const suggestions = (result.data as { suggestions: string[] }).suggestions;
-                      querySuggestions = suggestions.map((text: string) => ({ text, reasoning: '' }));
-                    } else if (result.type === 'failure' && result.data && 'error' in result.data) {
-                      suggestionError = (result.data as { error: string }).error || 'Failed to generate suggestions';
+
+                    if (
+                      result.type === "success" &&
+                      result.data &&
+                      "suggestions" in result.data
+                    ) {
+                      const suggestions = (
+                        result.data as { suggestions: string[] }
+                      ).suggestions;
+                      querySuggestions = suggestions.map((text: string) => ({
+                        text,
+                        reasoning: "",
+                      }));
+                    } else if (
+                      result.type === "failure" &&
+                      result.data &&
+                      "error" in result.data
+                    ) {
+                      suggestionError =
+                        (result.data as { error: string }).error ||
+                        "Failed to generate suggestions";
                     } else {
-                      suggestionError = 'Failed to generate suggestions';
+                      suggestionError = "Failed to generate suggestions";
                     }
                   };
                 }}
@@ -366,9 +411,10 @@
                 <button
                   type="submit"
                   disabled={loadingSuggestions}
-                  class="bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700 transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
+                  class="bg-black text-white px-6 py-3 rounded-lg hover:bg-gray-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer inline-flex items-center gap-2"
                 >
-                  {loadingSuggestions ? 'Generating...' : 'Get AI Suggestions'}
+                  <span>✨</span>
+                  {loadingSuggestions ? "Generating..." : "Get AI Suggestions"}
                 </button>
               </form>
               <p class="text-sm text-gray-500">Or</p>
@@ -378,9 +424,10 @@
                   isAIGeneratedQuery = false;
                   showAddQuery = true;
                 }}
-                class="bg-gray-100 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-200 transition-colors"
+                class="bg-blue-700 hover:bg-blue-800 text-white px-6 py-3 rounded-lg transition-colors cursor-pointer inline-flex items-center gap-2"
               >
-                Add Query Manually
+                <span>+</span>
+                Add Manually
               </button>
             </div>
           {/if}
@@ -390,7 +437,9 @@
 
     <!-- Error Toast -->
     {#if error}
-      <div class="fixed bottom-4 right-4 bg-red-500 text-white p-4 rounded-lg shadow-lg max-w-md">
+      <div
+        class="fixed bottom-4 right-4 bg-red-500 text-white p-4 rounded-lg shadow-lg max-w-md"
+      >
         <div class="flex justify-between items-start">
           <p class="text-sm">{error}</p>
           <button
@@ -408,12 +457,12 @@
     {#if showAddQuery}
       <AddQueryModal
         show={showAddQuery}
-        loading={loading}
-        newQuery={newQuery}
+        {loading}
+        {newQuery}
         isAIGenerated={isAIGeneratedQuery}
         onSubmit={() => {
           // Handle form submission via form action
-          handleAddQuery(new Event('submit'));
+          handleAddQuery(new Event("submit"));
         }}
         onClose={() => {
           showAddQuery = false;
@@ -436,24 +485,38 @@
 
     <!-- Modals for onboarding -->
     {#if showGoogleSearch}
-      <div class="fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center p-4 z-50">
-        <div class="bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-[80vh] overflow-y-auto">
+      <div
+        class="fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center p-4 z-50"
+      >
+        <div
+          class="bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-[80vh] overflow-y-auto"
+        >
           <div class="p-6">
             <div class="flex items-center justify-between mb-4">
-              <h3 class="text-lg font-semibold text-gray-900">Find Your Business</h3>
+              <h3 class="text-lg font-semibold text-gray-900">
+                Find Your Business
+              </h3>
               <button
                 onclick={() => (showGoogleSearch = false)}
                 class="text-gray-400 hover:text-gray-600 transition-colors cursor-pointer"
                 aria-label="Close modal"
               >
-                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                <svg
+                  class="w-6 h-6"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    stroke-width="2"
+                    d="M6 18L18 6M6 6l12 12"
+                  ></path>
                 </svg>
               </button>
             </div>
-            <GoogleBusinessSearch
-              onBusinessSelected={handleBusinessSelected}
-            />
+            <GoogleBusinessSearch onBusinessSelected={handleBusinessSelected} />
           </div>
         </div>
       </div>
@@ -462,7 +525,7 @@
     {#if showCreateBusiness}
       <CreateBusinessModal
         show={showCreateBusiness}
-        loading={loading}
+        {loading}
         business={newBusiness}
         onBackToSearch={() => {
           showCreateBusiness = false;
@@ -472,7 +535,9 @@
     {/if}
   </div>
 {:else}
-  <div class="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 flex items-center justify-center">
+  <div
+    class="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 flex items-center justify-center"
+  >
     <div class="text-center">
       <h1 class="text-2xl font-bold text-gray-900 mb-4">Loading...</h1>
       <p class="text-gray-600">Please wait while we load your dashboard.</p>

@@ -12,6 +12,7 @@
   export let onProviderChange: (provider: LLMProvider | null) => void
 </script>
 
+{#if hasQueries}
 <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
   <!-- LLM Provider Dropdown -->
   <LLMProviderDropdown 
@@ -69,4 +70,5 @@
       </div>
     </div>
   </div>
+{/if}
 {/if}

@@ -15,16 +15,17 @@ interface BusinessResearch {
 }
 
 export class QuerySuggestionService {
+  private static readonly MAX_RETRIES = 3
+  private static readonly TIMEOUT_MS = 10000 // 10 seconds
+
   static async generateQuerySuggestions(business: Business): Promise<QuerySuggestion[]> {
     try {
       // First, research the business to understand its characteristics
-      console.log(`Researching business: ${business.name}`)
-      const research = await this.researchBusiness(business)
-      console.log('Business research results:', research)
+      const research = await this.researchBusinessWithRetry(business)
       
       // Then generate suggestions based on the research
       const prompt = this.buildPrompt(business, research)
-      const content = await LLMService.queryLLM('Google Gemini', 'gemini-2.5-flash-lite', prompt, 'high')
+      const content = await this.queryLLMWithRetry('Google Gemini', 'gemini-2.5-flash-lite', prompt, 'high')
 
       if (!content) {
         throw new Error('No content received from LLM')
@@ -34,6 +35,62 @@ export class QuerySuggestionService {
     } catch (error) {
       console.error('Error generating query suggestions:', error)
       throw new Error('Failed to generate query suggestions')
+    }
+  }
+
+  private static async queryLLMWithRetry(
+    provider: string, 
+    model: string, 
+    prompt: string, 
+    quality: string,
+    attempt: number = 1
+  ): Promise<string> {
+    try {
+      console.log(`LLM query attempt ${attempt}/${this.MAX_RETRIES}`)
+      
+      const timeoutPromise = new Promise<never>((_, reject) => {
+        setTimeout(() => reject(new Error('Request timeout')), this.TIMEOUT_MS)
+      })
+      
+      const llmPromise = LLMService.queryLLM(provider, model, prompt, quality)
+      
+      const content = await Promise.race([llmPromise, timeoutPromise])
+      
+      if (!content) {
+        throw new Error('No content received from LLM')
+      }
+      
+      return content
+    } catch (error) {
+      console.error(`LLM query attempt ${attempt} failed:`, error)
+      
+      if (attempt < this.MAX_RETRIES) {
+        const delay = Math.pow(2, attempt - 1) * 1000 // Exponential backoff: 1s, 2s, 4s
+        console.log(`Retrying in ${delay}ms...`)
+        await new Promise(resolve => setTimeout(resolve, delay))
+        return this.queryLLMWithRetry(provider, model, prompt, quality, attempt + 1)
+      }
+      
+      throw new Error(`LLM query failed after ${this.MAX_RETRIES} attempts: ${error instanceof Error ? error.message : 'Unknown error'}`)
+    }
+  }
+
+  private static async researchBusinessWithRetry(business: Business, attempt: number = 1): Promise<BusinessResearch> {
+    try {
+      console.log(`Business research attempt ${attempt}/${this.MAX_RETRIES}`)
+      return await this.researchBusiness(business)
+    } catch (error) {
+      console.error(`Business research attempt ${attempt} failed:`, error)
+      
+      if (attempt < this.MAX_RETRIES) {
+        const delay = Math.pow(2, attempt - 1) * 1000 // Exponential backoff: 1s, 2s, 4s
+        console.log(`Retrying business research in ${delay}ms...`)
+        await new Promise(resolve => setTimeout(resolve, delay))
+        return this.researchBusinessWithRetry(business, attempt + 1)
+      }
+      
+      console.log('All business research attempts failed, using fallback research')
+      return this.createFallbackResearch(business)
     }
   }
 
@@ -68,21 +125,16 @@ Format your response as JSON:
 }`
 
     try {
-      console.log('Sending research request to LLM...')
-      const researchContent = await LLMService.queryLLM('Google Gemini', 'gemini-2.5-flash-lite', researchPrompt, 'high')
+      const researchContent = await this.queryLLMWithRetry('Google Gemini', 'gemini-2.5-flash-lite', researchPrompt, 'high')
       
       if (!researchContent) {
         throw new Error('No research content received')
       }
 
-      console.log('Raw research response:', researchContent)
       return this.parseBusinessResearch(researchContent)
     } catch (error) {
       console.error('Error researching business:', error)
-      console.log('Using fallback research based on business type')
-      
-      // Fallback research based on business type
-      return this.createFallbackResearch(business)
+      throw error // Let the retry logic handle this
     }
   }
 
@@ -186,6 +238,8 @@ Requirements:
 3. Use conversational language: "I need...", "Can you recommend...", "What are the best..."
 4. Include price positioning (${research.priceRange}) and popular amenities
 5. Vary locations: some with "${mainCity}", some without, avoid repeating same area
+6. Every query should be about a single thing, meaning ask for a hotel or a restaurant, never hotels or restaurants in the plural.
+7. Every query should always include a location reference.
 
 Examples:
 SHORT: "I need luxury hotels in Dublin", "Can you recommend budget accommodation?"

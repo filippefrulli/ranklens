@@ -129,11 +129,23 @@
         
         // Calculate aggregate statistics for each business
         competitors = Array.from(businessGroups.values()).map(business => {
-          const averageRank = business.allRanks.reduce((sum: number, rank: number) => sum + rank, 0) / business.allRanks.length
+          // Calculate average of provider averages (not weighted by individual ranks)
+          const providerAverages: number[] = []
+          const providerWeightedScores: number[] = []
+          
+          // Get the average rank from each provider's record
+          competitors.forEach(competitor => {
+            if (competitor.business_name === business.business_name) {
+              providerAverages.push(competitor.average_rank)
+              providerWeightedScores.push(competitor.weighted_score)
+            }
+          })
+          
+          const averageRank = providerAverages.reduce((sum, avg) => sum + avg, 0) / providerAverages.length
           const bestRank = Math.min(...business.allRanks)
           const worstRank = Math.max(...business.allRanks)
           const appearanceRate = (business.totalAppearances / business.totalProviderAttempts) * 100
-          const weightedScore = averageRank * (3.0 - 2.5 * (appearanceRate / 100))
+          const weightedScore = providerWeightedScores.reduce((sum, score) => sum + score, 0) / providerWeightedScores.length
           
           return {
             ...business,

@@ -80,10 +80,11 @@
   }
 </style>
 
+<a href="#main-content" class="sr-only focus:not-sr-only focus:fixed focus:top-2 focus:left-2 focus:z-50 focus:px-4 focus:py-2 focus:rounded-md focus:bg-blue-600 focus:text-white focus:shadow-lg">Skip to content</a>
 <div class="min-h-screen flex flex-col bg-white">
   <Navigation session={session} />
 
-  <main class="flex-1">
+  <main id="main-content" class="flex-1">
     {@render children()}
   </main>
 

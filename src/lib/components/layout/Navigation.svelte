@@ -27,7 +27,7 @@
         <div class="hidden sm:block">
           <UserDropdown {session} />
         </div>
-        <button class="md:hidden inline-flex items-center justify-center h-8 w-8 rounded-md border border-slate-300 bg-white text-slate-600 hover:bg-slate-50 cursor-pointer" onclick={toggle} aria-label="Toggle navigation">
+    <button class="md:hidden inline-flex items-center justify-center h-8 w-8 rounded-md border border-slate-300 bg-white text-slate-600 hover:bg-slate-50 focus-visible:ring-2 focus-visible:ring-blue-600 focus-visible:ring-offset-2 focus-visible:ring-offset-white cursor-pointer" onclick={toggle} aria-label="Toggle navigation" aria-expanded={mobileOpen} aria-controls="mobile-nav">
           {#if mobileOpen}
             <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
           {:else}
@@ -46,7 +46,7 @@
 
   <!-- Mobile panel -->
   {#if mobileOpen}
-    <div class="md:hidden border-t border-slate-200 bg-white/95 backdrop-blur-sm">
+    <div id="mobile-nav" class="md:hidden border-t border-slate-200 bg-white/95 backdrop-blur-sm" role="navigation" aria-label="Mobile navigation">
       <div class="px-3 py-3">
         {#if session}
           <UserDropdown {session} />

@@ -39,6 +39,7 @@
   let error = $state<string | null>(null)
   let placesService: any = null
   let mapDiv: HTMLDivElement
+  let selecting = $state(false)
 
   onMount(() => {
     loadGoogleMapsAPI()
@@ -115,26 +116,102 @@
     }
   }
 
-  function selectBusiness(place: GooglePlacesResult) {
-    // Extract city from formatted_address
-    const addressParts = place.formatted_address.split(', ')
-    let city = ''
-    
-    // Try to find the city (usually second to last part before country)
-    if (addressParts.length >= 2) {
-      city = addressParts[addressParts.length - 2].split(' ')[0] // Remove postal code
+  async function fetchPlaceDetails(placeId: string): Promise<any | null> {
+    if (!placesService) return null
+    return new Promise((resolve) => {
+      placesService.getDetails(
+        {
+          placeId,
+          fields: [
+            'address_components',
+            'name',
+            'place_id',
+            'types',
+            'geometry'
+          ]
+        },
+        (details: any, status: any) => {
+          const google = (window as any).google
+          if (status === google.maps.places.PlacesServiceStatus.OK) {
+            resolve(details)
+          } else {
+            resolve(null)
+          }
+        }
+      )
+    })
+  }
+
+  function extractCityFromComponents(components: any[]): string {
+    if (!components) return ''
+    // Helper to get long_name by type priority ordering
+    const find = (...types: string[]) => {
+      const comp = components.find(c => types.every(t => c.types.includes(t)))
+      return comp ? comp.long_name : ''
     }
 
-    // Get primary type and display name
+    // Priority list for city-like locality in many countries
+    const locality = find('locality')
+    const postalTown = find('postal_town') // UK / IE sometimes
+    const adminLevel2 = find('administrative_area_level_2')
+    const adminLevel1 = find('administrative_area_level_1')
+
+    let candidate = locality || postalTown || adminLevel2 || adminLevel1 || ''
+
+    // Special handling for Irish postal districts (e.g., "D08", "D02")
+    // If candidate matches D + 1-2 digits, try to use Dublin instead.
+    if (/^D\d{1,2}$/i.test(candidate)) {
+      // If any component explicitly has locality= Dublin, use that
+      const dublinComp = components.find(c => c.long_name === 'Dublin' || c.short_name === 'Dublin')
+      if (dublinComp) return 'Dublin'
+      // Fallback: Dublin
+      return 'Dublin'
+    }
+
+    // Some addresses may include things like "County Dublin"; trim County prefix
+    candidate = candidate.replace(/^County\s+/i, '')
+
+    return candidate
+  }
+
+  function extractCityFallbackFormattedAddress(formatted: string): string {
+    if (!formatted) return ''
+    const parts = formatted.split(',').map(p => p.trim())
+    if (parts.length < 2) return ''
+    // Heuristic: take second last meaningful part excluding postal codes like D08
+    for (let i = parts.length - 2; i >= 0; i--) {
+      const part = parts[i]
+      if (/^D\d{1,2}$/i.test(part)) continue
+      if (/^Dublin\s?\d{0,2}$/i.test(part)) return 'Dublin'
+      if (/^County\s+/i.test(part)) return part.replace(/^County\s+/i, '')
+      if (part) return part
+    }
+    return ''
+  }
+
+  async function selectBusiness(place: GooglePlacesResult) {
+    selecting = true
+    // Attempt structured details for reliable city extraction
+    let city = ''
+    try {
+      const details = await fetchPlaceDetails(place.place_id)
+      if (details?.address_components) {
+        city = extractCityFromComponents(details.address_components)
+      }
+      if (!city) {
+        city = extractCityFallbackFormattedAddress(place.formatted_address)
+      }
+    } catch (e) {
+      city = extractCityFallbackFormattedAddress(place.formatted_address)
+    } finally {
+      selecting = false
+    }
+
+    // Get primary type and display name (existing logic preserved)
     let primaryType = ''
     let primaryTypeDisplay = ''
-    
     if (place.types && place.types.length > 0) {
-      // Filter out generic types
-      const specificTypes = place.types.filter(type => 
-        !['establishment', 'point_of_interest'].includes(type)
-      )
-      
+      const specificTypes = place.types.filter(type => !['establishment', 'point_of_interest'].includes(type))
       if (specificTypes.length > 0) {
         primaryType = specificTypes[0]
         primaryTypeDisplay = formatBusinessType(primaryType)
@@ -144,12 +221,11 @@
     const selectedBusiness: SelectedBusiness = {
       name: place.name,
       google_place_id: place.place_id,
-      city: city,
+      city,
       google_primary_type: primaryType,
       google_primary_type_display: primaryTypeDisplay,
       google_types: place.types || []
     }
-
     onBusinessSelected(selectedBusiness)
   }
 
@@ -210,6 +286,7 @@
           <button
             onclick={() => selectBusiness(place)}
             class="w-full text-left p-3 border border-gray-200 rounded-md hover:bg-gray-50 hover:border-gray-300 transition-colors cursor-pointer"
+            aria-busy={selecting}
           >
             <div class="flex justify-between items-start">
               <div class="flex-1">

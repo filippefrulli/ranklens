@@ -40,7 +40,7 @@
     dispatch('click', e);
   }
 
-  const base = 'inline-flex items-center justify-center font-medium rounded-lg focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 focus-visible:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed transition-colors'
+  const base = 'inline-flex items-center justify-center font-medium rounded-lg focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 focus-visible:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed transition-colors cursor-pointer'
   const variants: Record<string,string> = {
     primary: 'bg-blue-600 text-white hover:bg-blue-700 shadow-sm',
     secondary: 'bg-slate-800 text-white hover:bg-slate-900',

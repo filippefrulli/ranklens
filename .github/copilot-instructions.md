@@ -18,3 +18,8 @@
 - Use TypeScript interfaces for data models
 - Make sure to use the server side when handling sensitive data or intensive tasks
 - Before making changes that involve more than one file, create an .md file describing what you are planning to do!
+
+## Interaction & Accessibility Conventions
+- All interactive elements (buttons, clickable anchors styled as buttons, icon buttons) must include the Tailwind `cursor-pointer` class unless they are disabled.
+- The shared `Button.svelte` component already includes `cursor-pointer`; add it manually when using raw `<button>` or `<a>` elements.
+- Disabled states should pair `disabled:cursor-not-allowed` (already in `Button.svelte`) to signal non-interaction.

@@ -83,9 +83,6 @@ export const actions: Actions = {
     const name = formData.get('name') as string
     const googlePlaceId = formData.get('google_place_id') as string
     const city = formData.get('city') as string
-    const googlePrimaryTypeDisplay = formData.get('google_primary_type_display') as string
-
-    console.log('Creating business:', { name, googlePlaceId, city, googlePrimaryTypeDisplay })
 
     if (!name || !googlePlaceId) {
       return fail(400, { error: 'Business name and Google Place ID are required' })
@@ -97,8 +94,7 @@ export const actions: Actions = {
       const business = await dbService.createBusiness({
         name,
         google_place_id: googlePlaceId,
-        city,
-        google_primary_type_display: googlePrimaryTypeDisplay
+        city
       })
 
       console.log('Business created successfully, redirecting...')

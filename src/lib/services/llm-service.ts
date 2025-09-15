@@ -1,6 +1,7 @@
 import type { LLMProvider } from '../types'
 import { env } from '$env/dynamic/private'
 import { GoogleGenAI } from '@google/genai'
+import { buildRankingPrompt, buildStandardizationPrompt } from './prompt-templates'
 
 export interface LLMResponse {
   rankedBusinesses: string[]
@@ -95,28 +96,7 @@ export class LLMService {
     }
   }
 
-  private static buildPrompt(query: string, userBusinessName: string, count: number): string {
-    return `You are a helpful assistant that provides ranked lists of businesses. You must always provide a complete ranked list without asking clarifying questions.
-
-Query: "${query}"
-
-IMPORTANT: Do not ask clarifying questions. Make reasonable assumptions and provide exactly ${count} businesses that best match this query. If the query mentions a location, include businesses in and around that area using your best judgment.
-
-Format your response as a simple numbered list with just the business names, like:
-
-1. Business Name One
-2. Business Name Two
-3. Business Name Three
-...
-
-Required guidelines:
-- Provide exactly ${count} businesses (no more, no less)
-- Provide business names as they are listed on google maps, and no other way.
-- Rank them from best to worst match for the query
-- Do not include explanations, questions, or additional text other than the business name
-- Only provide the numbered list of business names
-- Make reasonable assumptions if the query is ambiguous`
-  }
+  // buildPrompt removed: use buildRankingPrompt from prompt-templates
 
   private static extractBusinessNames(text: string): string[] {
     const lines = text.split('\n')
@@ -192,24 +172,9 @@ Required guidelines:
     }
 
     try {
-      const prompt = `You are a business name standardization assistant. Your task is to convert business names to their official Google Maps names and eliminate duplicates.
-
-IMPORTANT INSTRUCTIONS:
-1. For each business name provided, return the exact official Google Maps business name
-2. If a business name matches or is very similar to "${userBusinessName}", return exactly "${userBusinessName}"
-3. ELIMINATE DUPLICATES: If you see variations like "Wild Rover Tours" and "The Wild Rover Tours", or "Dublin Free Walking Tour" and "Dublin Free Walking Tours", only return ONE version - the most official Google Maps name
-4. Prefer names WITHOUT "The" prefix unless that's the official name (e.g., prefer "Wild Rover Tours" over "The Wild Rover Tours")
-5. Use singular forms unless plural is the official name (e.g., prefer "Dublin Free Walking Tour" over "Dublin Free Walking Tours")
-6. Only return the standardized names, one per line, no numbering or extra text
-7. If a business is not a real, Google Maps registered business, remove it from the list
-8. If multiple variations refer to the same business, only include it once
-
-Business names to standardize:
-${businessNames.map((name, index) => `${index + 1}. ${name}`).join('\n')}
-
-Return format: Just the unique standardized business names, one per line, with duplicates removed:`
-
-      const standardizedText = await this.callGemini(prompt)
+  const standardizedText = await this.callGemini(
+    buildStandardizationPrompt({ businessNames, userBusinessName })
+  )
       
       // Extract standardized names
       const standardizedNames = standardizedText
@@ -297,35 +262,6 @@ Return format: Just the unique standardized business names, one per line, with d
     return content
   }
 
-  private static async callAnthropic(prompt: string): Promise<string> {
-    const apiKey = env.ANTHROPIC_API_KEY
-    if (!apiKey) throw new Error('Anthropic API key not configured')
-
-    const resp = await withTimeout(
-      fetch('https://api.anthropic.com/v1/messages', {
-        method: 'POST',
-        headers: {
-          'x-api-key': apiKey,
-          'Content-Type': 'application/json',
-          'anthropic-version': '2023-06-01'
-        },
-        body: JSON.stringify({
-          model: 'claude-3-sonnet-20240229',
-          max_tokens: 500,
-          messages: [{ role: 'user', content: prompt }]
-        })
-      })
-    )
-    
-    if (!resp.ok) {
-      const t = await resp.text()
-      throw new Error(`Anthropic error ${resp.status}: ${t}`)
-    }
-    
-    const data = await resp.json()
-    return data?.content?.[0]?.text || ''
-  }
-
   private static async callGemini(prompt: string): Promise<string> {
     const apiKey = env.GEMINI_API_KEY
     if (!apiKey) throw new Error('Gemini API key not configured')
@@ -340,33 +276,6 @@ Return format: Just the unique standardized business names, one per line, with d
     )
     
     return resp.text || ''
-  }
-
-  private static async callPerplexity(prompt: string): Promise<string> {
-    const apiKey = env.PERPLEXITY_API_KEY
-    if (!apiKey) throw new Error('Perplexity API key not configured')
-
-    const resp = await withTimeout(
-      fetch('https://api.perplexity.ai/chat/completions', {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${apiKey}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          model: 'sonar',
-          messages: [{ role: 'user', content: prompt }]
-        })
-      })
-    )
-    
-    if (!resp.ok) {
-      const t = await resp.text()
-      throw new Error(`Perplexity error ${resp.status}: ${t}`)
-    }
-    
-    const data = await resp.json()
-    return data?.choices?.[0]?.message?.content || ''
   }
 
   // Calculate truncation limit based on user business rank
@@ -394,25 +303,16 @@ Return format: Just the unique standardized business names, one per line, with d
     console.log(`🤖 ${provider.name} request: "${query}" for "${businessName}"`)
     
     try {
-      const prompt = this.buildPrompt(query, businessName, requestCount)
+  const prompt = buildRankingPrompt({ query, userBusinessName: businessName, count: requestCount })
       let content = ''
       
       // Call appropriate LLM API directly
       switch (provider.name) {
-        case 'OpenAI GPT-5':
         case 'OpenAI':
           content = await this.callOpenAI(prompt, 'gpt-5-nano', 'low')
           break
-        case 'Anthropic Claude':
-        case 'Anthropic':
-          content = await this.callAnthropic(prompt)
-          break
-        case 'Google Gemini':
         case 'Gemini':
           content = await this.callGemini(prompt)
-          break
-        case 'Perplexity':
-          content = await this.callPerplexity(prompt)
           break
         default:
           throw new Error(`Unsupported provider: ${provider.name}`)

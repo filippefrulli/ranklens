@@ -282,74 +282,6 @@
             </Card>
           {/if}
 
-          <!-- Suggestions Card (visible when suggestions exist outside empty state) -->
-          {#if !filteredDashboardData?.queries?.length && querySuggestions.length === 0}
-            <!-- show nothing, handled in empty state -->
-          {:else if querySuggestions.length > 0 && filteredDashboardData?.queries?.length}
-            <Card padding="p-5">
-              <div class="flex items-start justify-between mb-4">
-                <div>
-                  <h3 class="text-sm font-semibold text-slate-700">AI Suggestions</h3>
-                  <p class="text-xs text-slate-500 mt-1">Click to add to your tracked list</p>
-                </div>
-                <form
-                  method="POST"
-                  action="?/generateQuerySuggestions"
-                  use:enhance={() => {
-                    loadingSuggestions = true;
-                    suggestionError = null;
-                    return async ({ result }) => {
-                      loadingSuggestions = false;
-                      if (result.type === 'success' && result.data && 'suggestions' in result.data) {
-                        const suggestions = (result.data as { suggestions: string[] }).suggestions;
-                        querySuggestions = suggestions.map((text: string) => ({ text, reasoning: '' }));
-                      } else if (result.type === 'failure' && result.data && 'error' in result.data) {
-                        suggestionError = (result.data as { error: string }).error || 'Failed to generate suggestions';
-                      } else {
-                        suggestionError = 'Failed to generate suggestions';
-                      }
-                    };
-                  }}
-                >
-                  <button type="submit" class="text-[11px] px-2.5 py-1.5 rounded-md border border-slate-300 text-slate-600 hover:bg-slate-100 cursor-pointer">Refresh</button>
-                </form>
-              </div>
-              <div class="space-y-2">
-                {#each querySuggestions as suggestion}
-                  <button type="button" class="w-full text-left p-3 rounded-md border border-slate-200 hover:border-blue-300 bg-white hover:bg-blue-50 transition-colors cursor-pointer group flex items-start justify-between gap-3" onclick={() => acceptQuerySuggestion(suggestion.text)}>
-                    <span class="text-sm text-slate-700 group-hover:text-slate-900">{suggestion.text}</span>
-                    <span class="inline-flex h-6 w-6 items-center justify-center rounded-full bg-blue-600 text-white text-xs font-medium group-hover:bg-blue-700">+</span>
-                  </button>
-                {/each}
-                <div class="pt-2">
-                  <form
-                    method="POST"
-                    action="?/generateQuerySuggestions"
-                    use:enhance={() => {
-                      loadingSuggestions = true;
-                      suggestionError = null;
-                      return async ({ result }) => {
-                        loadingSuggestions = false;
-                        if (result.type === 'success' && result.data && 'suggestions' in result.data) {
-                          const suggestions = (result.data as { suggestions: string[] }).suggestions;
-                          querySuggestions = suggestions.map((text: string) => ({ text, reasoning: '' }));
-                        } else if (result.type === 'failure' && result.data && 'error' in result.data) {
-                          suggestionError = (result.data as { error: string }).error || 'Failed to generate suggestions';
-                        } else {
-                          suggestionError = 'Failed to generate suggestions';
-                        }
-                      };
-                    }}
-                  >
-                    <button type="submit" class="text-[11px] px-2.5 py-1.5 rounded-md border border-slate-300 text-slate-600 hover:bg-slate-100 cursor-pointer inline-flex items-center gap-1">
-                      <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
-                      More
-                    </button>
-                  </form>
-                </div>
-              </div>
-            </Card>
-          {/if}
         </div>
         <!-- Full Width Tracked Queries Card -->
         <div class="lg:col-span-12">
@@ -490,6 +422,75 @@
             </div>
           </Card>
         </div>
+        <!-- Full Width AI Suggestions Card Moved Below Tracked Queries -->
+        {#if filteredDashboardData?.queries?.length}
+          <div class="lg:col-span-12">
+            <Card padding="p-6">
+              <div class="text-center mb-5">
+                <h3 class="text-sm font-semibold text-slate-700 tracking-wide">AI Suggestions</h3>
+                <p class="text-xs text-slate-500 mt-1">
+                  {#if querySuggestions.length > 0}
+                    Click a suggestion to add it to your tracked queries
+                  {:else if loadingSuggestions}
+                    Generating suggestions…
+                  {:else}
+                    Let AI propose new relevant search phrases based on what you already track
+                  {/if}
+                </p>
+              </div>
+              <div class="flex justify-center mb-4">
+                <form
+                  method="POST"
+                  action="?/generateQuerySuggestions"
+                  use:enhance={() => {
+                    loadingSuggestions = true;
+                    suggestionError = null;
+                    return async ({ result }) => {
+                      loadingSuggestions = false;
+                      if (result.type === 'success' && result.data && 'suggestions' in result.data) {
+                        const suggestions = (result.data as { suggestions: string[] }).suggestions;
+                        querySuggestions = suggestions.map((text: string) => ({ text, reasoning: '' }));
+                      } else if (result.type === 'failure' && result.data && 'error' in result.data) {
+                        suggestionError = (result.data as { error: string }).error || 'Failed to generate suggestions';
+                      } else {
+                        suggestionError = 'Failed to generate suggestions';
+                      }
+                    };
+                  }}
+                >
+                  <button type="submit" class="px-5 py-2.5 rounded-md text-sm font-medium bg-blue-600 text-white hover:bg-blue-700 transition-colors cursor-pointer inline-flex items-center gap-2 disabled:opacity-70 disabled:cursor-not-allowed" disabled={loadingSuggestions} aria-busy={loadingSuggestions}>
+                    <span>✨</span>
+                    {#if loadingSuggestions}
+                      {querySuggestions.length > 0 ? 'Refreshing…' : 'Generating…'}
+                    {:else}
+                      {querySuggestions.length > 0 ? 'Refresh Suggestions' : 'Generate Suggestions'}
+                    {/if}
+                  </button>
+                </form>
+              </div>
+              {#if suggestionError}
+                <div class="mb-3 p-3 bg-red-50 border border-red-200 rounded-md">
+                  <p class="text-xs text-red-700">{suggestionError}</p>
+                </div>
+              {/if}
+              {#if loadingSuggestions && querySuggestions.length === 0}
+                <div class="flex items-center gap-2 text-slate-600 text-sm py-4">
+                  <div class="animate-spin rounded-full h-5 w-5 border-2 border-blue-600 border-t-transparent"></div>
+                  Generating suggestions…
+                </div>
+              {:else}
+                <div class="space-y-2">
+                  {#each querySuggestions as suggestion}
+                    <button type="button" class="w-full text-left p-3 rounded-md border border-slate-200 hover:border-blue-300 bg-white hover:bg-blue-50 transition-colors cursor-pointer group flex items-start justify-between gap-3" onclick={() => acceptQuerySuggestion(suggestion.text)}>
+                      <span class="text-sm text-slate-700 group-hover:text-slate-900">{suggestion.text}</span>
+                      <span class="inline-flex h-6 w-6 items-center justify-center rounded-full bg-blue-600 text-white text-xs font-medium group-hover:bg-blue-700">+</span>
+                    </button>
+                  {/each}
+                </div>
+              {/if}
+            </Card>
+          </div>
+        {/if}
       </div>
     </main>
 

@@ -3,17 +3,11 @@
   
   export let rankingResults: any[]
 
+  import { getProviderDisplayName } from '$lib/constants/llm'
+
   function formatLLMName(llmName: string): string {
     if (!llmName) return 'Unknown Provider'
-    
-    switch (llmName.toLowerCase()) {
-      case 'openai':
-        return 'OpenAI GPT-5'
-      case 'gemini':
-        return 'Google Gemini'
-      default:
-        return llmName
-    }
+    return getProviderDisplayName(llmName)
   }
 
   // Aggregate results by LLM provider

@@ -22,17 +22,22 @@
   let isOpen = $state(false)
   let dropdownRef: HTMLDivElement
 
-  // Provider icons mapping
+  import { normalizeProvider, LLMProviderId } from '$lib/constants/llm'
+
+  // Provider icons mapping using canonical provider id
   function getProviderIconPath(providerName: string): string {
-    switch (providerName.toLowerCase()) {
-      case 'openai gpt-5':
-      case 'openai':
-        return '/images/providers/openai.svg'
-      case 'google gemini':
-      case 'gemini':
-        return '/images/providers/gemini.png'
-      default:
-        return '/images/providers/all.png'
+    try {
+      const { id } = normalizeProvider(providerName)
+      switch (id) {
+        case LLMProviderId.OPENAI:
+          return '/images/providers/openai.svg'
+        case LLMProviderId.GEMINI:
+          return '/images/providers/gemini.png'
+        default:
+          return '/images/providers/all.png'
+      }
+    } catch {
+      return '/images/providers/all.png'
     }
   }
 

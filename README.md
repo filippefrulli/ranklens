@@ -2,11 +2,11 @@
 
 **Track your business rankings across all major LLM platforms.**
 
-RankLens helps businesses understand how they rank when customers ask AI assistants for recommendations. Get comprehensive analytics from OpenAI GPT-5 and Google Gemini
+RankLens helps businesses understand how they rank when customers ask AI assistants for recommendations. Get comprehensive analytics across leading LLM providers (OpenAI, Google Gemini).
 
 ## 🎯 What RankLens Does
 
-- **Multi-LLM Analysis**: Query 5 major LLM providers simultaneously
+- **Multi-LLM Analysis**: Query multiple major LLM providers simultaneously
 - **Custom Search Queries**: Define up to 5 business-relevant search queries
 - **Automated Testing**: Each query runs 5 times per LLM for statistical accuracy
 - **Ranking Analytics**: Calculate average rankings and identify top competitors
@@ -25,7 +25,7 @@ RankLens helps businesses understand how they rank when customers ask AI assista
 ### Prerequisites
 - Node.js (v22+ recommended)
 - Supabase account
-- API keys for LLM providers (OpenAI, Google)
+- API keys for LLM providers (e.g. OpenAI, Google Gemini)
 
 ### Installation
 

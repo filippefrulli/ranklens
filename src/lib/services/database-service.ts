@@ -201,9 +201,10 @@ export class DatabaseService {
   }
 
   async ensureRequiredProvidersActive(): Promise<void> {
-    // Ensure both OpenAI GPT-5 and Google Gemini are active
+    // Ensure core providers are active using canonical display names
+    // (Models are managed separately; we only seed provider identities here)
     const requiredProviders = [
-      { name: 'OpenAI GPT-5' },
+      { name: 'OpenAI' },
       { name: 'Google Gemini' }
     ]
 

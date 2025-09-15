@@ -1,4 +1,5 @@
 import { LLMService } from './llm-service'
+import { DEFAULT_MODELS, LLMProviderId, PROVIDER_DISPLAY_NAMES } from '$lib/constants/llm'
 
 export interface BusinessNameStandardization {
   originalName: string
@@ -54,8 +55,8 @@ export class BusinessNameStandardizationService {
       
       // Use the existing LLM service to standardize names
       const response = await LLMService.queryLLM(
-        'OpenAI',
-        'gpt-5-nano',
+        LLMProviderId.OPENAI,
+        DEFAULT_MODELS.OPENAI,
         prompt,
         'low'
       )
@@ -75,7 +76,7 @@ export class BusinessNameStandardizationService {
 
       results.push(...standardizations)
       
-      console.log(`✅ Standardized ${standardizations.length} business names`)
+  console.log(`✅ Standardized ${standardizations.length} business names via ${PROVIDER_DISPLAY_NAMES[LLMProviderId.OPENAI]}`)
       return results
 
     } catch (error) {

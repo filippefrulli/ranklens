@@ -2,6 +2,7 @@ import type { LLMProvider } from '../types'
 import { env } from '$env/dynamic/private'
 import { GoogleGenAI } from '@google/genai'
 import { buildRankingPrompt, buildStandardizationPrompt } from './prompt-templates'
+import { normalizeProvider, LLMProviderId, getDefaultModel } from '$lib/constants/llm'
 
 export interface LLMResponse {
   rankedBusinesses: string[]
@@ -79,19 +80,18 @@ export class LLMService {
 
   // Public method for general LLM queries
   public static async queryLLM(providerName: string, model: string, prompt: string, reasoning: string): Promise<string> {
+    const { id, model: resolvedModel, displayName } = normalizeProvider(providerName, model)
     try {
-      // For now, just use OpenAI as the default for query suggestions
-      // You can extend this to support other providers if needed
-      switch (providerName) {
-        case 'OpenAI':
-          return await this.callOpenAI(prompt, model, reasoning)
-        case 'Gemini':
-          return await this.callGemini(prompt)
+      switch (id) {
+        case LLMProviderId.OPENAI:
+          return await this.callOpenAI(prompt, resolvedModel, reasoning)
+        case LLMProviderId.GEMINI:
+          return await this.callGemini(prompt, resolvedModel)
         default:
-          throw new Error(`Unsupported LLM provider: ${providerName}`)
+          throw new Error(`Unsupported LLM provider: ${displayName}`)
       }
     } catch (error) {
-      console.error(`Error querying ${providerName}:`, error)
+      console.error(`Error querying ${displayName}:`, error)
       throw error
     }
   }
@@ -262,19 +262,16 @@ export class LLMService {
     return content
   }
 
-  private static async callGemini(prompt: string): Promise<string> {
+  private static async callGemini(prompt: string, model?: string): Promise<string> {
     const apiKey = env.GEMINI_API_KEY
     if (!apiKey) throw new Error('Gemini API key not configured')
-
     const ai = new GoogleGenAI({ apiKey })
-
     const resp = await withTimeout(
       ai.models.generateContent({
-        model: "gemini-2.5-flash-lite",
+        model: model || getDefaultModel(LLMProviderId.GEMINI),
         contents: prompt,
       })
     )
-    
     return resp.text || ''
   }
 
@@ -306,13 +303,15 @@ export class LLMService {
   const prompt = buildRankingPrompt({ query, userBusinessName: businessName, count: requestCount })
       let content = ''
       
-      // Call appropriate LLM API directly
-      switch (provider.name) {
-        case 'OpenAI':
-          content = await this.callOpenAI(prompt, 'gpt-5-nano', 'low')
+      // Normalize provider name & get canonical model
+      const { id, model: canonicalModel, displayName } = normalizeProvider(provider.name)
+
+      switch (id) {
+        case LLMProviderId.OPENAI:
+          content = await this.callOpenAI(prompt, canonicalModel, 'low')
           break
-        case 'Gemini':
-          content = await this.callGemini(prompt)
+        case LLMProviderId.GEMINI:
+          content = await this.callGemini(prompt, canonicalModel)
           break
         default:
           throw new Error(`Unsupported provider: ${provider.name}`)
@@ -333,7 +332,7 @@ export class LLMService {
       const rankedBusinesses = standardizedBusinesses.slice(0, truncationLimit)
 
       const responseTime = Date.now() - startTime
-      console.log(`✅ ${provider.name} success: Found ${rankedBusinesses.length} businesses, ${businessName} rank ${foundResult.rank || 'not found'} (${responseTime}ms)`)
+  console.log(`✅ ${provider.name} → ${rankedBusinesses.length} businesses (rank: ${foundResult.rank || 'n/a'}) in ${responseTime}ms`)
       
       return {
         rankedBusinesses,
@@ -346,7 +345,7 @@ export class LLMService {
       
     } catch (err) {
       const responseTime = Date.now() - startTime
-      console.error(`❌ ${provider.name} failed: ${err instanceof Error ? err.message : err} (${responseTime}ms)`)
+  console.error(`❌ ${provider.name} failed: ${err instanceof Error ? err.message : err} (${responseTime}ms)`)
       
       return {
         rankedBusinesses: [],

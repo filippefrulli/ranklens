@@ -1,5 +1,6 @@
 import type { Business } from '../types'
 import { LLMService } from './llm-service'
+import { LLMProviderId, DEFAULT_MODELS } from '$lib/constants/llm'
 
 interface QuerySuggestion {
   text: string
@@ -19,7 +20,7 @@ export class QuerySuggestionService {
 
   // Then generate suggestions based on the narrative research
   const prompt = this.buildPrompt(business, researchNarrative)
-      const content = await this.queryLLMWithRetry('OpenAI', 'gpt-5-mini', prompt, 'low')
+  const content = await this.queryLLMWithRetry(LLMProviderId.OPENAI, DEFAULT_MODELS.OPENAI, prompt, 'low')
 
       if (!content) {
         throw new Error('No content received from LLM')
@@ -107,7 +108,7 @@ Rules:
 `
 
     try {
-      const researchContent = await this.queryLLMWithRetry('OpenAI', 'gpt-5-mini', researchPrompt, 'medium')
+  const researchContent = await this.queryLLMWithRetry(LLMProviderId.OPENAI, DEFAULT_MODELS.OPENAI, researchPrompt, 'medium')
       
       if (!researchContent) {
         throw new Error('No research content received')

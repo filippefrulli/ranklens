@@ -33,6 +33,7 @@
 
   // Get user from layout data
   const user = $derived(data.user)
+  import { PROVIDER_DISPLAY_NAMES, LLMProviderId } from '$lib/constants/llm'
 </script>
 
 {#if user}
@@ -80,8 +81,8 @@
       <!-- Logos / Providers Strip -->
       <section class="mt-20">
         <div class="flex flex-wrap items-center justify-center gap-x-10 gap-y-6 opacity-80">
-          <div class="flex items-center gap-2 text-slate-500 text-sm"><span class="h-2.5 w-2.5 rounded-full bg-gradient-to-br from-blue-500 to-blue-700"></span>OpenAI</div>
-          <div class="flex items-center gap-2 text-slate-500 text-sm"><span class="h-2.5 w-2.5 rounded-full bg-gradient-to-br from-indigo-500 to-indigo-700"></span>Gemini</div>
+          <div class="flex items-center gap-2 text-slate-500 text-sm"><span class="h-2.5 w-2.5 rounded-full bg-gradient-to-br from-blue-500 to-blue-700"></span>{PROVIDER_DISPLAY_NAMES[LLMProviderId.OPENAI]}</div>
+          <div class="flex items-center gap-2 text-slate-500 text-sm"><span class="h-2.5 w-2.5 rounded-full bg-gradient-to-br from-indigo-500 to-indigo-700"></span>{PROVIDER_DISPLAY_NAMES[LLMProviderId.GEMINI]}</div>
         </div>
       </section>
 
@@ -93,7 +94,7 @@
               <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2"/></svg>
             </div>
             <h3 class="text-base font-semibold text-slate-800 mb-2">Multi-LLM Coverage</h3>
-            <p class="text-sm text-slate-600 leading-relaxed flex-1">Benchmark visibility across OpenAI and Google Gemini in one unified workflow.</p>
+            <p class="text-sm text-slate-600 leading-relaxed flex-1">Benchmark visibility across {PROVIDER_DISPLAY_NAMES[LLMProviderId.OPENAI]} and {PROVIDER_DISPLAY_NAMES[LLMProviderId.GEMINI]} in one unified workflow.</p>
           </Card>
           <Card variant="glass" padding="p-6" custom="flex flex-col">
             <div class="h-12 w-12 rounded-lg bg-emerald-100 text-emerald-600 flex items-center justify-center mb-4">

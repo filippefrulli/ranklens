@@ -9,6 +9,7 @@
   } from "$env/static/public";
   import { goto } from "$app/navigation";
   import { onMount } from "svelte";
+  import { PROVIDER_DISPLAY_NAMES, LLMProviderId } from '$lib/constants/llm'
 
   interface Props {
     data: PageData;
@@ -63,7 +64,7 @@
             <p class="text-3xl font-semibold text-slate-800 leading-tight">Understand how AI recommends (or ignores) your business.</p>
           </div>
           <ul class="space-y-5 text-sm text-slate-600">
-            <li class="flex items-start gap-3"><span class="inline-flex h-6 w-6 items-center justify-center rounded-full bg-blue-600 text-white text-[11px] font-medium">1</span><span>Track rankings across OpenAI and Google Gemini.</span></li>
+            <li class="flex items-start gap-3"><span class="inline-flex h-6 w-6 items-center justify-center rounded-full bg-blue-600 text-white text-[11px] font-medium">1</span><span>Track rankings across {PROVIDER_DISPLAY_NAMES[LLMProviderId.OPENAI]} and {PROVIDER_DISPLAY_NAMES[LLMProviderId.GEMINI]}.</span></li>
             <li class="flex items-start gap-3"><span class="inline-flex h-6 w-6 items-center justify-center rounded-full bg-blue-600 text-white text-[11px] font-medium">2</span><span>Monitor competitor visibility and discover who dominates queries.</span></li>
             <li class="flex items-start gap-3"><span class="inline-flex h-6 w-6 items-center justify-center rounded-full bg-blue-600 text-white text-[11px] font-medium">3</span><span>Run periodic analyses to see improvement trends.</span></li>
           </ul>

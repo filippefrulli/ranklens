@@ -3,17 +3,11 @@
   
   export let results: any[]
 
+  import { getProviderDisplayName } from '$lib/constants/llm'
+
   function formatLLMName(llmName: string): string {
     if (!llmName) return 'Unknown Provider'
-    
-    switch (llmName.toLowerCase()) {
-      case 'openai':
-        return 'OpenAI'
-      case 'gemini':
-        return 'Google Gemini'
-      default:
-        return llmName
-    }
+    return getProviderDisplayName(llmName)
   }
 
   function getStatusBadgeClass(status: string): string {

@@ -9,12 +9,8 @@
     switch (llmName.toLowerCase()) {
       case 'openai':
         return 'OpenAI'
-      case 'anthropic':
-        return 'Anthropic Claude'
       case 'gemini':
         return 'Google Gemini'
-      case 'perplexity':
-        return 'Perplexity'
       default:
         return llmName
     }

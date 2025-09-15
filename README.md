@@ -2,7 +2,7 @@
 
 **Track your business rankings across all major LLM platforms.**
 
-RankLens helps businesses understand how they rank when customers ask AI assistants for recommendations. Get comprehensive analytics from OpenAI GPT-5, Anthropic Claude, Google Gemini, and Perplexity AI.
+RankLens helps businesses understand how they rank when customers ask AI assistants for recommendations. Get comprehensive analytics from OpenAI GPT-5 and Google Gemini
 
 ## 🎯 What RankLens Does
 
@@ -25,7 +25,7 @@ RankLens helps businesses understand how they rank when customers ask AI assista
 ### Prerequisites
 - Node.js (v22+ recommended)
 - Supabase account
-- API keys for LLM providers (OpenAI, Anthropic, Google, Perplexity)
+- API keys for LLM providers (OpenAI, Google)
 
 ### Installation
 
@@ -47,9 +47,7 @@ VITE_SUPABASE_ANON_KEY=your_supabase_anon_key
 
 # LLM API Keys
 OPENAI_API_KEY=your_openai_api_key
-ANTHROPIC_API_KEY=your_anthropic_api_key
 GOOGLE_API_KEY=your_google_api_key
-PERPLEXITY_API_KEY=your_perplexity_api_key
 ```
 
 4. Set up your Supabase database using the schema in `database/schema.sql`

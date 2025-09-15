@@ -31,11 +31,6 @@
       case 'google gemini':
       case 'gemini':
         return '/images/providers/gemini.png'
-      case 'anthropic claude':
-      case 'anthropic':
-        return '/images/providers/anthropic.svg'
-      case 'perplexity':
-        return '/images/providers/perplexity.svg'
       default:
         return '/images/providers/all.png'
     }

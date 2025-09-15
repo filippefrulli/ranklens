@@ -1,32 +1,19 @@
 <script lang="ts">
-  interface ProgressState {
-    currentStep: number
-    totalSteps: number
-    percentage: number
-    currentQuery: string
-    currentProvider: string
-  }
+  interface EstimationState { totalSeconds: number }
+  const { estimation }: { estimation: EstimationState } = $props()
 
-  const { progress }: { progress: ProgressState } = $props()
+  function formatTime(sec: number): string {
+    const m = Math.floor(sec / 60)
+    const s = sec % 60
+    if (m > 0) return `${m}m ${s}s`
+    return `${s}s`
+  }
 </script>
 
-<div class="bg-white rounded-lg shadow-md p-6 mb-6">
-  <div class="flex items-center justify-between mb-4">
-    <h3 class="text-lg font-semibold text-gray-900">Analysis in Progress</h3>
-    <span class="text-sm font-medium text-gray-600">{progress.percentage}%</span>
-  </div>
-  
-  <!-- Progress Bar -->
-  <div class="w-full bg-gray-200 rounded-full h-3 mb-4">
-    <div 
-      class="bg-blue-600 h-3 rounded-full transition-all duration-300 ease-out"
-      style="width: {progress.percentage}%"
-    ></div>
-  </div>
-  
-  <!-- Animation for active state -->
-  <div class="mt-8 flex items-center justify-center">
-    <div class="animate-spin rounded-full h-5 w-5 border-b-2 border-blue-600 mr-2"></div>
-    <span class="text-sm text-gray-600">Running analysis...</span>
+<div class="bg-white rounded-md border border-slate-200 p-3 flex items-center gap-3 w-full max-w-sm">
+  <div class="h-6 w-6 rounded-full border-2 border-slate-200 border-t-blue-600 animate-spin"></div>
+  <div class="flex-1 min-w-0">
+    <p class="text-md font-medium text-slate-700 leading-snug">Analysis running…</p>
+    <p class="text-[11px] text-slate-500 truncate">Estimated time: {formatTime(estimation.totalSeconds)}</p>
   </div>
 </div>

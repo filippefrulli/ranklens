@@ -64,7 +64,6 @@ const PROVIDER_ALIASES: Record<string, { id: LLMProviderId; modelOverride?: stri
   'openai gpt5': { id: LLMProviderId.OPENAI },
   'openai gpt-5 nano': { id: LLMProviderId.OPENAI, modelOverride: 'gpt-5-nano' },
   'openai gpt-5-nano': { id: LLMProviderId.OPENAI, modelOverride: 'gpt-5-nano' },
-  'openai gpt-4.1-mini': { id: LLMProviderId.OPENAI, modelOverride: 'gpt-4.1-mini' },
   // Gemini variants
   'gemini': { id: LLMProviderId.GEMINI },
   'google gemini': { id: LLMProviderId.GEMINI },

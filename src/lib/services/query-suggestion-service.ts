@@ -11,7 +11,7 @@ type BusinessResearchNarrative = string
 
 export class QuerySuggestionService {
   private static readonly MAX_RETRIES = 3
-  private static readonly TIMEOUT_MS = 150000 // 10 seconds
+  private static readonly TIMEOUT_MS = 150000 // 15 seconds
 
   static async generateQuerySuggestions(business: Business): Promise<QuerySuggestion[]> {
     try {

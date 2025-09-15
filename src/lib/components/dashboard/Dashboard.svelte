@@ -11,8 +11,7 @@
   } from "../../types";
   import { enhance } from "$app/forms";
   import GoogleBusinessSearch from "../business/GoogleBusinessSearch.svelte";
-  import BusinessNameBar from "./BusinessNameBar.svelte";
-  import DashboardControls from "./DashboardControls.svelte";
+
   import QueryGrid from "./QueryGrid.svelte";
   import BusinessRegistration from "./BusinessRegistration.svelte";
   import AddQueryModal from "./AddQueryModal.svelte";
@@ -67,17 +66,40 @@
   let loadingSuggestions = $state(false);
   let suggestionError = $state<string | null>(null);
 
-  // Progress tracking (derived from runningAnalysis + query histories)
-  let analysisProgress = $derived.by(() => {
-    if (!runningAnalysis) {
-      return { currentStep: 0, totalSteps: 0, percentage: 0, currentQuery: '', currentProvider: '' }
+  // Static estimated time logic (60s per query, no live progress / countdown)
+  const SECONDS_PER_QUERY = 60;
+  let estimation = $state<{ totalSeconds: number }>({ totalSeconds: 0 });
+
+  $effect(() => {
+    if (runningAnalysis) {
+      const totalSeconds = (runningAnalysis.total_queries || queries.length) * SECONDS_PER_QUERY;
+      estimation = { totalSeconds };
+    } else {
+      estimation = { totalSeconds: 0 };
     }
-    // Prefer precise counters from runningAnalysis if available
-    const totalSteps = runningAnalysis.total_llm_calls || (runningAnalysis.total_queries * (llmProviders?.length || 1))
-    const completed = runningAnalysis.completed_llm_calls || runningAnalysis.completed_queries * (llmProviders?.length || 1)
-    const percentage = totalSteps === 0 ? 0 : Math.min(100, Math.round((completed / totalSteps) * 100))
-    return { currentStep: completed, totalSteps, percentage, currentQuery: '', currentProvider: '' }
-  })
+  });
+
+  // Auto-hide analysis indicator when either:
+  // 1. A future server refresh sets status to completed (handled by conditional block), or
+  // 2. Local optimistic timer exceeds estimated time + small buffer.
+  let hideTimeout: any;
+  $effect(() => {
+    if (runningAnalysis) {
+      // Clear any previous timeout
+      if (hideTimeout) clearTimeout(hideTimeout);
+      const bufferMs = 15_000; // 15s buffer beyond estimate
+      const durationMs = estimation.totalSeconds * 1000 + bufferMs;
+      hideTimeout = setTimeout(() => {
+        // If still marked running (optimistic) after estimate + buffer, hide it
+        if (runningAnalysis && runningAnalysis.status === 'running') {
+          runningAnalysis = null;
+        }
+      }, durationMs);
+      return () => hideTimeout && clearTimeout(hideTimeout);
+    } else if (hideTimeout) {
+      clearTimeout(hideTimeout);
+    }
+  });
 
   // Form data
   let newBusiness = $state({
@@ -145,29 +167,7 @@
     showAddQuery = true;
   }
 
-  // Progress monitoring - handled server-side with periodic refresh
-  // TODO: Implement server-sent events or WebSocket for real-time updates
-  function monitorAnalysisProgress() {
-    if (!business || !runningAnalysis) return;
-
-    // Periodically refresh data by reloading the page
-    // This ensures we get updated analysis status from server-side load function
-    const checkInterval = setInterval(() => {
-      if (typeof window !== "undefined") {
-        window.location.reload();
-      }
-    }, 10000); // Check every 10 seconds
-
-    return () => clearInterval(checkInterval);
-  }
-
-  // Start monitoring if analysis is already running
-  $effect(() => {
-    if (runningAnalysis) {
-      const cleanup = monitorAnalysisProgress();
-      return cleanup;
-    }
-  });
+  // Removed auto-reload logic; page stays in place during analysis.
 
   // UI helper functions
   function dismissError() {
@@ -185,47 +185,118 @@
       <!-- Business Summary / Header Card -->
       <div class="grid gap-6 lg:grid-cols-12">
         <div class="lg:col-span-12 space-y-6">
-          <Card variant="glass" padding="p-6" custom="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+          <Card
+            variant="glass"
+            padding="p-6"
+            custom="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4"
+          >
             <div>
-              <h2 class="text-xl font-semibold text-gray-900 flex items-center gap-2">
-                <span class="inline-flex h-10 w-10 items-center justify-center rounded-lg bg-blue-100 text-blue-600 font-bold text-lg">{business.name?.[0] || 'B'}</span>
+              <h2
+                class="text-xl font-semibold text-gray-900 flex items-center gap-2"
+              >
+                <span
+                  class="inline-flex h-10 w-10 items-center justify-center rounded-lg bg-blue-100 text-blue-600 font-bold text-lg"
+                  >{business.name?.[0] || "B"}</span
+                >
                 {business.name}
               </h2>
               <p class="text-sm text-gray-600 mt-1 flex items-center gap-2">
-                <svg class="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
-                {business.city || 'Location N/A'}
-                {#if business.google_primary_type_display}
-                  <span class="inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-700 border border-slate-200">{business.google_primary_type_display}</span>
-                {/if}
+                <svg
+                  class="w-4 h-4 text-gray-400"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                  ><path
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    stroke-width="2"
+                    d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"
+                  /><path
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    stroke-width="2"
+                    d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"
+                  /></svg
+                >
+                {business.city || "Location N/A"}
               </p>
             </div>
             <div class="flex items-center gap-3">
-              <Button variant="subtle" size="md" ariaLabel="Change business" on:click={() => (showGoogleSearch = true)}>Change</Button>
-              <Button variant="primary" size="md" ariaLabel="Add query" on:click={() => { isAIGeneratedQuery = false; showAddQuery = true; }}>Add Query</Button>
+              <Button
+                variant="subtle"
+                size="md"
+                ariaLabel="Change business"
+                on:click={() => (showGoogleSearch = true)}>Change</Button
+              >
+              <Button
+                variant="primary"
+                size="md"
+                ariaLabel="Add query"
+                on:click={() => {
+                  isAIGeneratedQuery = false;
+                  showAddQuery = true;
+                }}>+ Add Query</Button
+              >
             </div>
           </Card>
 
           <!-- Metrics Strip -->
           <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
             <Card radius="lg" padding="p-4">
-              <p class="text-xs uppercase tracking-wide text-slate-500 font-medium">Avg Rank</p>
+              <p
+                class="text-xs uppercase tracking-wide text-slate-500 font-medium"
+              >
+                Avg Rank
+              </p>
               <p class="mt-2 text-2xl font-semibold text-slate-800">—</p>
-              <p class="text-[11px] text-slate-500 mt-1">No data yet</p>
             </Card>
             <Card radius="lg" padding="p-4">
-              <p class="text-xs uppercase tracking-wide text-slate-500 font-medium">Queries</p>
-              <p class="mt-2 text-2xl font-semibold text-slate-800">{queries.length}</p>
-              <p class="text-[11px] text-slate-500 mt-1">Tracked now</p>
+              <p
+                class="text-xs uppercase tracking-wide text-slate-500 font-medium"
+              >
+                Queries
+              </p>
+              <p class="mt-2 text-2xl font-semibold text-slate-800">
+                {queries.length}
+              </p>
             </Card>
             <Card radius="lg" padding="p-4">
-              <p class="text-xs uppercase tracking-wide text-slate-500 font-medium">Last Analysis</p>
-              <p class="mt-2 text-lg font-semibold text-slate-800">{runningAnalysis ? 'Running…' : (weeklyCheck?.lastRunDate ? new Date(weeklyCheck.lastRunDate).toLocaleDateString() : 'Never')}</p>
-              <p class="text-[11px] text-slate-500 mt-1">Status</p>
+              <p
+                class="text-xs uppercase tracking-wide text-slate-500 font-medium"
+              >
+                Last Analysis
+              </p>
+              <p class="mt-2 text-lg font-semibold text-slate-800">
+                {runningAnalysis
+                  ? "Running…"
+                  : weeklyCheck?.lastRunDate
+                    ? new Date(weeklyCheck.lastRunDate).toLocaleDateString()
+                    : "Never"}
+              </p>
             </Card>
+
             <Card radius="lg" padding="p-4">
-              <p class="text-xs uppercase tracking-wide text-slate-500 font-medium">Providers</p>
-              <p class="mt-2 text-2xl font-semibold text-slate-800">{llmProviders.length || 0}</p>
-              <p class="text-[11px] text-slate-500 mt-1">Configured</p>
+              <p
+                class="text-xs uppercase tracking-wide text-slate-500 font-medium"
+              >
+                Providers
+              </p>
+              <div class="mt-2 flex items-center gap-2 h-8">
+                {#if llmProviders && llmProviders.length > 0}
+                  <!-- Show OpenAI and Gemini logos if those providers exist -->
+                  {#if llmProviders.some(p => p.name.toLowerCase().includes('openai'))}
+                    <img src="/images/providers/openai.svg" alt="OpenAI" class="h-8 w-8 object-contain" loading="lazy" />
+                  {/if}
+                  {#if llmProviders.some(p => p.name.toLowerCase().includes('gemini') || p.name.toLowerCase().includes('google'))}
+                    <img src="/images/providers/gemini.png" alt="Gemini" class="h-8 w-8 object-contain" loading="lazy" />
+                  {/if}
+                  {#if !llmProviders.some(p => p.name.toLowerCase().includes('openai')) && !llmProviders.some(p => p.name.toLowerCase().includes('gemini') || p.name.toLowerCase().includes('google'))}
+                    <span class="text-2xl font-semibold text-slate-800">{llmProviders.length}</span>
+                  {/if}
+                {:else}
+                  <span class="text-2xl font-semibold text-slate-800">0</span>
+                {/if}
+              </div>
             </Card>
           </div>
 
@@ -233,69 +304,95 @@
           <!-- Tracked Queries card moved to its own full-width row -->
           <!-- Analysis Controls: compact button when idle, expanded card when running -->
           {#if runningAnalysis}
-            <Card padding="p-6" custom="mt-2">
-              <div class="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-4">
-                <div class="flex-1">
-                  <h3 class="text-sm font-semibold text-slate-700">Analysis Running</h3>
-                  <p class="text-xs text-slate-500 mt-1">Generating multi-provider rankings…</p>
-                  <div class="flex mt-3 -space-x-1">
-                    {#each llmProviders.slice(0,4) as provider}
-                      <span class="inline-flex h-7 w-7 items-center justify-center rounded-full border border-white bg-gradient-to-br from-slate-200 to-slate-300 text-[11px] font-semibold text-slate-600 shadow ring-1 ring-slate-300" title={provider.name}>{provider.name?.[0] || 'P'}</span>
-                    {/each}
-                    {#if llmProviders.length > 4}
-                      <span class="inline-flex h-7 w-7 items-center justify-center rounded-full border border-white bg-slate-100 text-[11px] font-medium text-slate-600 ring-1 ring-slate-300">+{llmProviders.length - 4}</span>
-                    {/if}
-                  </div>
-                  <p class="text-[11px] text-slate-500 mt-3">Weekly allowance: <span class="font-medium text-slate-700">{weeklyCheck?.canRun ? 'Available' : 'Used'}</span></p>
-                </div>
-                <div class="w-full lg:w-72">
-                  <AnalysisProgressBar progress={analysisProgress} />
-                </div>
+            <div class="mt-2 flex flex-wrap items-center gap-3">
+              <AnalysisProgressBar estimation={estimation} />
+              <div class="flex -space-x-1">
+                {#if llmProviders.length > 4}
+                  <span class="inline-flex h-6 w-6 items-center justify-center rounded-full border border-white bg-slate-100 text-[10px] font-medium text-slate-600 ring-1 ring-slate-300">+{llmProviders.length - 4}</span>
+                {/if}
               </div>
-            </Card>
+            </div>
           {:else}
             <div class="mt-2">
-              <Button variant="primary" ariaLabel="Run analysis" disabled={queries.length === 0 || !weeklyCheck?.canRun} on:click={() => {
-                  const form = document.createElement('form');
-                  form.method = 'POST';
-                  form.action = '?/runAnalysis';
-                  form.style.display = 'none';
-                  const businessIdInput = document.createElement('input');
-                  businessIdInput.name = 'businessId';
-                  businessIdInput.value = business.id;
-                  form.appendChild(businessIdInput);
-                  document.body.appendChild(form);
-                  form.submit();
+              <Button
+                variant="primary"
+                ariaLabel="Run analysis"
+                disabled={queries.length === 0 || !weeklyCheck?.canRun}
+                on:click={async () => {
+                  // Submit via fetch to avoid full page reload; optimistic UI start
+                  if (loading) return;
+                  loading = true;
+                  try {
+                    const formData = new FormData();
+                    formData.set('businessId', business.id);
+                    const res = await fetch('?/runAnalysis', { method: 'POST', body: formData });
+                    if (!res.ok) {
+                      console.error('Failed to start analysis');
+                    } else {
+                      // Set a local runningAnalysis placeholder to trigger estimation UI
+                      runningAnalysis = {
+                        id: 'temp',
+                        business_id: business.id,
+                        run_date: new Date().toISOString(),
+                        status: 'running',
+                        total_queries: queries.length,
+                        completed_queries: 0,
+                        total_llm_calls: 0,
+                        completed_llm_calls: 0,
+                        created_at: new Date().toISOString()
+                      } as any;
+                    }
+                  } catch (e) {
+                    console.error('Error starting analysis', e);
+                  } finally {
+                    loading = false;
+                  }
                 }}
               >
-                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                <svg
+                  class="w-4 h-4"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                  ><path
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    stroke-width="2"
+                    d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"
+                  /><path
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    stroke-width="2"
+                    d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+                  /></svg
+                >
                 Run Analysis
               </Button>
-              <p class="text-[11px] text-slate-500 mt-2">{queries.length === 0 ? 'Add queries to enable analysis.' : (weeklyCheck?.canRun ? '' : 'Weekly analysis limit reached.')}</p>
+              <p class="text-[11px] text-slate-500 mt-2">
+                {queries.length === 0
+                  ? "Add queries to enable analysis."
+                  : weeklyCheck?.canRun
+                    ? ""
+                    : "Weekly analysis limit reached."}
+              </p>
             </div>
           {/if}
         </div>
-  <!-- Full Width Tracked Queries Card -->
+        <!-- Full Width Tracked Queries Card -->
         <div class="lg:col-span-12">
           <Card padding="p-0" custom="overflow-hidden">
-            <div class="px-6 py-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-slate-200 bg-slate-50/60">
+            <div
+              class="px-6 py-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-slate-200 bg-slate-50/60"
+            >
               <div>
-                <h3 class="text-sm font-semibold text-slate-700 tracking-wide">Tracked Queries</h3>
-                <p class="text-xs text-slate-500 mt-0.5">Monitor how you appear across LLM assistants</p>
+                <h3 class="text-sm font-semibold text-slate-700 tracking-wide">
+                  Tracked Queries
+                </h3>
+                <p class="text-xs text-slate-500 mt-0.5">
+                  Monitor how you appear in searches across LLM assistants
+                </p>
               </div>
-              <div class="flex flex-wrap items-center gap-2">
-                <button class="px-3 py-1.5 rounded-full text-xs font-medium border cursor-pointer transition-colors {selectedProvider === null ? 'bg-blue-600 text-white border-blue-600' : 'border-slate-300 text-slate-600 hover:bg-slate-100'}" onclick={() => handleProviderSelection(null)}>All</button>
-                {#each llmProviders as provider}
-                  <button
-                    class="px-3 py-1.5 rounded-full text-xs font-medium border cursor-pointer transition-colors flex items-center gap-1 {selectedProvider?.id === provider.id ? 'bg-blue-600 text-white border-blue-600' : 'border-slate-300 text-slate-600 hover:bg-slate-100'}"
-                    onclick={() => handleProviderSelection(provider)}
-                    aria-label={`Filter by ${provider.name}`}
-                  >
-                    <span class="inline-flex h-4 w-4 items-center justify-center rounded-full bg-gradient-to-br from-slate-200 to-slate-300 text-[10px] font-semibold text-slate-600">{provider.name?.[0] || 'P'}</span>
-                    {provider.name}
-                  </button>
-                {/each}
-              </div>
+
             </div>
             <div class="p-6">
               {#if filteredDashboardData?.queries && filteredDashboardData.queries.length > 0}
@@ -311,41 +408,87 @@
                 />
               {:else}
                 <div class="text-center py-14">
-                  <div class="mx-auto h-12 w-12 rounded-full bg-blue-50 flex items-center justify-center mb-5">
-                    <svg class="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-4.35-4.35M11 19a8 8 0 100-16 8 8 0 000 16z"/></svg>
+                  <div
+                    class="mx-auto h-12 w-12 rounded-full bg-blue-50 flex items-center justify-center mb-5"
+                  >
+                    <svg
+                      class="w-6 h-6 text-blue-600"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                      ><path
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                        stroke-width="2"
+                        d="M21 21l-4.35-4.35M11 19a8 8 0 100-16 8 8 0 000 16z"
+                      /></svg
+                    >
                   </div>
-                  <h4 class="text-base font-semibold text-slate-800">No queries yet</h4>
-                  <p class="mt-2 text-sm text-slate-500 max-w-sm mx-auto">Add the search phrases customers might use. Or let AI suggest relevant queries for you.</p>
+                  <h4 class="text-base font-semibold text-slate-800">
+                    No queries yet
+                  </h4>
+                  <p class="mt-2 text-sm text-slate-500 max-w-sm mx-auto">
+                    Add the search phrases customers might use. Or let AI
+                    suggest relevant queries for you.
+                  </p>
                   {#if suggestionError}
-                    <div class="mt-5 mb-4 p-3 bg-red-50 border border-red-200 rounded-md max-w-sm mx-auto">
+                    <div
+                      class="mt-5 mb-4 p-3 bg-red-50 border border-red-200 rounded-md max-w-sm mx-auto"
+                    >
                       <p class="text-red-700 text-xs">{suggestionError}</p>
                     </div>
                   {/if}
                   {#if loadingSuggestions}
                     <div class="mt-6 flex flex-col items-center gap-2">
-                      <div class="flex items-center gap-2 text-slate-600 text-sm">
-                        <div class="animate-spin rounded-full h-5 w-5 border-2 border-blue-600 border-t-transparent"></div>
+                      <div
+                        class="flex items-center gap-2 text-slate-600 text-sm"
+                      >
+                        <div
+                          class="animate-spin rounded-full h-5 w-5 border-2 border-blue-600 border-t-transparent"
+                        ></div>
                         Generating AI suggestions…
                       </div>
-                      <p class="text-[11px] text-slate-500">This may take a few moments</p>
+                      <p class="text-[11px] text-slate-500">
+                        This may take a few moments
+                      </p>
                     </div>
                   {:else if querySuggestions.length > 0}
                     <div class="mt-8 max-w-xl mx-auto space-y-3">
                       {#each querySuggestions as suggestion}
-                        <div class="flex items-start justify-between gap-4 p-4 rounded-lg border border-slate-200 bg-white shadow-sm hover:border-blue-300 transition-colors">
+                        <div
+                          class="flex items-start justify-between gap-4 p-4 rounded-lg border border-slate-200 bg-white shadow-sm hover:border-blue-300 transition-colors"
+                        >
                           <div class="text-left">
-                            <p class="text-sm font-medium text-slate-800">{suggestion.text}</p>
+                            <p class="text-sm font-medium text-slate-800">
+                              {suggestion.text}
+                            </p>
                             {#if suggestion.reasoning}
-                              <p class="text-xs text-slate-500 mt-1 leading-relaxed">{suggestion.reasoning}</p>
+                              <p
+                                class="text-xs text-slate-500 mt-1 leading-relaxed"
+                              >
+                                {suggestion.reasoning}
+                              </p>
                             {/if}
                           </div>
                           <button
                             type="button"
-                            onclick={() => acceptQuerySuggestion(suggestion.text)}
+                            onclick={() =>
+                              acceptQuerySuggestion(suggestion.text)}
                             class="flex items-center justify-center h-8 w-8 rounded-full bg-blue-600 text-white hover:bg-blue-700 transition-colors cursor-pointer"
                             aria-label="Add Query"
                           >
-                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
+                            <svg
+                              class="w-4 h-4"
+                              fill="none"
+                              stroke="currentColor"
+                              viewBox="0 0 24 24"
+                              ><path
+                                stroke-linecap="round"
+                                stroke-linejoin="round"
+                                stroke-width="2"
+                                d="M12 4v16m8-8H4"
+                              /></svg
+                            >
                           </button>
                         </div>
                       {/each}
@@ -358,29 +501,67 @@
                             suggestionError = null;
                             return async ({ result }) => {
                               loadingSuggestions = false;
-                              if (result.type === 'success' && result.data && 'suggestions' in result.data) {
-                                const suggestions = (result.data as { suggestions: string[] }).suggestions;
-                                querySuggestions = suggestions.map((text: string) => ({ text, reasoning: '' }));
-                              } else if (result.type === 'failure' && result.data && 'error' in result.data) {
-                                suggestionError = (result.data as { error: string }).error || 'Failed to generate suggestions';
+                              if (
+                                result.type === "success" &&
+                                result.data &&
+                                "suggestions" in result.data
+                              ) {
+                                const suggestions = (
+                                  result.data as { suggestions: string[] }
+                                ).suggestions;
+                                querySuggestions = suggestions.map(
+                                  (text: string) => ({ text, reasoning: "" })
+                                );
+                              } else if (
+                                result.type === "failure" &&
+                                result.data &&
+                                "error" in result.data
+                              ) {
+                                suggestionError =
+                                  (result.data as { error: string }).error ||
+                                  "Failed to generate suggestions";
                               } else {
-                                suggestionError = 'Failed to generate suggestions';
+                                suggestionError =
+                                  "Failed to generate suggestions";
                               }
                             };
                           }}
                         >
-                          <button type="submit" class="text-xs px-3 py-2 rounded-md border border-slate-300 text-slate-600 hover:bg-slate-100 cursor-pointer inline-flex items-center gap-1">
-                            <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+                          <button
+                            type="submit"
+                            class="text-xs px-3 py-2 rounded-md border border-slate-300 text-slate-600 hover:bg-slate-100 cursor-pointer inline-flex items-center gap-1"
+                          >
+                            <svg
+                              class="w-3 h-3"
+                              fill="none"
+                              stroke="currentColor"
+                              viewBox="0 0 24 24"
+                              ><path
+                                stroke-linecap="round"
+                                stroke-linejoin="round"
+                                stroke-width="2"
+                                d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+                              /></svg
+                            >
                             Generate More
                           </button>
                         </form>
-                        <button type="button" class="text-xs px-3 py-2 rounded-md bg-blue-600 text-white hover:bg-blue-700 cursor-pointer inline-flex items-center gap-1" onclick={() => { isAIGeneratedQuery = false; showAddQuery = true; }}>
+                        <button
+                          type="button"
+                          class="text-xs px-3 py-2 rounded-md bg-blue-600 text-white hover:bg-blue-700 cursor-pointer inline-flex items-center gap-1"
+                          onclick={() => {
+                            isAIGeneratedQuery = false;
+                            showAddQuery = true;
+                          }}
+                        >
                           <span>+</span> Add Custom
                         </button>
                       </div>
                     </div>
                   {:else}
-                    <div class="mt-8 flex flex-col sm:flex-row items-center justify-center gap-3">
+                    <div
+                      class="mt-8 flex flex-col sm:flex-row items-center justify-center gap-3"
+                    >
                       <form
                         method="POST"
                         action="?/generateQuerySuggestions"
@@ -389,22 +570,50 @@
                           suggestionError = null;
                           return async ({ result }) => {
                             loadingSuggestions = false;
-                            if (result.type === 'success' && result.data && 'suggestions' in result.data) {
-                              const suggestions = (result.data as { suggestions: string[] }).suggestions;
-                              querySuggestions = suggestions.map((text: string) => ({ text, reasoning: '' }));
-                            } else if (result.type === 'failure' && result.data && 'error' in result.data) {
-                              suggestionError = (result.data as { error: string }).error || 'Failed to generate suggestions';
+                            if (
+                              result.type === "success" &&
+                              result.data &&
+                              "suggestions" in result.data
+                            ) {
+                              const suggestions = (
+                                result.data as { suggestions: string[] }
+                              ).suggestions;
+                              querySuggestions = suggestions.map(
+                                (text: string) => ({ text, reasoning: "" })
+                              );
+                            } else if (
+                              result.type === "failure" &&
+                              result.data &&
+                              "error" in result.data
+                            ) {
+                              suggestionError =
+                                (result.data as { error: string }).error ||
+                                "Failed to generate suggestions";
                             } else {
-                              suggestionError = 'Failed to generate suggestions';
+                              suggestionError =
+                                "Failed to generate suggestions";
                             }
                           };
                         }}
                       >
-                        <button type="submit" class="bg-gray-900 text-white px-5 py-2.5 rounded-md text-sm font-medium hover:bg-gray-800 cursor-pointer inline-flex items-center gap-2">
-                          <span>✨</span> {loadingSuggestions ? 'Generating…' : 'Get AI Suggestions'}
+                        <button
+                          type="submit"
+                          class="bg-gray-900 text-white px-5 py-2.5 rounded-md text-sm font-medium hover:bg-gray-800 cursor-pointer inline-flex items-center gap-2"
+                        >
+                          <span>✨</span>
+                          {loadingSuggestions
+                            ? "Generating…"
+                            : "Get AI Suggestions"}
                         </button>
                       </form>
-                      <button type="button" class="bg-blue-600 text-white px-5 py-2.5 rounded-md text-sm font-medium hover:bg-blue-700 cursor-pointer inline-flex items-center gap-2" onclick={() => { isAIGeneratedQuery = false; showAddQuery = true; }}>
+                      <button
+                        type="button"
+                        class="bg-blue-600 text-white px-5 py-2.5 rounded-md text-sm font-medium hover:bg-blue-700 cursor-pointer inline-flex items-center gap-2"
+                        onclick={() => {
+                          isAIGeneratedQuery = false;
+                          showAddQuery = true;
+                        }}
+                      >
                         <span>+</span> Add Manually
                       </button>
                     </div>
@@ -419,14 +628,17 @@
           <div class="lg:col-span-12">
             <Card padding="p-6">
               <div class="text-center mb-5">
-                <h3 class="text-sm font-semibold text-slate-700 tracking-wide">AI Suggestions</h3>
+                <h3 class="text-sm font-semibold text-slate-700 tracking-wide">
+                  AI Suggestions
+                </h3>
                 <p class="text-xs text-slate-500 mt-1">
                   {#if querySuggestions.length > 0}
                     Click a suggestion to add it to your tracked queries
                   {:else if loadingSuggestions}
                     Generating suggestions…
                   {:else}
-                    Let AI propose new relevant search phrases based on what you already track
+                    Let AI propose new relevant search phrases based on what you
+                    already track
                   {/if}
                 </p>
               </div>
@@ -439,43 +651,83 @@
                     suggestionError = null;
                     return async ({ result }) => {
                       loadingSuggestions = false;
-                      if (result.type === 'success' && result.data && 'suggestions' in result.data) {
-                        const suggestions = (result.data as { suggestions: string[] }).suggestions;
-                        querySuggestions = suggestions.map((text: string) => ({ text, reasoning: '' }));
-                      } else if (result.type === 'failure' && result.data && 'error' in result.data) {
-                        suggestionError = (result.data as { error: string }).error || 'Failed to generate suggestions';
+                      if (
+                        result.type === "success" &&
+                        result.data &&
+                        "suggestions" in result.data
+                      ) {
+                        const suggestions = (
+                          result.data as { suggestions: string[] }
+                        ).suggestions;
+                        querySuggestions = suggestions.map((text: string) => ({
+                          text,
+                          reasoning: "",
+                        }));
+                      } else if (
+                        result.type === "failure" &&
+                        result.data &&
+                        "error" in result.data
+                      ) {
+                        suggestionError =
+                          (result.data as { error: string }).error ||
+                          "Failed to generate suggestions";
                       } else {
-                        suggestionError = 'Failed to generate suggestions';
+                        suggestionError = "Failed to generate suggestions";
                       }
                     };
                   }}
                 >
-                  <button type="submit" class="px-5 py-2.5 rounded-md text-sm font-medium bg-blue-600 text-white hover:bg-blue-700 transition-colors cursor-pointer inline-flex items-center gap-2 disabled:opacity-70 disabled:cursor-not-allowed" disabled={loadingSuggestions} aria-busy={loadingSuggestions}>
+                  <button
+                    type="submit"
+                    class="px-5 py-2.5 rounded-md text-sm font-medium bg-blue-600 text-white hover:bg-blue-700 transition-colors cursor-pointer inline-flex items-center gap-2 disabled:opacity-70 disabled:cursor-not-allowed"
+                    disabled={loadingSuggestions}
+                    aria-busy={loadingSuggestions}
+                  >
                     <span>✨</span>
                     {#if loadingSuggestions}
-                      {querySuggestions.length > 0 ? 'Refreshing…' : 'Generating…'}
+                      {querySuggestions.length > 0
+                        ? "Refreshing…"
+                        : "Generating…"}
                     {:else}
-                      {querySuggestions.length > 0 ? 'Refresh Suggestions' : 'Generate Suggestions'}
+                      {querySuggestions.length > 0
+                        ? "Refresh Suggestions"
+                        : "Generate Suggestions"}
                     {/if}
                   </button>
                 </form>
               </div>
               {#if suggestionError}
-                <div class="mb-3 p-3 bg-red-50 border border-red-200 rounded-md">
+                <div
+                  class="mb-3 p-3 bg-red-50 border border-red-200 rounded-md"
+                >
                   <p class="text-xs text-red-700">{suggestionError}</p>
                 </div>
               {/if}
               {#if loadingSuggestions && querySuggestions.length === 0}
-                <div class="flex items-center gap-2 text-slate-600 text-sm py-4">
-                  <div class="animate-spin rounded-full h-5 w-5 border-2 border-blue-600 border-t-transparent"></div>
+                <div
+                  class="flex items-center gap-2 text-slate-600 text-sm py-4"
+                >
+                  <div
+                    class="animate-spin rounded-full h-5 w-5 border-2 border-blue-600 border-t-transparent"
+                  ></div>
                   Generating suggestions…
                 </div>
               {:else}
                 <div class="space-y-2">
                   {#each querySuggestions as suggestion}
-                    <button type="button" class="w-full text-left p-3 rounded-md border border-slate-200 hover:border-blue-300 bg-white hover:bg-blue-50 transition-colors cursor-pointer group flex items-start justify-between gap-3" onclick={() => acceptQuerySuggestion(suggestion.text)}>
-                      <span class="text-sm text-slate-700 group-hover:text-slate-900">{suggestion.text}</span>
-                      <span class="inline-flex h-6 w-6 items-center justify-center rounded-full bg-blue-600 text-white text-xs font-medium group-hover:bg-blue-700">+</span>
+                    <button
+                      type="button"
+                      class="w-full text-left p-3 rounded-md border border-slate-200 hover:border-blue-300 bg-white hover:bg-blue-50 transition-colors cursor-pointer group flex items-start justify-between gap-3"
+                      onclick={() => acceptQuerySuggestion(suggestion.text)}
+                    >
+                      <span
+                        class="text-sm text-slate-700 group-hover:text-slate-900"
+                        >{suggestion.text}</span
+                      >
+                      <span
+                        class="inline-flex h-6 w-6 items-center justify-center rounded-full bg-blue-600 text-white text-xs font-medium group-hover:bg-blue-700"
+                        >+</span
+                      >
                     </button>
                   {/each}
                 </div>

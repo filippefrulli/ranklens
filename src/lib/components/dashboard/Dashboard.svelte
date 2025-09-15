@@ -350,10 +350,10 @@
                 }}
               >
                 <svg
-                  class="w-4 h-4"
+                  class="w-4 h-4 mr-2"
                   fill="none"
                   stroke="currentColor"
-                  viewBox="0 0 24 24"
+                  viewBox="0 0 22 22"
                   ><path
                     stroke-linecap="round"
                     stroke-linejoin="round"
@@ -368,13 +368,6 @@
                 >
                 Run Analysis
               </Button>
-              <p class="text-[11px] text-slate-500 mt-2">
-                {queries.length === 0
-                  ? "Add queries to enable analysis."
-                  : weeklyCheck?.canRun
-                    ? ""
-                    : "Weekly analysis limit reached."}
-              </p>
             </div>
           {/if}
         </div>

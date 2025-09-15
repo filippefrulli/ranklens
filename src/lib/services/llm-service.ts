@@ -76,23 +76,16 @@ export class LLMService {
     return { rank: null, foundName: null }
   }
 
-  // Public method for general LLM queries (server-side only)
+  // Public method for general LLM queries
   public static async queryLLM(providerName: string, model: string, prompt: string, reasoning: string): Promise<string> {
     try {
       // For now, just use OpenAI as the default for query suggestions
       // You can extend this to support other providers if needed
       switch (providerName) {
-        case 'OpenAI GPT-5':
         case 'OpenAI':
           return await this.callOpenAI(prompt, model, reasoning)
-        case 'Anthropic Claude':
-        case 'Anthropic':
-          return await this.callAnthropic(prompt)
-        case 'Google Gemini':
         case 'Gemini':
           return await this.callGemini(prompt)
-        case 'Perplexity':
-          return await this.callPerplexity(prompt)
         default:
           throw new Error(`Unsupported LLM provider: ${providerName}`)
       }

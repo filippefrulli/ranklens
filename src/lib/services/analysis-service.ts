@@ -73,7 +73,7 @@ export class AnalysisService {
     providers: LLMProvider[]
   ) {
     const startTime = Date.now()
-    console.log(`🔄 Background analysis started for "${business.name}" (Run ID: ${analysisRun.id})`)
+    console.log(`🔄 Background analysis started for "${business.name}"`)
     
     try {
       let completedCalls = 0

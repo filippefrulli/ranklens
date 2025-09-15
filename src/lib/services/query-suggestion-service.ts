@@ -5,27 +5,21 @@ interface QuerySuggestion {
   text: string
 }
 
-interface BusinessResearch {
-  category: string
-  priceRange: string
-  keyAmenities: string[]
-  targetAudience: string
-  uniqueFeatures: string[]
-  businessType: string
-}
+// Narrative research is now plain text (two concise paragraphs) instead of structured JSON
+type BusinessResearchNarrative = string
 
 export class QuerySuggestionService {
   private static readonly MAX_RETRIES = 3
-  private static readonly TIMEOUT_MS = 10000 // 10 seconds
+  private static readonly TIMEOUT_MS = 150000 // 10 seconds
 
   static async generateQuerySuggestions(business: Business): Promise<QuerySuggestion[]> {
     try {
       // First, research the business to understand its characteristics
-      const research = await this.researchBusinessWithRetry(business)
-      
-      // Then generate suggestions based on the research
-      const prompt = this.buildPrompt(business, research)
-      const content = await this.queryLLMWithRetry('Google Gemini', 'gemini-2.5-flash-lite', prompt, 'high')
+  const researchNarrative = await this.researchBusinessWithRetry(business)
+
+  // Then generate suggestions based on the narrative research
+  const prompt = this.buildPrompt(business, researchNarrative)
+      const content = await this.queryLLMWithRetry('OpenAI', 'gpt-5-mini', prompt, 'low')
 
       if (!content) {
         throw new Error('No content received from LLM')
@@ -42,7 +36,7 @@ export class QuerySuggestionService {
     provider: string, 
     model: string, 
     prompt: string, 
-    quality: string,
+    reasoning: string,
     attempt: number = 1
   ): Promise<string> {
     try {
@@ -52,7 +46,7 @@ export class QuerySuggestionService {
         setTimeout(() => reject(new Error('Request timeout')), this.TIMEOUT_MS)
       })
       
-      const llmPromise = LLMService.queryLLM(provider, model, prompt, quality)
+      const llmPromise = LLMService.queryLLM(provider, model, prompt, reasoning)
       
       const content = await Promise.race([llmPromise, timeoutPromise])
       
@@ -68,14 +62,14 @@ export class QuerySuggestionService {
         const delay = Math.pow(2, attempt - 1) * 1000 // Exponential backoff: 1s, 2s, 4s
         console.log(`Retrying in ${delay}ms...`)
         await new Promise(resolve => setTimeout(resolve, delay))
-        return this.queryLLMWithRetry(provider, model, prompt, quality, attempt + 1)
+        return this.queryLLMWithRetry(provider, model, prompt, reasoning, attempt + 1)
       }
       
       throw new Error(`LLM query failed after ${this.MAX_RETRIES} attempts: ${error instanceof Error ? error.message : 'Unknown error'}`)
     }
   }
 
-  private static async researchBusinessWithRetry(business: Business, attempt: number = 1): Promise<BusinessResearch> {
+  private static async researchBusinessWithRetry(business: Business, attempt: number = 1): Promise<BusinessResearchNarrative> {
     try {
       console.log(`Business research attempt ${attempt}/${this.MAX_RETRIES}`)
       return await this.researchBusiness(business)
@@ -94,109 +88,42 @@ export class QuerySuggestionService {
     }
   }
 
-  private static async researchBusiness(business: Business): Promise<BusinessResearch> {
-    const researchPrompt = `Research and analyze the business "${business.name}" to understand its characteristics and positioning.
+  private static async researchBusiness(business: Business): Promise<BusinessResearchNarrative> {
+    const researchPrompt = `You are an analyst. Write exactly TWO concise paragraphs (no lists, no headings) describing the business "${business.name}".
 
-Business Details:
-- Name: ${business.name}
-- Location: ${business.city || 'Not specified'}
-- Business Type: ${business.google_primary_type_display || 'Not specified'}
-- Google Types: ${business.google_types ? JSON.stringify(business.google_types) : 'Not specified'}
+Context:
+Name: ${business.name}
+Location: ${business.city || 'Not specified'}
+Google Type (optional): ${business.google_primary_type_display || 'Unknown'}
 
-Please analyze this business and provide insights about:
+Paragraph 1: Infer positioning, category, likely price tier, audience, and core qualities. Be specific but concise.
+Paragraph 2: Infer distinctive amenities, differentiators, experience style, and what customers might value. Natural prose.
 
-1. CATEGORY & POSITIONING: Is this a luxury, mid-range, budget, boutique, chain, independent business?
-2. PRICE RANGE: Likely pricing tier (budget, affordable, mid-range, upscale, luxury)
-3. KEY AMENITIES: What amenities/features would this type of business likely offer?
-4. TARGET AUDIENCE: Who are the typical customers (business travelers, families, couples, tourists, locals)?
-5. UNIQUE FEATURES: What might make this business stand out or be special?
-6. BUSINESS TYPE: More specific classification beyond the Google type
-
-Use your knowledge about businesses with similar names, locations, and types to make educated inferences.
-
-Format your response as JSON:
-{
-  "category": "specific category like 'boutique hotel', 'budget accommodation', 'luxury resort'",
-  "priceRange": "budget|affordable|mid-range|upscale|luxury",
-  "keyAmenities": ["amenity1", "amenity2", "amenity3"],
-  "targetAudience": "description of typical customers",
-  "uniqueFeatures": ["feature1", "feature2"],
-  "businessType": "more specific business type"
-}`
+Rules:
+- 2 paragraphs only.
+- No JSON, no bullet points, no labels.
+- <= 90 words each.
+- Avoid repeating the business name more than once besides the opening.
+`
 
     try {
-      const researchContent = await this.queryLLMWithRetry('Google Gemini', 'gemini-2.5-flash-lite', researchPrompt, 'high')
+      const researchContent = await this.queryLLMWithRetry('OpenAI', 'gpt-5-mini', researchPrompt, 'medium')
       
       if (!researchContent) {
         throw new Error('No research content received')
       }
 
-      return this.parseBusinessResearch(researchContent)
+  return researchContent.trim()
     } catch (error) {
       console.error('Error researching business:', error)
       throw error // Let the retry logic handle this
     }
   }
 
-  private static parseBusinessResearch(content: string): BusinessResearch {
-    try {
-      const cleanContent = content.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim()
-      const parsed = JSON.parse(cleanContent)
-      
-      return {
-        category: parsed.category || 'general business',
-        priceRange: parsed.priceRange || 'mid-range',
-        keyAmenities: Array.isArray(parsed.keyAmenities) ? parsed.keyAmenities : [],
-        targetAudience: parsed.targetAudience || 'general customers',
-        uniqueFeatures: Array.isArray(parsed.uniqueFeatures) ? parsed.uniqueFeatures : [],
-        businessType: parsed.businessType || 'service business'
-      }
-    } catch (error) {
-      console.error('Error parsing business research:', error)
-      return {
-        category: 'general business',
-        priceRange: 'mid-range',
-        keyAmenities: [],
-        targetAudience: 'general customers',
-        uniqueFeatures: [],
-        businessType: 'service business'
-      }
-    }
-  }
-
-  private static createFallbackResearch(business: Business): BusinessResearch {
-    const businessType = business.google_primary_type_display?.toLowerCase() || ''
-    
-    if (businessType.includes('hotel') || businessType.includes('accommodation') || businessType.includes('lodging')) {
-      return {
-        category: 'hotel',
-        priceRange: 'mid-range',
-        keyAmenities: ['wifi', 'breakfast', 'parking', 'concierge'],
-        targetAudience: 'travelers and tourists',
-        uniqueFeatures: ['comfortable rooms', 'good location'],
-        businessType: 'accommodation'
-      }
-    }
-    
-    if (businessType.includes('restaurant') || businessType.includes('dining')) {
-      return {
-        category: 'restaurant',
-        priceRange: 'mid-range',
-        keyAmenities: ['dine-in', 'takeout', 'reservations'],
-        targetAudience: 'diners and food lovers',
-        uniqueFeatures: ['quality food', 'good service'],
-        businessType: 'dining'
-      }
-    }
-    
-    return {
-      category: 'general business',
-      priceRange: 'mid-range',
-      keyAmenities: [],
-      targetAudience: 'general customers',
-      uniqueFeatures: [],
-      businessType: 'service business'
-    }
+  private static createFallbackResearch(business: Business): BusinessResearchNarrative {
+    const type = (business.google_primary_type_display || 'business').toLowerCase()
+    return `${business.name} is a ${type} likely operating at a mid-range price point and serving general customers in ${(business.city || 'its local area')}. Its positioning cannot be fully inferred due to limited data.`
+      + ` It probably focuses on delivering consistent core value with standard features while aiming to attract repeat local or destination-driven interest.`
   }
 
   private static extractMainCity(cityValue: string): string {
@@ -221,81 +148,62 @@ Format your response as JSON:
     return cityValue
   }
 
-  private static buildPrompt(business: Business, research: BusinessResearch): string {
-    // Extract the main city from postal code or detailed location
+  private static buildPrompt(business: Business, researchNarrative: BusinessResearchNarrative): string {
     const mainCity = this.extractMainCity(business.city || '')
-    
-    return `Generate 5 natural queries that customers would ask an AI assistant when looking for "${business.name}" or similar services.
 
-Business: ${business.name} in ${mainCity}
-Type: ${research.category} (${research.priceRange})
-Key amenities: ${research.keyAmenities.slice(0, 3).join(', ')}
-Target customers: ${research.targetAudience}
+    return `You will generate customer search queries an AI assistant might receive when someone is seeking ${business.name} or similar services.
+
+Business Research Narrative (context for grounding – do NOT summarize it back):
+"""
+${researchNarrative}
+"""
+
+Task:
+Generate exactly 6 diverse natural-language query strings a user would type/say. Use the narrative to infer positioning, amenities, audience, price tier and vary across the set.
 
 Requirements:
-1. Use business research to make queries realistic and relevant
-2. Mix 3 SHORT queries (6-8 words) + 2 DETAILED queries (10-15 words)
-3. Use conversational language: "I need help finding...", "Can you recommend...", "What are the best..."
-4. Include price positioning (${research.priceRange}) and popular amenities
-5. Vary locations: some with "${mainCity}", some with an area in that city, or other way but always have some type of location reference.
-6. Every query should be about a SINGLE thing, meaning ask for a hotel or a restaurant, never hotels or restaurants in the plural.
-7. Every query should ALWAYS include a location reference like a city, area, or neighborhood.
+1. EACH query MUST contain some form of location reference ("${mainCity}" or a neighborhood/area/nearby descriptor)
+2. EXACTLY 6 queries: 3 SHORT (6-10 words) + 3 DETAILED (12-18 words)
+3. SINGLE intent per query (no plural mixed categories, no combining unrelated asks)
+4. Vary structure, tone, and included inferred attributes (price tier, amenity, audience), avoid repeating the same adjective or location form more than twice
+5. Do not mention the business name directly, always write queries to search for the type of business or its features
+6. Avoid wrapping queries in quotes; they are plain strings
+7. No numbering, no bullets, no explanation outside JSON
+8. Return valid minified JSON ONLY with a top-level key "suggestions" mapping to an array of 6 strings.
+9. Ensure the queries are written in natural, conversational language that a real user would use, starting sentences like 'I'm looking for...', 'Where can I find...', 'What are the best...', etc.
 
-Examples:
-SHORT: "I need luxury hotels in Dublin", "Can you recommend budget accommodation?"
-DETAILED: "I'm looking for family hotels with pool in Dublin", "I need affordable accommodation for business trip"
-
-Format as JSON:
-{
-  "suggestions": [
-    "query 1",
-    "query 2", 
-    "query 3",
-    "query 4",
-    "query 5"
-  ]
-}`
+Output JSON schema:
+{"suggestions": ["query1", "query2", "query3", "query4", "query5", "query6"]}`
   }
 
   private static parseQuerySuggestions(content: string): QuerySuggestion[] {
+    const cleaned = content.replace(/```json\n?/gi, '').replace(/```/g, '').trim()
+    // Try strict JSON first
     try {
-      // Clean the content to handle potential markdown formatting
-      const cleanContent = content.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim()
-      
-      const parsed = JSON.parse(cleanContent)
-      
-      if (!parsed.suggestions || !Array.isArray(parsed.suggestions)) {
-        throw new Error('Invalid response format')
-      }
-
-      const results = parsed.suggestions.map((suggestion: any) => ({
-        text: typeof suggestion === 'string' ? suggestion : suggestion.text || ''
-      })).filter((s: QuerySuggestion) => s.text.trim().length > 0)
-      
-      return results
-      
-    } catch (error) {
-      console.error('Error parsing query suggestions:', error)
-      console.error('Content:', content)
-      
-      // Fallback: try to extract queries using regex if JSON parsing fails
-      const lines = content.split('\n')
-      const queries: QuerySuggestion[] = []
-      
-      for (const line of lines) {
-        const match = line.match(/"([^"]+)"/)
-        if (match && match[1].length > 10) { // Reasonable query length
-          queries.push({
-            text: match[1]
-          })
+      const parsed = JSON.parse(cleaned)
+      if (parsed && Array.isArray(parsed.suggestions)) {
+        const arr = parsed.suggestions
+          .map((s: any) => (typeof s === 'string' ? s : s?.text || ''))
+          .map((s: string) => s.trim())
+          .filter((s: string) => s.length > 0)
+          .slice(0, 6)
+        if (arr.length > 0) {
+          return arr.map((text: string) => ({ text }))
         }
       }
-      
-      if (queries.length > 0) {
-        return queries.slice(0, 5) // Limit to 5
-      }
-      
-      throw new Error('Failed to parse query suggestions')
+    } catch (e) {
+      // fall through to line-based parsing
     }
+
+    // Fallback: treat as raw lines
+    const lines = cleaned.split(/\r?\n/)
+      .map(l => l.trim().replace(/^[-*\d+.\)]\s*/, ''))
+      .filter(l => l.length > 0 && !l.startsWith('{') && !l.startsWith('"suggestions"'))
+
+    const queries = lines.slice(0, 6).map(text => ({ text }))
+    if (queries.length === 0) {
+      throw new Error('Failed to parse query suggestions (no JSON or lines)')
+    }
+    return queries
   }
 }

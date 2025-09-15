@@ -78,7 +78,6 @@ export class DatabaseService {
     name: string
     google_place_id: string
     city: string
-    google_primary_type_display?: string
   }): Promise<Business> {
     const { data, error } = await this.supabase
       .from('businesses')
@@ -87,8 +86,7 @@ export class DatabaseService {
           user_id: this.userId,
           name: businessData.name,
           google_place_id: businessData.google_place_id,
-          city: businessData.city,
-          google_primary_type_display: businessData.google_primary_type_display
+          city: businessData.city
         }
       ])
       .select()

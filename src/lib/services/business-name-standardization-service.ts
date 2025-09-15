@@ -54,7 +54,7 @@ export class BusinessNameStandardizationService {
       
       // Use the existing LLM service to standardize names
       const response = await LLMService.queryLLM(
-        'OpenAI GPT-5',
+        'OpenAI',
         'gpt-5-nano',
         prompt,
         'low'

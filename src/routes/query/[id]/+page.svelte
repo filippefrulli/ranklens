@@ -3,14 +3,12 @@
   import { goto } from '$app/navigation'
   import { onMount } from 'svelte'
   import type { PageData } from './$types'
-  import QueryResultHeader from '../../../lib/components/query/QueryResultHeader.svelte'
   import RankingResultsByLLMTable from '../../../lib/components/query/RankingResultsByLLMTable.svelte'
   import CompetitorRankingsTable from '../../../lib/components/query/CompetitorRankingsTable.svelte'
   import LoadingSpinner from '../../../lib/components/ui/LoadingSpinner.svelte'
   import ErrorMessage from '../../../lib/components/ui/ErrorMessage.svelte'
   import type { Query, RankingAttempt, LLMProvider } from '../../../lib/types'
   import Card from '$lib/components/ui/Card.svelte'
-  import Button from '$lib/components/ui/Button.svelte'
 
   interface Props { data: PageData }
   let { data }: Props = $props()
@@ -149,11 +147,10 @@
                       <span class="inline-flex items-center rounded-full bg-blue-600 text-white px-2 py-0.5 text-[10px] font-medium">Active</span>
                     {/if}
                   </div>
-                  <p class="mt-1 text-[11px] text-slate-500">Run ID: {run.id.slice(0,8)}…</p>
                 </button>
               {/each}
             </div>
-          {:else}
+          {:else} 
             <p class="text-sm text-slate-500">No runs yet. Trigger an analysis from the dashboard.</p>
           {/if}
   </Card>

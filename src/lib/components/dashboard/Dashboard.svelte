@@ -67,14 +67,17 @@
   let loadingSuggestions = $state(false);
   let suggestionError = $state<string | null>(null);
 
-  // Progress tracking
-  let analysisProgress = $state({
-    currentStep: 0,
-    totalSteps: 0,
-    percentage: 0,
-    currentQuery: "",
-    currentProvider: "",
-  });
+  // Progress tracking (derived from runningAnalysis + query histories)
+  let analysisProgress = $derived.by(() => {
+    if (!runningAnalysis) {
+      return { currentStep: 0, totalSteps: 0, percentage: 0, currentQuery: '', currentProvider: '' }
+    }
+    // Prefer precise counters from runningAnalysis if available
+    const totalSteps = runningAnalysis.total_llm_calls || (runningAnalysis.total_queries * (llmProviders?.length || 1))
+    const completed = runningAnalysis.completed_llm_calls || runningAnalysis.completed_queries * (llmProviders?.length || 1)
+    const percentage = totalSteps === 0 ? 0 : Math.min(100, Math.round((completed / totalSteps) * 100))
+    return { currentStep: completed, totalSteps, percentage, currentQuery: '', currentProvider: '' }
+  })
 
   // Form data
   let newBusiness = $state({
@@ -181,7 +184,7 @@
     <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
       <!-- Business Summary / Header Card -->
       <div class="grid gap-6 lg:grid-cols-12">
-        <div class="lg:col-span-8 space-y-6">
+        <div class="lg:col-span-12 space-y-6">
           <Card variant="glass" padding="p-6" custom="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
             <div>
               <h2 class="text-xl font-semibold text-gray-900 flex items-center gap-2">
@@ -228,28 +231,31 @@
 
           <!-- Queries Section -->
           <!-- Tracked Queries card moved to its own full-width row -->
-        </div>
-
-        <!-- Right Sidebar Column -->
-        <div class="lg:col-span-4 space-y-6">
-          <!-- Run Analysis / Controls Card -->
-          <Card padding="p-5">
-            <div class="flex items-start justify-between">
-              <div>
-                <h3 class="text-sm font-semibold text-slate-700">Analysis</h3>
-                <p class="text-xs text-slate-500 mt-1">Run fresh rankings across providers</p>
+          <!-- Analysis Controls: compact button when idle, expanded card when running -->
+          {#if runningAnalysis}
+            <Card padding="p-6" custom="mt-2">
+              <div class="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-4">
+                <div class="flex-1">
+                  <h3 class="text-sm font-semibold text-slate-700">Analysis Running</h3>
+                  <p class="text-xs text-slate-500 mt-1">Generating multi-provider rankings…</p>
+                  <div class="flex mt-3 -space-x-1">
+                    {#each llmProviders.slice(0,4) as provider}
+                      <span class="inline-flex h-7 w-7 items-center justify-center rounded-full border border-white bg-gradient-to-br from-slate-200 to-slate-300 text-[11px] font-semibold text-slate-600 shadow ring-1 ring-slate-300" title={provider.name}>{provider.name?.[0] || 'P'}</span>
+                    {/each}
+                    {#if llmProviders.length > 4}
+                      <span class="inline-flex h-7 w-7 items-center justify-center rounded-full border border-white bg-slate-100 text-[11px] font-medium text-slate-600 ring-1 ring-slate-300">+{llmProviders.length - 4}</span>
+                    {/if}
+                  </div>
+                  <p class="text-[11px] text-slate-500 mt-3">Weekly allowance: <span class="font-medium text-slate-700">{weeklyCheck?.canRun ? 'Available' : 'Used'}</span></p>
+                </div>
+                <div class="w-full lg:w-72">
+                  <AnalysisProgressBar progress={analysisProgress} />
+                </div>
               </div>
-              <div class="flex -space-x-1">
-                {#each llmProviders.slice(0,4) as provider}
-                  <span class="inline-flex h-7 w-7 items-center justify-center rounded-full border border-white bg-gradient-to-br from-slate-200 to-slate-300 text-[11px] font-semibold text-slate-600 shadow ring-1 ring-slate-300" title={provider.name}>{provider.name?.[0] || 'P'}</span>
-                {/each}
-                {#if llmProviders.length > 4}
-                  <span class="inline-flex h-7 w-7 items-center justify-center rounded-full border border-white bg-slate-100 text-[11px] font-medium text-slate-600 ring-1 ring-slate-300">+{llmProviders.length - 4}</span>
-                {/if}
-              </div>
-            </div>
-            <div class="mt-4 space-y-3">
-              <Button variant="primary" fullWidth ariaLabel="Run analysis" disabled={!!runningAnalysis || queries.length === 0} on:click={() => {
+            </Card>
+          {:else}
+            <div class="mt-2">
+              <Button variant="primary" ariaLabel="Run analysis" disabled={queries.length === 0 || !weeklyCheck?.canRun} on:click={() => {
                   const form = document.createElement('form');
                   form.method = 'POST';
                   form.action = '?/runAnalysis';
@@ -263,27 +269,13 @@
                 }}
               >
                 <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
-                {runningAnalysis ? 'Running Analysis…' : 'Run Analysis'}
+                Run Analysis
               </Button>
-              <p class="text-[11px] text-slate-500 leading-relaxed">Each run queries all configured LLM providers multiple times per search phrase to build reliable rankings.</p>
-              <div class="pt-2 border-t border-slate-100">
-                <p class="text-[11px] text-slate-500">Weekly allowance: <span class="font-medium text-slate-700">{weeklyCheck?.canRun ? 'Available' : 'Used'}</span></p>
-              </div>
+              <p class="text-[11px] text-slate-500 mt-2">{queries.length === 0 ? 'Add queries to enable analysis.' : (weeklyCheck?.canRun ? '' : 'Weekly analysis limit reached.')}</p>
             </div>
-          </Card>
-
-          {#if runningAnalysis}
-            <Card padding="p-5">
-              <div class="flex items-center justify-between mb-3">
-                <h3 class="text-sm font-semibold text-slate-700">Analysis Progress</h3>
-                <span class="text-[11px] text-slate-500">Auto-refreshing</span>
-              </div>
-              <AnalysisProgressBar progress={analysisProgress} />
-            </Card>
           {/if}
-
         </div>
-        <!-- Full Width Tracked Queries Card -->
+  <!-- Full Width Tracked Queries Card -->
         <div class="lg:col-span-12">
           <Card padding="p-0" custom="overflow-hidden">
             <div class="px-6 py-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-slate-200 bg-slate-50/60">

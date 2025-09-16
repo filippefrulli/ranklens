@@ -102,9 +102,6 @@
             <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
               Best Rank
             </th>
-            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-              Attempts
-            </th>
           </tr>
         </thead>
         <tbody class="bg-white divide-y divide-gray-200">
@@ -140,9 +137,6 @@
                 {:else}
                   <span class="text-gray-400 text-sm">—</span>
                 {/if}
-              </td>
-              <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                {llm.totalAttempts}
               </td>
             </tr>
           {/each}

@@ -15,6 +15,22 @@
   let sortedCompetitors = sortByWeightedScore(competitorRankings)
   $: sortedCompetitors = sortByWeightedScore(competitorRankings)
 
+  // Display logic: show all competitors up to and including the user business, plus the next 5 after it.
+  // If user business not present, fall back to original top segment (top 6 to keep table small early on).
+  function buildDisplayed(list: any[]): any[] {
+    if (!Array.isArray(list) || list.length === 0) return []
+    const FOLLOWING = 5
+    const FALLBACK_SIZE = 6
+    const userIdx = list.findIndex(c => c?.is_user_business)
+    if (userIdx === -1) {
+      return list.slice(0, FALLBACK_SIZE)
+    }
+    const endExclusive = Math.min(list.length, userIdx + 1 + FOLLOWING)
+    return list.slice(0, endExclusive)
+  }
+  let displayedCompetitors = buildDisplayed(sortedCompetitors)
+  $: displayedCompetitors = buildDisplayed(sortedCompetitors)
+
   function getAppearancePercentage(appearances: number, totalAttempts: number): string {
     return ((appearances / totalAttempts) * 100).toFixed(1)
   }
@@ -74,12 +90,12 @@
           </tr>
         </thead>
         <tbody class="bg-white divide-y divide-gray-200">
-          {#each sortedCompetitors as competitor, index}
+          {#each displayedCompetitors as competitor}
             <tr class="hover:bg-gray-50 {competitor.is_user_business ? 'bg-blue-50/80 border-l-4 border-blue-500 ring-2 ring-blue-400' : ''}" aria-current={competitor.is_user_business ? 'true' : 'false'}>
               <td class="px-6 py-4 whitespace-nowrap">
                 <div class="flex items-center">
-                  <div class="flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center {competitor.is_user_business ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-700'}">
-                    <span class="text-sm font-semibold">#{index + 1}</span>
+                  <div class="flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center {competitor.is_user_business ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-700'}" title="Rank position in full sorted list">
+                    <span class="text-sm font-semibold">#{sortedCompetitors.findIndex(c => c === competitor) + 1}</span>
                   </div>
                   <div class="ml-4">
                     <div class="text-sm {competitor.is_user_business ? 'text-blue-900 font-semibold' : 'text-gray-900 font-medium'}">

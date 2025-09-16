@@ -19,6 +19,8 @@
   import AnalysisProgressBar from "./AnalysisProgressBar.svelte";
   import Card from "$lib/components/ui/Card.svelte";
   import Button from "$lib/components/ui/Button.svelte";
+  import { browser } from "$app/environment";
+  import { loadSuggestions, saveSuggestions } from "$lib/utils/suggestionsCache";
 
   interface Props {
     form?: any;
@@ -60,11 +62,21 @@
   let isAIGeneratedQuery = $state(false);
 
   // Query suggestions state
+  // Note: We cache suggestions per-business in localStorage so they persist across reloads.
   let querySuggestions = $state<QuerySuggestion[]>(
     serverSuggestions.map((text) => ({ text, reasoning: "" }))
   );
   let loadingSuggestions = $state(false);
   let suggestionError = $state<string | null>(null);
+
+  // Helper to set suggestions from server responses and immediately update cache
+  function setSuggestionsAndCache(texts: string[]) {
+    const items = texts.map((text) => ({ text, reasoning: "" }));
+    querySuggestions = items;
+    if (browser && business?.id) {
+      saveSuggestions(business.id, items);
+    }
+  }
 
   // Static estimated time logic (60s per query, no live progress / countdown)
   const SECONDS_PER_QUERY = 60;
@@ -136,6 +148,24 @@
     // For now, return unfiltered data since analytics are empty
     // This will be properly implemented when analytics are loaded from server
     return dashboardData;
+  });
+  // Hydrate suggestions from cache when business changes or on mount
+  $effect(() => {
+    if (!browser || !business?.id) return;
+    const cached = loadSuggestions(business.id);
+    if (cached && cached.length > 0) {
+      querySuggestions = cached;
+    } else {
+      // fall back to any server-provided suggestions
+      querySuggestions = (serverSuggestions || []).map((t) => ({ text: t, reasoning: "" }));
+    }
+  });
+
+  // Persist to cache whenever suggestions change and we have a business id
+  $effect(() => {
+    if (!browser || !business?.id) return;
+    if (!querySuggestions || querySuggestions.length === 0) return;
+    saveSuggestions(business.id, querySuggestions);
   });
 
   // Initialize selected provider (start with "All Providers" - null)

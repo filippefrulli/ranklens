@@ -57,14 +57,12 @@
       }
       if (a.averageRank !== null) return -1
       if (b.averageRank !== null) return 1
-      return b.successfulAttempts / b.totalAttempts - a.successfulAttempts / a.totalAttempts
+      // Fallback: more found occurrences (business located) is better
+      return b.foundRankings.length - a.foundRankings.length
     })
   }
 
-  function getSuccessRate(successful: number, total: number): string {
-    if (total === 0) return '0%'
-    return `${Math.round((successful / total) * 100)}%`
-  }
+  // Count of times the target business was found (rank not null) is simply foundRankings.length
 
   $: aggregatedResults = aggregateResultsByLLM(rankingResults)
 </script>
@@ -94,7 +92,7 @@
               LLM Provider
             </th>
             <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-              Success Rate
+              Found (count)
             </th>
             <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
               Average Rank
@@ -113,12 +111,10 @@
                 </div>
               </td>
               <td class="px-6 py-4 whitespace-nowrap">
-                <div class="text-sm text-gray-900">
-                  {getSuccessRate(llm.successfulAttempts, llm.totalAttempts)}
+                <div class="text-sm font-medium text-gray-900">
+                  {llm.foundRankings.length}/{llm.totalAttempts}
                 </div>
-                <div class="text-sm text-gray-500">
-                  {llm.successfulAttempts}/{llm.totalAttempts}
-                </div>
+                <div class="text-xs text-gray-500">business found</div>
               </td>
               <td class="px-6 py-4 whitespace-nowrap">
                 {#if llm.averageRank !== null}

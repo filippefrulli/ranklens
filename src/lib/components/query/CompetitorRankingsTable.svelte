@@ -3,6 +3,18 @@
   
   export let competitorRankings: any[]
 
+  // Sort by weighted_score (ascending: lower score = better). Missing scores go last.
+  function sortByWeightedScore(list: any[]): any[] {
+    return [...list].sort((a, b) => {
+      const aw = typeof a?.weighted_score === 'number' ? a.weighted_score : Number.POSITIVE_INFINITY
+      const bw = typeof b?.weighted_score === 'number' ? b.weighted_score : Number.POSITIVE_INFINITY
+      return aw - bw
+    })
+  }
+
+  let sortedCompetitors = sortByWeightedScore(competitorRankings)
+  $: sortedCompetitors = sortByWeightedScore(competitorRankings)
+
   function getAppearancePercentage(appearances: number, totalAttempts: number): string {
     return ((appearances / totalAttempts) * 100).toFixed(1)
   }
@@ -48,7 +60,7 @@
               Competitor Business
             </th>
             <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-              Weighted Score
+              Weighted Score <span class="ml-1 text-[10px] font-normal text-gray-400" title="Sorted ascending (lower = better)">▲</span>
             </th>
             <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
               Average Rank
@@ -62,7 +74,7 @@
           </tr>
         </thead>
         <tbody class="bg-white divide-y divide-gray-200">
-          {#each competitorRankings as competitor, index}
+          {#each sortedCompetitors as competitor, index}
             <tr class="hover:bg-gray-50 {competitor.is_user_business ? 'bg-blue-50/80 border-l-4 border-blue-500 ring-2 ring-blue-400' : ''}" aria-current={competitor.is_user_business ? 'true' : 'false'}>
               <td class="px-6 py-4 whitespace-nowrap">
                 <div class="flex items-center">

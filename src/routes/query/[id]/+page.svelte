@@ -188,8 +188,8 @@
         </div>
       </div>
 
-      <!-- Competitor Rankings -->
-      <div>
+  <!-- Competitor Rankings -->
+  <div class="-mt-2"> <!-- space-y-8 adds 2rem; -mt-4 offsets by 1rem => effective 1rem gap -->
         {#if loadingData}
           <Card padding="p-8" custom="text-center">
             <LoadingSpinner message="Loading run data..." />

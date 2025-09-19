@@ -9,6 +9,7 @@
   import ErrorMessage from '../../../lib/components/ui/ErrorMessage.svelte'
   import type { Query, RankingAttempt, LLMProvider } from '../../../lib/types'
   import Card from '$lib/components/ui/Card.svelte'
+  import { loadRun, saveRun } from '$lib/utils/queryRunCache'
 
   interface Props { data: PageData }
   let { data }: Props = $props()
@@ -43,22 +44,31 @@
     if (!queryId || !runId) return
     try {
       loadingData = true
-      const { data: rankings, error: rankingsError } = await supabase
-        .from('ranking_attempts')
-        .select(`*, analysis_runs!inner(id, created_at), llm_providers!inner(id, name)`)        
-        .eq('query_id', queryId)
-        .eq('analysis_run_id', runId)
-        .order('created_at', { ascending: false })
-      if (rankingsError) throw new Error(`Failed to fetch ranking results: ${rankingsError.message}`)
-      rankingResults = rankings || []
+      // Try cache first
+      const cached = loadRun(queryId, runId)
+      let competitorData: any[] | null = null
+      if (cached) {
+        rankingResults = cached.rankingResults
+        competitorData = cached.competitorRankings
+      } else {
+        const { data: rankings, error: rankingsError } = await supabase
+          .from('ranking_attempts')
+          .select(`*, analysis_runs!inner(id, created_at), llm_providers!inner(id, name)`)        
+          .eq('query_id', queryId)
+          .eq('analysis_run_id', runId)
+          .order('created_at', { ascending: false })
+        if (rankingsError) throw new Error(`Failed to fetch ranking results: ${rankingsError.message}`)
+        rankingResults = rankings || []
 
-      const { data: competitorData, error: competitorError } = await supabase
-        .from('competitor_results')
-        .select('*')
-        .eq('query_id', queryId)
-        .eq('analysis_run_id', runId)
-        .order('average_rank', { ascending: true })
-      if (competitorError) throw new Error(`Failed to fetch competitor rankings: ${competitorError.message}`)
+        const { data: competitorDataRaw, error: competitorError } = await supabase
+          .from('competitor_results')
+          .select('*')
+          .eq('query_id', queryId)
+          .eq('analysis_run_id', runId)
+          .order('average_rank', { ascending: true })
+        if (competitorError) throw new Error(`Failed to fetch competitor rankings: ${competitorError.message}`)
+        competitorData = competitorDataRaw || []
+      }
 
       let competitors = competitorData || []
       if (selectedProvider) {
@@ -87,6 +97,10 @@
         })
       }
       competitorRankings = competitors
+      // Save to cache if freshly fetched (no cache before)
+      if (!cached) {
+        saveRun(queryId, runId, rankingResults, competitorRankings)
+      }
     } catch (e: any) {
       console.error('Error loading run data', e)
       error = e.message || 'Failed to load run data'
@@ -115,7 +129,6 @@
             <button onclick={() => goBack()} class="text-slate-500 hover:text-slate-700 rounded-md border border-slate-300 bg-white px-2.5 py-1.5 text-xs font-medium cursor-pointer">← Back</button>
             <h1 class="text-xl font-semibold text-slate-800">Query: <span class="text-slate-900">{query.text}</span></h1>
           </div>
-          <p class="mt-2 text-xs text-slate-500">View ranking attempts and competitor performance for this search phrase across LLM providers.</p>
         </div>
         <!-- Provider Pills -->
         <div class="flex flex-wrap items-center gap-2">
@@ -126,7 +139,8 @@
               {provider.name}
             </button>
           {/each}
-        </div>
+        </div>LLM Ranking Attempts
+
       </div>
 
       <!-- Runs & LLM results -->
@@ -175,7 +189,7 @@
       </div>
 
       <!-- Competitor Rankings -->
-      <div class="mt-8">
+      <div>
         {#if loadingData}
           <Card padding="p-8" custom="text-center">
             <LoadingSpinner message="Loading run data..." />

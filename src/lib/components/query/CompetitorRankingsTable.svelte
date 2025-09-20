@@ -22,11 +22,11 @@
   $: sortedCompetitors = sortByWeightedScore(competitorRankings);
 
   // Display logic: show all competitors up to and including the user business, plus the next 5 after it.
-  // If user business not present, fall back to original top segment (top 6 to keep table small early on).
+  // If user business not present, fall back to a larger top segment (top 20) so user can scan a broader field.
   function buildDisplayed(list: any[]): any[] {
     if (!Array.isArray(list) || list.length === 0) return [];
     const FOLLOWING = 5;
-    const FALLBACK_SIZE = 6;
+    const FALLBACK_SIZE = 20;
     const userIdx = list.findIndex((c) => c?.is_user_business);
     if (userIdx === -1) {
       return list.slice(0, FALLBACK_SIZE);
@@ -222,16 +222,12 @@
     {#if competitorRankings.length > 0}
       <div class="bg-gray-50 px-6 py-3">
         <p class="text-sm text-gray-600">
-          <strong>Weighted Analysis:</strong> Results are ranked by weighted score
-          that considers both average rank and appearance consistency. A business
+          <strong>Weighted Analysis:</strong><br/> Results are ranked by weighted score
+          that considers both average rank and appearance consistency.
+        </p>
+        <p class="text-sm text-gray-600">A business
           appearing in 100% of attempts at rank #15 scores better than one appearing
-          once at rank #14.
-        </p>
-        <p class="text-xs text-gray-500 mt-1">
-          Formula: Weighted Score = Average Rank × (3 - 2.5 × Appearance Rate).
-          Lower scores indicate stronger competitors with high consistency being
-          heavily rewarded.
-        </p>
+          once at rank #14.</p>
       </div>
     {/if}
   {/if}

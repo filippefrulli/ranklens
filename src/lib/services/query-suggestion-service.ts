@@ -163,7 +163,7 @@ Task:
 Generate exactly 6 diverse natural-language query strings a user would type/say. Use the narrative to infer positioning, amenities, audience, price tier and vary across the set.
 
 Requirements:
-1. EACH query MUST contain some form of location reference ("${mainCity}" or a neighborhood/area/nearby descriptor)
+1. EACH query MUST contain some form of location reference ("${mainCity}" or a neighborhood, an area, or a major landmark)
 2. EXACTLY 6 queries: 3 SHORT (6-10 words) + 3 DETAILED (12-18 words)
 3. SINGLE intent per query (no plural mixed categories, no combining unrelated asks)
 4. Vary structure, tone, and included inferred attributes (price tier, amenity, audience), avoid repeating the same adjective or location form more than twice

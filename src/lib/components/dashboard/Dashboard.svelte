@@ -478,40 +478,24 @@
                   {:else if querySuggestions.length > 0}
                     <div class="mt-8 max-w-xl mx-auto space-y-3">
                       {#each querySuggestions as suggestion}
-                        <div
-                          class="flex items-start justify-between gap-4 p-4 rounded-lg border border-slate-200 bg-white shadow-sm hover:border-blue-300 transition-colors"
-                        >
-                          <div class="text-left">
-                            <p class="text-sm font-medium text-slate-800">
+                        <div class="flex items-center gap-3 p-4 rounded-lg border border-slate-200 bg-white shadow-sm hover:border-blue-300 transition-colors w-full md:max-w-xl mx-auto">
+                          <div class="text-left flex-1 min-w-0">
+                            <p class="text-sm font-medium text-slate-800 break-words">
                               {suggestion.text}
                             </p>
                             {#if suggestion.reasoning}
-                              <p
-                                class="text-xs text-slate-500 mt-1 leading-relaxed"
-                              >
+                              <p class="text-xs text-slate-500 mt-1 leading-relaxed break-words">
                                 {suggestion.reasoning}
                               </p>
                             {/if}
                           </div>
                           <button
                             type="button"
-                            onclick={() =>
-                              acceptQuerySuggestion(suggestion.text)}
-                            class="flex items-center justify-center h-8 w-8 rounded-full bg-blue-600 text-white hover:bg-blue-700 transition-colors cursor-pointer"
+                            onclick={() => acceptQuerySuggestion(suggestion.text)}
+                            class="shrink-0 inline-flex items-center justify-center h-9 w-9 aspect-square rounded-full bg-blue-600 text-white hover:bg-blue-700 transition-colors cursor-pointer"
                             aria-label="Add Query"
                           >
-                            <svg
-                              class="w-4 h-4"
-                              fill="none"
-                              stroke="currentColor"
-                              viewBox="0 0 24 24"
-                              ><path
-                                stroke-linecap="round"
-                                stroke-linejoin="round"
-                                stroke-width="2"
-                                d="M12 4v16m8-8H4"
-                              /></svg
-                            >
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.2" d="M12 4v16m8-8H4" /></svg>
                           </button>
                         </div>
                       {/each}
@@ -740,17 +724,13 @@
                   {#each querySuggestions as suggestion}
                     <button
                       type="button"
-                      class="w-full text-left p-3 rounded-md border border-slate-200 hover:border-blue-300 bg-white hover:bg-blue-50 transition-colors cursor-pointer group flex items-start justify-between gap-3"
+                      class="w-full md:max-w-xl text-left p-3 rounded-md border border-slate-200 hover:border-blue-300 bg-white hover:bg-blue-50 transition-colors cursor-pointer group flex items-center gap-3 mx-auto"
                       onclick={() => acceptQuerySuggestion(suggestion.text)}
                     >
-                      <span
-                        class="text-sm text-slate-700 group-hover:text-slate-900"
-                        >{suggestion.text}</span
-                      >
-                      <span
-                        class="inline-flex h-6 w-6 items-center justify-center rounded-full bg-blue-600 text-white text-xs font-medium group-hover:bg-blue-700"
-                        >+</span
-                      >
+                      <span class="flex-1 text-sm text-slate-700 group-hover:text-slate-900 break-words">{suggestion.text}</span>
+                      <span class="shrink-0 inline-flex h-9 w-9 aspect-square items-center justify-center rounded-full bg-blue-600 text-white group-hover:bg-blue-700">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.2" d="M12 4v16m8-8H4" /></svg>
+                      </span>
                     </button>
                   {/each}
                 </div>

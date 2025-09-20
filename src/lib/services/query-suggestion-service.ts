@@ -1,6 +1,7 @@
 import type { Business } from '../types'
 import { LLMService } from './llm-service'
 import { LLMProviderId, DEFAULT_MODELS } from '$lib/constants/llm'
+import { buildBusinessResearchPrompt, buildQuerySuggestionsPrompt } from './prompt-templates'
 
 interface QuerySuggestion {
   text: string
@@ -90,22 +91,11 @@ export class QuerySuggestionService {
   }
 
   private static async researchBusiness(business: Business): Promise<BusinessResearchNarrative> {
-    const researchPrompt = `You are an analyst. Write exactly TWO concise paragraphs (no lists, no headings) describing the business "${business.name}".
-
-Context:
-Name: ${business.name}
-Location: ${business.city || 'Not specified'}
-Google Type (optional): ${business.google_primary_type_display || 'Unknown'}
-
-Paragraph 1: Infer positioning, category, likely price tier, audience, and core qualities. Be specific but concise.
-Paragraph 2: Infer distinctive amenities, differentiators, experience style, and what customers might value. Natural prose.
-
-Rules:
-- 2 paragraphs only.
-- No JSON, no bullet points, no labels.
-- <= 90 words each.
-- Avoid repeating the business name more than once besides the opening.
-`
+    const researchPrompt = buildBusinessResearchPrompt({
+      name: business.name,
+      city: business.city,
+      googlePrimaryTypeDisplay: business.google_primary_type_display
+    })
 
     try {
   const researchContent = await this.queryLLMWithRetry(LLMProviderId.OPENAI, DEFAULT_MODELS.OPENAI, researchPrompt, 'medium')
@@ -151,30 +141,11 @@ Rules:
 
   private static buildPrompt(business: Business, researchNarrative: BusinessResearchNarrative): string {
     const mainCity = this.extractMainCity(business.city || '')
-
-    return `You will generate customer search queries an AI assistant might receive when someone is seeking ${business.name} or similar services.
-
-Business Research Narrative (context for grounding – do NOT summarize it back):
-"""
-${researchNarrative}
-"""
-
-Task:
-Generate exactly 6 diverse natural-language query strings a user would type/say. Use the narrative to infer positioning, amenities, audience, price tier and vary across the set.
-
-Requirements:
-1. EACH query MUST contain some form of location reference ("${mainCity}" or a neighborhood, an area, or a major landmark)
-2. EXACTLY 6 queries: 3 SHORT (6-10 words) + 3 DETAILED (12-18 words)
-3. SINGLE intent per query (no plural mixed categories, no combining unrelated asks)
-4. Vary structure, tone, and included inferred attributes (price tier, amenity, audience), avoid repeating the same adjective or location form more than twice
-5. Do not mention the business name directly, always write queries to search for the type of business or its features
-6. Avoid wrapping queries in quotes; they are plain strings
-7. No numbering, no bullets, no explanation outside JSON
-8. Return valid minified JSON ONLY with a top-level key "suggestions" mapping to an array of 6 strings.
-9. Ensure the queries are written in natural, conversational language that a real user would use, starting sentences like 'I'm looking for...', 'Where can I find...', 'What are the best...', etc.
-
-Output JSON schema:
-{"suggestions": ["query1", "query2", "query3", "query4", "query5", "query6"]}`
+    return buildQuerySuggestionsPrompt({
+      businessName: business.name,
+      researchNarrative,
+      mainCity
+    })
   }
 
   private static parseQuerySuggestions(content: string): QuerySuggestion[] {

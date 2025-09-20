@@ -101,9 +101,6 @@
             >Learn More</a
           >
         </div>
-        <p class="mt-4 text-[11px] text-slate-500">
-          No credit card needed • Free while in early access
-        </p>
       </section>
 
       <!-- Logos / Providers Strip -->
@@ -257,11 +254,6 @@
               href="/signin"
               class="inline-flex items-center justify-center bg-white text-blue-700 text-sm font-medium px-7 py-3 rounded-lg shadow-sm hover:bg-blue-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-white cursor-pointer transition-colors"
               >Create Free Account</a
-            >
-            <a
-              href="#features"
-              class="inline-flex items-center justify-center bg-blue-500/40 backdrop-blur text-white text-sm font-medium px-7 py-3 rounded-lg border border-white/50 hover:bg-blue-500/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-white cursor-pointer transition-colors"
-              >Explore Features</a
             >
           </div>
         </div>

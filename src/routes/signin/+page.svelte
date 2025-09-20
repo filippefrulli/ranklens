@@ -49,24 +49,7 @@
     <div class="grid lg:grid-cols-2 gap-10 items-stretch">
       <!-- Auth Card -->
       <Card variant="glass" padding="p-8" custom="flex flex-col justify-center">
-        <div class="mb-6">
-          <h1 class="text-2xl font-semibold text-slate-800">Welcome back</h1>
-          <p class="mt-1 text-sm text-slate-500">
-            Sign in or create an account to track your rankings across AI
-            assistants.
-          </p>
-        </div>
         <LoginForm {supabase} />
-        <p class="mt-8 text-[11px] text-slate-400">
-          By continuing you agree to our <a
-            href="/terms"
-            class="underline hover:text-slate-600">Terms</a
-          >
-          and
-          <a href="/privacy" class="underline hover:text-slate-600"
-            >Privacy Policy</a
-          >.
-        </p>
       </Card>
 
       <!-- Side Panel / Value Prop -->
@@ -112,16 +95,6 @@
               ><span>Run periodic analyses to see improvement trends.</span>
             </li>
           </ul>
-          <div class="pt-4">
-            <div
-              class="p-4 rounded-lg bg-white/70 border border-slate-200 shadow-sm"
-            >
-              <p class="text-sm text-slate-600">
-                <span class="font-medium text-slate-800">New:</span> Query suggestions
-                powered by AI help you discover impactful search phrases instantly.
-              </p>
-            </div>
-          </div>
         </div>
       </div>
     </div>

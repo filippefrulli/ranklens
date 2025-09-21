@@ -1,5 +1,6 @@
 <script lang="ts">
   import LLMProviderDropdown from '../ui/LLMProviderDropdown.svelte'
+  import Button from '../ui/Button.svelte'
   import type { LLMProvider } from '../../types'
   
   export let query: any
@@ -11,15 +12,14 @@
 
 <!-- Back to Dashboard Button - Outside and above the card -->
 <div class="mb-4">
-  <button 
-    onclick={goBack}
-    class="text-black border border-black hover:bg-gray-50 font-medium px-3 py-2 rounded-md inline-flex items-center cursor-pointer transition-colors"
+  <Button
+    variant="secondary"
+    size="md"
+    onClick={() => goBack()}
+    class="px-3 py-2 border border-black hover:bg-gray-50 inline-flex items-center"
   >
-    <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path>
-    </svg>
-    Back to Dashboard
-  </button>
+    {@const _=null}<span class="inline-flex items-center gap-2"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/></svg>Back to Dashboard</span>
+  </Button>
 </div>
 
 <!-- Query Information Card -->

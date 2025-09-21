@@ -1,5 +1,6 @@
 <script lang="ts">
   import { enhance } from '$app/forms';
+  import Button from '../ui/Button.svelte';
 
   export let show: boolean;
   export let loading: boolean;
@@ -51,7 +52,7 @@
             bind:value={newQuery}
             required
             rows="3"
-            class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+            class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-[rgb(var(--color-primary))]/50"
             placeholder={isAIGenerated
               ? "Edit the AI suggestion..."
               : "Best pizza place in Dublin"}
@@ -65,22 +66,20 @@
         </div>
 
         <div class="flex justify-end space-x-3 pt-4">
-          <button
+          <Button
             type="button"
-            onclick={onClose}
-            class="px-4 py-2 text-sm font-medium text-black border border-gray-500 rounded-md transition-colors cursor-pointer"
-          >
-            Cancel
-          </button>
-          <button
+            variant="secondary"
+            size="md"
+            onClick={() => onClose()}
+            class="px-4 py-2 text-sm border border-gray-500"
+          >Cancel</Button>
+          <Button
             type="submit"
             disabled={loading}
-            class="px-4 py-2 text-sm font-medium text-white bg-black hover:bg-gray-700 disabled:bg-gray-400 rounded-md transition-colors cursor-pointer"
-          >
-            {loading
-              ? "Adding..."
-              : "Add Query"}
-          </button>
+            variant="primary"
+            size="md"
+            class="px-4 py-2 text-sm"
+          >{loading ? 'Adding...' : 'Add Query'}</Button>
         </div>
       </form>
     </div>

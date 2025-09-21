@@ -134,7 +134,7 @@
           {#each displayedCompetitors as competitor}
             <tr
               class="hover:bg-gray-50 {competitor.is_user_business
-                ? 'bg-blue-50/80 border-l-4 border-blue-500 ring-2 ring-blue-400'
+                ? 'bg-[rgb(var(--color-primary))]/5 border-l-4 border-[rgb(var(--color-primary))] ring-2 ring-[rgb(var(--color-primary))]/30'
                 : ''}"
               aria-current={competitor.is_user_business ? "true" : "false"}
             >
@@ -142,7 +142,7 @@
                 <div class="flex items-center">
                   <div
                     class="flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center {competitor.is_user_business
-                      ? 'bg-blue-600 text-white'
+                      ? 'bg-[rgb(var(--color-primary))] text-white'
                       : 'bg-gray-100 text-gray-700'}"
                     title="Rank position in full sorted list"
                   >
@@ -195,7 +195,7 @@
                 <div class="flex items-center">
                   <div class="flex-1 bg-gray-200 rounded-full h-2 mr-2">
                     <div
-                      class="bg-blue-600 h-2 rounded-full"
+                      class="bg-[rgb(var(--color-primary))] h-2 rounded-full"
                       style="width: {getAppearancePercentage(
                         competitor.appearances_count,
                         competitor.total_attempts

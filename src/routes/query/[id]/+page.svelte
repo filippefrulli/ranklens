@@ -9,6 +9,7 @@
   import ErrorMessage from "../../../lib/components/ui/ErrorMessage.svelte";
   import type { Query, RankingAttempt, LLMProvider } from "../../../lib/types";
   import Card from "$lib/components/ui/Card.svelte";
+  import Button from "$lib/components/ui/Button.svelte";
   import { loadRun, saveRun } from "$lib/utils/queryRunCache";
 
   interface Props {
@@ -176,25 +177,27 @@
   }
 </script>
 
-<div class="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 py-8">
+<div class="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 py-8">
   <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-8">
     {#if error}
       <ErrorMessage {error} onDismiss={() => (error = null)} />
-      <button
-        onclick={() => goBack()}
-        class="mt-4 text-sm font-medium text-blue-600 hover:text-blue-700 cursor-pointer"
-        >← Back to Dashboard</button
-      >
+      <Button
+        variant="subtle"
+        size="sm"
+        onClick={() => goBack()}
+        class="mt-4 bg-transparent hover:bg-transparent text-[rgb(var(--color-primary))] px-0 py-0"
+      >← Back to Dashboard</Button>
     {:else if query}
       <!-- Header -->
       <div class="flex items-start justify-between flex-col md:flex-row gap-4">
         <div>
           <div class="flex items-center gap-3">
-            <button
-              onclick={() => goBack()}
-              class="text-slate-500 hover:text-slate-700 rounded-md border border-slate-300 bg-white px-2.5 py-1.5 text-xs font-medium cursor-pointer"
-              >← Back</button
-            >
+            <Button
+              variant="subtle"
+              size="sm"
+              onClick={() => goBack()}
+              class="text-slate-500 hover:text-slate-700 border border-slate-300 bg-white px-2.5 py-1.5 text-xs rounded-md"
+            >← Back</Button>
             <h1 class="text-xl font-semibold text-slate-800">
               Query: <span class="text-slate-900">{query.text}</span>
             </h1>
@@ -202,30 +205,23 @@
         </div>
         <!-- Provider Pills -->
         <div class="flex flex-wrap items-center gap-2">
-          <button
-            class="px-3 py-1.5 rounded-full text-xs font-medium border cursor-pointer transition-colors {selectedProvider ===
-            null
-              ? 'bg-blue-600 text-white border-blue-600'
-              : 'border-slate-300 text-slate-600 hover:bg-slate-100'}"
-            onclick={() => onProviderChange(null)}>All</button
-          >
+          <Button
+            variant="subtle"
+            size="sm"
+            onClick={() => onProviderChange(null)}
+            class="px-3 py-1.5 rounded-full text-xs font-medium border transition-colors {selectedProvider === null ? 'bg-[rgb(var(--color-primary))] text-black border-[rgb(var(--color-primary))]' : 'border-slate-300 text-slate-600 hover:bg-slate-100'}"
+          >All</Button>
           {#each llmProviders as provider}
-            <button
-              class="px-3 py-1.5 rounded-full text-xs font-medium border cursor-pointer transition-colors flex items-center gap-1 {selectedProvider?.id ===
-              provider.id
-                ? 'bg-blue-600 text-white border-blue-600'
-                : 'border-slate-300 text-slate-600 hover:bg-slate-100'}"
-              onclick={() => onProviderChange(provider)}
+            <Button
+              variant="subtle"
+              size="sm"
+              onClick={() => onProviderChange(provider)}
+              class="px-3 py-1.5 rounded-full text-xs font-medium border transition-colors flex items-center gap-1 {selectedProvider?.id === provider.id ? 'bg-[rgb(var(--color-primary))] text-white border-[rgb(var(--color-primary))]' : 'border-slate-300 text-slate-600 hover:bg-slate-100'}"
             >
-              <span
-                class="inline-flex h-4 w-4 items-center justify-center rounded-full bg-gradient-to-br from-slate-200 to-slate-300 text-[10px] font-semibold text-slate-600"
-                >{provider.name?.[0] || "P"}</span
-              >
-              {provider.name}
-            </button>
+              {@const _=null}<span class="inline-flex h-4 w-4 items-center justify-center rounded-full bg-gradient-to-br from-slate-200 to-slate-300 text-[10px] font-semibold text-slate-600">{provider.name?.[0] || 'P'}</span>{provider.name}
+            </Button>
           {/each}
         </div>
-        LLM Ranking Attempts
       </div>
 
       <!-- Runs & LLM results -->
@@ -243,26 +239,15 @@
           {#if analysisRuns.length > 0}
             <div class="space-y-2">
               {#each analysisRuns as run (run.id)}
-                <button
+                <Button
                   type="button"
-                  class="w-full text-left p-3 rounded-lg border transition-colors cursor-pointer {selectedRunId ===
-                  run.id
-                    ? 'bg-blue-50 border-blue-400'
-                    : 'bg-white border-slate-200 hover:border-slate-300'}"
-                  onclick={() => selectRun(run.id)}
+                  variant="subtle"
+                  size="sm"
+                  onClick={() => selectRun(run.id)}
+                  class="w-full justify-start text-left p-3 rounded-lg border transition-colors {selectedRunId === run.id ? 'bg-black/5 border-black' : 'bg-white border-slate-200 hover:border-slate-300'}"
                 >
-                  <div class="flex items-center justify-between">
-                    <span class="text-xs font-medium text-slate-700"
-                      >{formatDate(run.created_at)}</span
-                    >
-                    {#if selectedRunId === run.id}
-                      <span
-                        class="inline-flex items-center rounded-full bg-blue-600 text-white px-2 py-0.5 text-[10px] font-medium"
-                        >Active</span
-                      >
-                    {/if}
-                  </div>
-                </button>
+                  {@const _=null}<span class="w-full flex items-center justify-between"><span class="text-xs font-medium text-slate-700">{formatDate(run.created_at)}</span>{#if selectedRunId === run.id}<span class="inline-flex items-center rounded-full bg-[rgb(var(--color-primary))] text-white px-2 py-0.5 text-[10px] font-medium">Active</span>{/if}</span>
+                </Button>
               {/each}
             </div>
           {:else}

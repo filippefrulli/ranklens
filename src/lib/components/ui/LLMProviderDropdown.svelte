@@ -105,7 +105,7 @@
     <button
       type="button"
       onclick={() => isOpen = !isOpen}
-      class="flex items-center gap-2 border border-gray-300 rounded-md bg-white {sizeClasses[size]} pr-8 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 cursor-pointer hover:bg-gray-50 w-full text-left"
+  class="flex items-center gap-2 border border-gray-300 rounded-md bg-white {sizeClasses[size]} pr-8 focus:outline-none focus:ring-2 focus:ring-[rgb(var(--color-primary))]/50 focus:border-[rgb(var(--color-primary))] cursor-pointer hover:bg-gray-50 w-full text-left"
       aria-haspopup="listbox"
       aria-expanded={isOpen}
     >
@@ -137,7 +137,7 @@
         <button
           type="button"
           onclick={() => handleProviderSelect(null)}
-          class="flex items-center gap-2 w-full px-3 py-2 text-left hover:bg-gray-50 focus:bg-gray-50 focus:outline-none {sizeClasses[size].split(' ')[0]} {selectedProvider === null ? 'bg-blue-50 text-blue-600' : 'text-gray-900'}"
+          class="flex items-center gap-2 w-full px-3 py-2 text-left hover:bg-gray-50 focus:bg-gray-50 focus:outline-none {sizeClasses[size].split(' ')[0]} {selectedProvider === null ? 'bg-black/5 text-slate-900' : 'text-gray-900'}"
         >
           <img 
             src="/images/providers/all.png" 
@@ -153,7 +153,7 @@
           <button
             type="button"
             onclick={() => handleProviderSelect(provider)}
-            class="flex items-center gap-2 w-full px-3 py-2 text-left hover:bg-gray-50 focus:bg-gray-50 focus:outline-none {sizeClasses[size].split(' ')[0]} {selectedProvider?.id === provider.id ? 'bg-blue-50 text-blue-600' : 'text-gray-900'}"
+            class="flex items-center gap-2 w-full px-3 py-2 text-left hover:bg-gray-50 focus:bg-gray-50 focus:outline-none {sizeClasses[size].split(' ')[0]} {selectedProvider?.id === provider.id ? 'bg-black/5 text-slate-900' : 'text-gray-900'}"
           >
             <img 
               src={getProviderIconPath(provider.name)} 

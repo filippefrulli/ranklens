@@ -43,7 +43,7 @@
 </svelte:head>
 
 <div
-  class="min-h-[calc(100vh-4rem)] flex items-center justify-center py-12 bg-gradient-to-br from-slate-50 to-blue-50"
+  class="min-h-[calc(100vh-4rem)] flex items-center justify-center py-12 bg-gradient-to-br from-slate-50 to-slate-100"
 >
   <div class="w-full max-w-5xl mx-auto px-4">
     <div class="grid lg:grid-cols-2 gap-10 items-stretch">
@@ -55,12 +55,12 @@
       <!-- Side Panel / Value Prop -->
       <div class="hidden lg:flex flex-col justify-center relative">
         <div
-          class="absolute -inset-4 rounded-2xl bg-gradient-to-br from-blue-100/60 to-indigo-100/40 border border-blue-200/60"
+          class="absolute -inset-4 rounded-2xl bg-gradient-to-br from-slate-100/60 to-slate-300/40 border border-slate-200/60"
         ></div>
         <div class="relative p-10 space-y-8">
           <div>
             <h2
-              class="text-sm font-medium uppercase tracking-wide text-blue-600 mb-3"
+              class="text-sm font-medium uppercase tracking-wide text-[rgb(var(--color-primary))] mb-3"
             >
               Why RankLens
             </h2>
@@ -71,7 +71,7 @@
           <ul class="space-y-5 text-sm text-slate-600">
             <li class="flex items-start gap-3">
               <span
-                class="inline-flex h-6 w-6 items-center justify-center rounded-full bg-blue-600 text-white text-[11px] font-medium"
+                class="inline-flex h-6 w-6 items-center justify-center rounded-full bg-[rgb(var(--color-primary))] text-white text-[11px] font-medium"
                 >1</span
               ><span
                 >Track rankings across {PROVIDER_DISPLAY_NAMES[
@@ -81,7 +81,7 @@
             </li>
             <li class="flex items-start gap-3">
               <span
-                class="inline-flex h-6 w-6 items-center justify-center rounded-full bg-blue-600 text-white text-[11px] font-medium"
+                class="inline-flex h-6 w-6 items-center justify-center rounded-full bg-[rgb(var(--color-primary))] text-white text-[11px] font-medium"
                 >2</span
               ><span
                 >Monitor competitor visibility and discover who dominates
@@ -90,7 +90,7 @@
             </li>
             <li class="flex items-start gap-3">
               <span
-                class="inline-flex h-6 w-6 items-center justify-center rounded-full bg-blue-600 text-white text-[11px] font-medium"
+                class="inline-flex h-6 w-6 items-center justify-center rounded-full bg-[rgb(var(--color-primary))] text-white text-[11px] font-medium"
                 >3</span
               ><span>Run periodic analyses to see improvement trends.</span>
             </li>

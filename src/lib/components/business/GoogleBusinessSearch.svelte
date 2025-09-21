@@ -256,13 +256,13 @@
         onkeydown={handleKeydown}
         type="text"
         placeholder="e.g., Joe's Pizza Dublin"
-        class="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+  class="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-[rgb(var(--color-primary))]/50"
         disabled={isSearching}
       />
       <button
         onclick={searchBusinesses}
         disabled={isSearching || !searchQuery.trim()}
-        class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:bg-gray-400 transition-colors cursor-pointer"
+  class="px-4 py-2 bg-[rgb(var(--color-primary))] text-white rounded-md hover:bg-[rgb(var(--color-primary))] disabled:bg-gray-400 transition-colors cursor-pointer"
       >
         {isSearching ? 'Searching...' : 'Search'}
       </button>
@@ -295,7 +295,7 @@
                 {#if place.types && place.types.length > 0}
                   <div class="mt-1">
                     {#each place.types.slice(0, 3) as type}
-                      <span class="inline-block px-2 py-1 text-xs bg-blue-100 text-blue-800 rounded mr-1">
+                      <span class="inline-block px-2 py-1 text-xs bg-black/5 text-slate-700 rounded mr-1">
                         {formatBusinessType(type)}
                       </span>
                     {/each}

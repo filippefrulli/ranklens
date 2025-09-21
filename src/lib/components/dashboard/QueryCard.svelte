@@ -37,7 +37,7 @@
     <a
       href="/query/{query.id}"
       aria-label="View details for query"
-      class="bg-blue-50 hover:bg-blue-100 text-blue-600 text-sm font-medium py-2 px-3 rounded-md transition-colors cursor-pointer inline-flex items-center flex-shrink-0"
+	class="bg-white border border-gray-300 hover:bg-gray-50 text-slate-700 hover:text-slate-900 text-sm font-medium py-2 px-3 rounded-md transition-colors cursor-pointer inline-flex items-center flex-shrink-0"
     >
       <svg
         class="w-4 h-4"
@@ -87,7 +87,7 @@
             <div class="flex items-end justify-center space-x-1 h-full">
               {#each history.slice(-8) as run}
                 <div
-                  class="bg-blue-500 w-3 rounded-t transition-all duration-300"
+                  class="bg-[rgb(var(--color-primary))] w-3 rounded-t transition-all duration-300"
                   style="height: {getBarHeight(run.average_rank)}px"
                   title="Rank {run.average_rank?.toFixed(1) || 'N/A'} on {formatDate(run.run_date)}"
                 ></div>
@@ -97,7 +97,7 @@
             <div class="flex items-end justify-center space-x-1 h-full">
               {#each analytics.llm_breakdown.slice(0, 8) as breakdown}
                 <div
-                  class="bg-blue-400 w-3 rounded-t"
+                  class="bg-[rgb(var(--color-primary))]/80 w-3 rounded-t"
                   style="height: {breakdown.average_rank
                     ? Math.max(12, 80 - breakdown.average_rank * 3)
                     : 12}px"

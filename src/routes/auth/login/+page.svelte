@@ -6,7 +6,7 @@
   let { data }: Props = $props()
 </script>
 
-<div class="min-h-[calc(100vh-4rem)] flex items-center justify-center py-12 bg-gradient-to-br from-slate-50 to-blue-50">
+<div class="min-h-[calc(100vh-4rem)] flex items-center justify-center py-12 bg-gradient-to-br from-slate-50 to-slate-100">
   <div class="w-full max-w-md mx-auto px-4">
     <Card variant="glass" padding="p-8">
       <div class="mb-6 text-center">

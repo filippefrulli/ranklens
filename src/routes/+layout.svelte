@@ -66,7 +66,7 @@
 
 <a
   href="#main-content"
-  class="sr-only focus:not-sr-only focus:fixed focus:top-2 focus:left-2 focus:z-50 focus:px-4 focus:py-2 focus:rounded-md focus:bg-blue-600 focus:text-white focus:shadow-lg"
+  class="sr-only focus:not-sr-only focus:fixed focus:top-2 focus:left-2 focus:z-50 focus:px-4 focus:py-2 focus:rounded-md focus:bg-primary focus:text-white focus:shadow-lg"
   >Skip to content</a
 >
 <div class="min-h-screen flex flex-col bg-white">

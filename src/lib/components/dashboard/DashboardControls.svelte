@@ -1,6 +1,7 @@
 <script lang="ts">
   import type { LLMProvider, WeeklyAnalysisCheck } from '../../types'
   import LLMProviderDropdown from '../ui/LLMProviderDropdown.svelte'
+  import Button from '../ui/Button.svelte'
   
   export let llmProviders: LLMProvider[]
   export let selectedProvider: LLMProvider | null
@@ -23,26 +24,26 @@
 
   <!-- Action Buttons -->
   <div class="flex gap-2">
-    <button
-      onclick={onAddQuery}
-      class="text-black border border-gray-400 text-sm font-medium py-2 px-4 rounded-md cursor-pointer inline-flex items-center gap-2"
+    <Button
+      variant="secondary"
+      size="md"
+      onClick={() => onAddQuery()}
+      class="border border-gray-400 gap-2 px-4 py-2 text-sm"
     >
-      <span>+</span>
-      Add Query
-    </button>
+      {@const _=null}<span>+</span> Add Query
+    </Button>
 
     {#if hasQueries}
       <div class="relative">
-        <button
-          onclick={onRunAnalysis}
+        <Button
+          onClick={() => onRunAnalysis()}
           disabled={!weeklyCheck.canRun || runningAnalysis}
-          class="text-sm font-medium py-2 px-4 rounded-md transition-colors cursor-pointer
-            {weeklyCheck.canRun && !runningAnalysis
-              ? 'bg-black hover:bg-gray-700 text-white'
-              : 'bg-gray-300 text-gray-500 cursor-not-allowed'}"
+          variant={weeklyCheck.canRun && !runningAnalysis ? 'primary' : 'secondary'}
+          size="md"
+          class="px-4 py-2 text-sm {(!weeklyCheck.canRun || runningAnalysis) ? 'opacity-70' : ''}"
         >
-          {runningAnalysis ? "Running Analysis..." : "Run Weekly Analysis"}
-        </button>
+          {runningAnalysis ? 'Running Analysis...' : 'Run Weekly Analysis'}
+        </Button>
 
         {#if !weeklyCheck.canRun && weeklyCheck.nextAllowedDate}
           <div class="absolute top-full left-0 mt-1 p-2 bg-yellow-50 border border-yellow-200 rounded-md text-sm text-yellow-700 whitespace-nowrap z-10">

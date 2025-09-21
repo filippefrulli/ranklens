@@ -16,8 +16,8 @@
       <form method="POST" action="?/createBusiness">
         <div class="text-center">
           <div class="mb-4">
-            <div class="w-12 h-12 mx-auto bg-blue-100 rounded-full flex items-center justify-center">
-              <svg class="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <div class="w-12 h-12 mx-auto bg-black/5 rounded-full flex items-center justify-center">
+              <svg class="w-6 h-6 text-[rgb(var(--color-primary))]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"></path>
               </svg>
             </div>
@@ -48,7 +48,7 @@
             <button
               type="submit"
               disabled={loading}
-              class="px-6 py-2 text-md font-medium text-white bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 rounded-md transition-colors cursor-pointer"
+              class="px-6 py-2 text-md font-medium text-white bg-[rgb(var(--color-primary))] hover:bg-[rgb(var(--color-primary))] disabled:bg-gray-400 rounded-md transition-colors cursor-pointer"
             >
               {loading ? "Registering..." : "Confirm"}
             </button>

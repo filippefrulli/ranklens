@@ -210,7 +210,7 @@
 </script>
 
 {#if user && business}
-  <div class="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50">
+  <div class="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100">
     <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
       <!-- Business Summary / Header Card -->
       <div class="grid gap-6 lg:grid-cols-12">
@@ -225,7 +225,7 @@
                 class="text-xl font-semibold text-gray-900 flex items-center gap-2"
               >
                 <span
-                  class="inline-flex h-10 w-10 items-center justify-center rounded-lg bg-blue-100 text-blue-600 font-bold text-lg"
+                  class="inline-flex h-10 w-10 items-center justify-center rounded-lg bg-black/5 text-black font-bold text-lg"
                   >{business.name?.[0] || "B"}</span
                 >
                 {business.name}
@@ -432,10 +432,10 @@
               {:else}
                 <div class="text-center py-14">
                   <div
-                    class="mx-auto h-12 w-12 rounded-full bg-blue-50 flex items-center justify-center mb-5"
+                    class="mx-auto h-12 w-12 rounded-full bg-black/5 flex items-center justify-center mb-5"
                   >
                     <svg
-                      class="w-6 h-6 text-blue-600"
+                      class="w-6 h-6 text-[rgb(var(--color-primary))]"
                       fill="none"
                       stroke="currentColor"
                       viewBox="0 0 24 24"
@@ -467,7 +467,7 @@
                         class="flex items-center gap-2 text-slate-600 text-sm"
                       >
                         <div
-                          class="animate-spin rounded-full h-5 w-5 border-2 border-blue-600 border-t-transparent"
+                          class="animate-spin rounded-full h-5 w-5 border-2 border-[rgb(var(--color-primary))] border-t-transparent"
                         ></div>
                         Generating AI suggestions…
                       </div>
@@ -478,7 +478,7 @@
                   {:else if querySuggestions.length > 0}
                     <div class="mt-8 max-w-xl mx-auto space-y-3">
                       {#each querySuggestions as suggestion}
-                        <div class="flex items-center gap-3 p-4 rounded-lg border border-slate-200 bg-white shadow-sm hover:border-blue-300 transition-colors w-full md:max-w-xl mx-auto">
+                        <div class="flex items-center gap-3 p-4 rounded-lg border border-slate-200 bg-white shadow-sm hover:border-slate-400 transition-colors w-full md:max-w-xl mx-auto">
                           <div class="text-left flex-1 min-w-0">
                             <p class="text-sm font-medium text-slate-800 break-words">
                               {suggestion.text}
@@ -492,7 +492,7 @@
                           <button
                             type="button"
                             onclick={() => acceptQuerySuggestion(suggestion.text)}
-                            class="shrink-0 inline-flex items-center justify-center h-9 w-9 aspect-square rounded-full bg-blue-600 text-white hover:bg-blue-700 transition-colors cursor-pointer"
+                            class="shrink-0 inline-flex items-center justify-center h-9 w-9 aspect-square rounded-full bg-[rgb(var(--color-primary))] text-white hover:brightness-95 transition-colors cursor-pointer"
                             aria-label="Add Query"
                           >
                             <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.2" d="M12 4v16m8-8H4" /></svg>
@@ -536,7 +536,7 @@
                         >
                           <button
                             type="submit"
-                            class="text-xs px-3 py-2 rounded-md border border-slate-300 text-slate-600 hover:bg-slate-100 cursor-pointer inline-flex items-center gap-1"
+                            class="text-xs px-3 py-2 rounded-md border border-slate-300 text-slate-600 hover:bg-gray-100 cursor-pointer inline-flex items-center gap-1"
                           >
                             <svg
                               class="w-3 h-3"
@@ -555,7 +555,7 @@
                         </form>
                         <button
                           type="button"
-                          class="text-xs px-3 py-2 rounded-md bg-blue-600 text-white hover:bg-blue-700 cursor-pointer inline-flex items-center gap-1"
+                          class="text-xs px-3 py-2 rounded-md bg-[rgb(var(--color-primary))] text-white hover:brightness-95 cursor-pointer inline-flex items-center gap-1"
                           onclick={() => {
                             isAIGeneratedQuery = false;
                             showAddQuery = true;
@@ -605,7 +605,7 @@
                       >
                         <button
                           type="submit"
-                          class="bg-gray-900 text-white px-5 py-2.5 rounded-md text-sm font-medium hover:bg-gray-800 cursor-pointer inline-flex items-center gap-2"
+                          class="bg-black text-white px-5 py-2.5 rounded-md text-sm font-medium hover:bg-gray-800 cursor-pointer inline-flex items-center gap-2"
                         >
                           <span>✨</span>
                           {loadingSuggestions
@@ -615,7 +615,7 @@
                       </form>
                       <button
                         type="button"
-                        class="bg-blue-600 text-white px-5 py-2.5 rounded-md text-sm font-medium hover:bg-blue-700 cursor-pointer inline-flex items-center gap-2"
+                        class="bg-[rgb(var(--color-primary))] text-white px-5 py-2.5 rounded-md text-sm font-medium hover:brightness-95 cursor-pointer inline-flex items-center gap-2"
                         onclick={() => {
                           isAIGeneratedQuery = false;
                           showAddQuery = true;
@@ -686,19 +686,15 @@
                 >
                   <button
                     type="submit"
-                    class="px-5 py-2.5 rounded-md text-sm font-medium bg-blue-600 text-white hover:bg-blue-700 transition-colors cursor-pointer inline-flex items-center gap-2 disabled:opacity-70 disabled:cursor-not-allowed"
+                    class="px-5 py-2.5 rounded-md text-sm font-medium bg-[rgb(var(--color-secondary))] text-white hover:brightness-90 transition-colors cursor-pointer inline-flex items-center gap-2 disabled:opacity-70 disabled:cursor-not-allowed"
                     disabled={loadingSuggestions}
                     aria-busy={loadingSuggestions}
                   >
                     <span>✨</span>
                     {#if loadingSuggestions}
-                      {querySuggestions.length > 0
-                        ? "Refreshing…"
-                        : "Generating…"}
+                      {querySuggestions.length > 0 ? "Refreshing…" : "Generating…"}
                     {:else}
-                      {querySuggestions.length > 0
-                        ? "Refresh Suggestions"
-                        : "Generate Suggestions"}
+                      {querySuggestions.length > 0 ? "Refresh Suggestions" : "Generate Suggestions"}
                     {/if}
                   </button>
                 </form>
@@ -715,7 +711,7 @@
                   class="flex items-center gap-2 text-slate-600 text-sm py-4"
                 >
                   <div
-                    class="animate-spin rounded-full h-5 w-5 border-2 border-blue-600 border-t-transparent"
+                    class="animate-spin rounded-full h-5 w-5 border-2 border-[rgb(var(--color-primary))] border-t-transparent"
                   ></div>
                   Generating suggestions…
                 </div>
@@ -724,11 +720,11 @@
                   {#each querySuggestions as suggestion}
                     <button
                       type="button"
-                      class="w-full md:max-w-xl text-left p-3 rounded-md border border-slate-200 hover:border-blue-300 bg-white hover:bg-blue-50 transition-colors cursor-pointer group flex items-center gap-3 mx-auto"
+                      class="w-full md:max-w-xl text-left p-3 rounded-md border border-slate-200 hover:border-slate-400 bg-white hover:bg-black/5 transition-colors cursor-pointer group flex items-center gap-3 mx-auto"
                       onclick={() => acceptQuerySuggestion(suggestion.text)}
                     >
                       <span class="flex-1 text-sm text-slate-700 group-hover:text-slate-900 break-words">{suggestion.text}</span>
-                      <span class="shrink-0 inline-flex h-9 w-9 aspect-square items-center justify-center rounded-full bg-blue-600 text-white group-hover:bg-blue-700">
+                      <span class="shrink-0 inline-flex h-9 w-9 aspect-square items-center justify-center rounded-full bg-[rgb(var(--color-primary))] text-white group-hover:bg-[rgb(var(--color-primary))]">
                         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.2" d="M12 4v16m8-8H4" /></svg>
                       </span>
                     </button>
@@ -779,7 +775,7 @@
     {/if}
   </div>
 {:else if user && needsOnboarding}
-  <div class="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50">
+  <div class="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100">
     <main class="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
       <BusinessRegistration
         onSearchForBusiness={() => (showGoogleSearch = true)}
@@ -839,7 +835,7 @@
   </div>
 {:else}
   <div
-    class="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 flex items-center justify-center"
+    class="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 flex items-center justify-center"
   >
     <div class="text-center">
       <h1 class="text-2xl font-bold text-gray-900 mb-4">Loading...</h1>

@@ -1,1 +1,21 @@
 @import "tailwindcss";
+
+/* Primary color (current) */
+/*:root { --color-primary: 37 99 235; } /* #2563eb (blue-600) */
+
+/* Alternatives: duplicate desired line over the current one */
+/* :root { --color-primary: 14 165 233; } /* #0ea5e9  sky-500 */
+/* :root { --color-primary: 79 70 229; }  /* #4f46e5  indigo-600 */
+/* :root { --color-primary: 30 64 175; } /*  #1e40af  blue-800 */
+/* :root { --color-primary: 5 150 105; }  /* #059669  emerald-600 */
+/* :root { --color-primary: 13 148 136; } /* #0d9488  teal-600 */
+/* :root { --color-primary: 109 40 217; } /* #6d28d9  violet-600 */
+/* :root { --color-primary: 126 34 206; } /* #7e22ce  purple-600 */
+ :root { --color-primary: 234 88 12; --color-secondary: 0 0 0; }  /* primary #ea580c, secondary black */
+/* :root { --color-primary: 217 119 6; }  /* #d97706  amber-600 */
+/* :root { --color-primary: 192 38 211; } /* #c026d3  fuchsia-600 */
+/* :root { --color-primary: 219 39 119; } /* #db2777  pink-600 */
+/* :root { --color-primary: 71 85 105; }  /* #475569  slate-600 */
+/* :root { --color-primary: 82 82 91; }   /* #52525b  zinc-600 */
+/* :root { --color-primary: 124 58 237; } /* #7c3aed  violet-500 */
+/* :root { --color-primary: 56 189 248; } /* #38bdf8  sky-400 */

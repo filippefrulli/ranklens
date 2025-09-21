@@ -23,23 +23,9 @@
   let dropdownRef: HTMLDivElement
 
   import { normalizeProvider, LLMProviderId } from '$lib/constants/llm'
+  import LLMLogo from '$lib/components/logos/LLMLogo.svelte'
 
   // Provider icons mapping using canonical provider id
-  function getProviderIconPath(providerName: string): string {
-    try {
-      const { id } = normalizeProvider(providerName)
-      switch (id) {
-        case LLMProviderId.OPENAI:
-          return '/images/providers/openai.svg'
-        case LLMProviderId.GEMINI:
-          return '/images/providers/gemini.png'
-        default:
-          return '/images/providers/all.png'
-      }
-    } catch {
-      return '/images/providers/all.png'
-    }
-  }
 
   // Icon size based on component size
   const iconSizeClasses = {
@@ -88,7 +74,7 @@
 
   // Get display text for selected provider
   const selectedDisplayText = $derived(selectedProvider?.name || 'All Providers')
-  const selectedIconPath = $derived(selectedProvider ? getProviderIconPath(selectedProvider.name) : '/images/providers/all.png')
+  const selectedIconName = $derived(selectedProvider ? selectedProvider.name : 'All Providers')
 </script>
 
 <svelte:window on:click={handleClickOutside} on:keydown={handleKeydown} />
@@ -109,12 +95,7 @@
       aria-haspopup="listbox"
       aria-expanded={isOpen}
     >
-      <img 
-        src={selectedIconPath} 
-        alt={selectedDisplayText}
-        class="{iconSizeClasses[size]} flex-shrink-0"
-        loading="lazy"
-      />
+      <LLMLogo provider={selectedIconName} size={size === 'sm' ? 16 : size === 'md' ? 20 : 24} class="{iconSizeClasses[size]} flex-shrink-0" />
       <span class="flex-1 truncate">{selectedDisplayText}</span>
     </button>
     
@@ -139,12 +120,7 @@
           onclick={() => handleProviderSelect(null)}
           class="flex items-center gap-2 w-full px-3 py-2 text-left hover:bg-gray-50 focus:bg-gray-50 focus:outline-none {sizeClasses[size].split(' ')[0]} {selectedProvider === null ? 'bg-black/5 text-slate-900' : 'text-gray-900'}"
         >
-          <img 
-            src="/images/providers/all.png" 
-            alt="All Providers"
-            class="{iconSizeClasses[size]} flex-shrink-0"
-            loading="lazy"
-          />
+          <LLMLogo provider="All Providers" size={size === 'sm' ? 16 : size === 'md' ? 20 : 24} class="{iconSizeClasses[size]} flex-shrink-0" />
           <span>All Providers</span>
         </button>
 
@@ -155,12 +131,7 @@
             onclick={() => handleProviderSelect(provider)}
             class="flex items-center gap-2 w-full px-3 py-2 text-left hover:bg-gray-50 focus:bg-gray-50 focus:outline-none {sizeClasses[size].split(' ')[0]} {selectedProvider?.id === provider.id ? 'bg-black/5 text-slate-900' : 'text-gray-900'}"
           >
-            <img 
-              src={getProviderIconPath(provider.name)} 
-              alt={provider.name}
-              class="{iconSizeClasses[size]} flex-shrink-0"
-              loading="lazy"
-            />
+            <LLMLogo provider={provider.name} size={size === 'sm' ? 16 : size === 'md' ? 20 : 24} class="{iconSizeClasses[size]} flex-shrink-0" />
             <span>{provider.name}</span>
           </button>
         {/each}

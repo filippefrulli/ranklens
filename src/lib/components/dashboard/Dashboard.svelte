@@ -21,6 +21,7 @@
   import Button from "$lib/components/ui/Button.svelte";
   import { browser } from "$app/environment";
   import { loadSuggestions, saveSuggestions } from "$lib/utils/suggestionsCache";
+  import LLMLogo from '$lib/components/logos/LLMLogo.svelte';
 
   interface Props {
     form?: any;
@@ -315,10 +316,10 @@
                 {#if llmProviders && llmProviders.length > 0}
                   <!-- Show OpenAI and Gemini logos if those providers exist -->
                   {#if llmProviders.some(p => p.name.toLowerCase().includes('openai'))}
-                    <img src="/images/providers/openai.svg" alt="OpenAI" class="h-8 w-8 object-contain" loading="lazy" />
+                    <LLMLogo provider="OpenAI" size={32} class="h-8 w-8" />
                   {/if}
                   {#if llmProviders.some(p => p.name.toLowerCase().includes('gemini') || p.name.toLowerCase().includes('google'))}
-                    <img src="/images/providers/gemini.png" alt="Gemini" class="h-8 w-8 object-contain" loading="lazy" />
+                    <LLMLogo provider="Gemini" size={32} class="h-8 w-8" />
                   {/if}
                   {#if !llmProviders.some(p => p.name.toLowerCase().includes('openai')) && !llmProviders.some(p => p.name.toLowerCase().includes('gemini') || p.name.toLowerCase().includes('google'))}
                     <span class="text-2xl font-semibold text-slate-800">{llmProviders.length}</span>

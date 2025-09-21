@@ -34,6 +34,7 @@
   // Get user from layout data
   const user = $derived(data.user);
   import { PROVIDER_DISPLAY_NAMES, LLMProviderId } from "$lib/constants/llm";
+  import LLMLogo from '$lib/components/logos/LLMLogo.svelte';
 </script>
 
 {#if user}
@@ -109,14 +110,12 @@
           class="flex flex-wrap items-center justify-center gap-x-10 gap-y-6 opacity-80"
         >
           <div class="flex items-center gap-2 text-slate-500 text-sm">
-            <span
-              class="h-2.5 w-2.5 rounded-full bg-[rgb(var(--color-primary))]"
-            ></span>{PROVIDER_DISPLAY_NAMES[LLMProviderId.OPENAI]}
+            <LLMLogo provider="OpenAI" size={20} class="h-5 w-5" />
+            {PROVIDER_DISPLAY_NAMES[LLMProviderId.OPENAI]}
           </div>
           <div class="flex items-center gap-2 text-slate-500 text-sm">
-            <span
-              class="h-2.5 w-2.5 rounded-full bg-gradient-to-br from-indigo-500 to-indigo-700"
-            ></span>{PROVIDER_DISPLAY_NAMES[LLMProviderId.GEMINI]}
+            <LLMLogo provider="Gemini" size={20} class="h-5 w-5" />
+            {PROVIDER_DISPLAY_NAMES[LLMProviderId.GEMINI]}
           </div>
         </div>
       </section>

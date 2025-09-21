@@ -35,6 +35,7 @@
   const user = $derived(data.user);
   import { PROVIDER_DISPLAY_NAMES, LLMProviderId } from "$lib/constants/llm";
   import LLMLogo from '$lib/components/logos/LLMLogo.svelte';
+  import Icon from '$lib/components/icons/Icon.svelte';
 </script>
 
 {#if user}
@@ -127,18 +128,7 @@
             <div
               class="h-12 w-12 rounded-lg bg-black/5 text-black flex items-center justify-center mb-4"
             >
-              <svg
-                class="w-6 h-6"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-                ><path
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                  stroke-width="2"
-                  d="M9 19V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2"
-                /></svg
-              >
+              <Icon name="globe-alt" class="w-6 h-6" ariaLabel="Global LLM coverage" />
             </div>
             <h3 class="text-base font-semibold text-slate-800 mb-2">
               Multi-LLM Coverage
@@ -154,18 +144,7 @@
             <div
               class="h-12 w-12 rounded-lg bg-emerald-100 text-emerald-600 flex items-center justify-center mb-4"
             >
-              <svg
-                class="w-6 h-6"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-                ><path
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                  stroke-width="2"
-                  d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"
-                /></svg
-              >
+              <Icon name="chart-bar" class="w-6 h-6" ariaLabel="Ranking analytics" />
             </div>
             <h3 class="text-base font-semibold text-slate-800 mb-2">
               Ranking Analytics
@@ -179,18 +158,7 @@
             <div
               class="h-12 w-12 rounded-lg bg-purple-100 text-purple-600 flex items-center justify-center mb-4"
             >
-              <svg
-                class="w-6 h-6"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-                ><path
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                  stroke-width="2"
-                  d="M12 6v2m0 0a2 2 0 100 4m0-4a2 2 0 110 4M6 20a2 2 0 100-4m0 4a2 2 0 100 4m0-4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 100 4m0-4v2m0-6V4"
-                /></svg
-              >
+              <Icon name="adjustments-horizontal" class="w-6 h-6" ariaLabel="Smart query selection" />
             </div>
             <h3 class="text-base font-semibold text-slate-800 mb-2">
               Smart Query Selection

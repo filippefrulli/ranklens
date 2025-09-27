@@ -70,17 +70,7 @@ CREATE TABLE public.queries (
   CONSTRAINT queries_pkey PRIMARY KEY (id),
   CONSTRAINT queries_business_id_fkey FOREIGN KEY (business_id) REFERENCES public.businesses(id)
 );
-CREATE TABLE public.query_sources (
-  id uuid NOT NULL DEFAULT gen_random_uuid(),
-  query_id uuid NOT NULL,
-  sources jsonb NOT NULL,
-  last_updated timestamp with time zone DEFAULT now(),
-  created_at timestamp with time zone DEFAULT now(),
-  created_by uuid,
-  CONSTRAINT query_sources_pkey PRIMARY KEY (id),
-  CONSTRAINT query_sources_created_by_fkey FOREIGN KEY (created_by) REFERENCES auth.users(id),
-  CONSTRAINT query_sources_query_id_fkey FOREIGN KEY (query_id) REFERENCES public.queries(id)
-);
+
 CREATE TABLE public.ranking_attempts (
   id uuid NOT NULL DEFAULT gen_random_uuid(),
   analysis_run_id uuid NOT NULL,
@@ -97,19 +87,4 @@ CREATE TABLE public.ranking_attempts (
   CONSTRAINT ranking_attempts_query_id_fkey FOREIGN KEY (query_id) REFERENCES public.queries(id),
   CONSTRAINT ranking_attempts_analysis_run_id_fkey FOREIGN KEY (analysis_run_id) REFERENCES public.analysis_runs(id),
   CONSTRAINT ranking_attempts_llm_provider_id_fkey FOREIGN KEY (llm_provider_id) REFERENCES public.llm_providers(id)
-);
-CREATE TABLE public.ranking_sources (
-  id uuid NOT NULL DEFAULT gen_random_uuid(),
-  ranking_attempt_id uuid NOT NULL,
-  business_name character varying NOT NULL,
-  rank_position integer NOT NULL,
-  source_url character varying,
-  source_title character varying,
-  source_domain character varying,
-  source_type character varying,
-  excerpt text,
-  relevance_score numeric,
-  created_at timestamp with time zone DEFAULT now(),
-  CONSTRAINT ranking_sources_pkey PRIMARY KEY (id),
-  CONSTRAINT ranking_sources_ranking_attempt_id_fkey FOREIGN KEY (ranking_attempt_id) REFERENCES public.ranking_attempts(id)
 );

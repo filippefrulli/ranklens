@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onNavigate, invalidate } from "$app/navigation";
+  import { onNavigate, invalidate, invalidateAll } from "$app/navigation";
   import { onMount } from "svelte";
   import "../app.css";
   import Footer from "$lib/components/layout/Footer.svelte";
@@ -29,24 +29,36 @@
   });
 
   onMount(() => {
-    // Set up auth state change listener
+    // 1) Immediately reconcile any existing session (e.g., after OAuth redirect)
+    (async () => {
+      const {
+        data: { session: currentSession },
+      } = await supabase.auth.getSession();
+      if (currentSession && !session) {
+        // Ensure all loads re-run so UI reflects authenticated state
+        await invalidateAll();
+      }
+    })();
+
+    // 2) Listen for auth changes and re-run data loads when the session changes
     const { data: authData } = supabase.auth.onAuthStateChange(
       async (event: string, newSession: Session | null) => {
-        // Only proceed if session state actually changed
-        if (newSession?.expires_at !== session?.expires_at) {
-          // Validate the session by getting the user
+        const sessionChanged = newSession?.expires_at !== session?.expires_at;
+
+        if (event === "SIGNED_IN" || event === "TOKEN_REFRESHED" || event === "USER_UPDATED" || sessionChanged) {
           const {
             data: { user },
-            error,
           } = await supabase.auth.getUser();
 
-          if (!error && user) {
-            // Session is valid, invalidate auth cache
-            invalidate("supabase:auth");
-          } else if (error) {
-            // Session is invalid, clear it
-            invalidate("supabase:auth");
-          }
+          // Invalidate everything to refresh layout/page loads that depend on auth
+          await invalidateAll();
+
+          // Optionally, you could route based on location here if desired
+          // e.g., keep user on the same page and let data update render the dashboard
+        }
+
+        if (event === "SIGNED_OUT") {
+          await invalidateAll();
         }
       }
     );

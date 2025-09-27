@@ -20,7 +20,7 @@
         <div>
           <Button
             variant="primary"
-            size="md"
+            size="lg"
             on:click={onSearchForBusiness}
             ariaLabel="Find your business via Google Places search"
           >

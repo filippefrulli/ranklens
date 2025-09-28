@@ -218,9 +218,9 @@
       <ErrorMessage {error} onDismiss={() => (error = null)} />
       <Button
         variant="subtle"
-        size="sm"
+        size="md"
         onClick={() => goBack()}
-        class="mt-4 bg-transparent hover:bg-transparent text-[rgb(var(--color-primary))] px-0 py-0"
+        class="mt-4 bg-transparent hover:bg-transparent text-[rgb(var(--color-primary))] px-4 py-2 text-sm"
       >← Back to Dashboard</Button>
     {:else if query}
       <!-- Header -->
@@ -229,9 +229,9 @@
           <div class="flex items-center gap-3">
             <Button
               variant="subtle"
-              size="sm"
+              size="md"
               onClick={() => goBack()}
-              class="text-slate-500 hover:text-slate-700 border border-slate-300 bg-white px-2.5 py-1.5 text-xs rounded-md"
+              class="text-slate-600 hover:text-slate-800 border border-slate-300 bg-white px-4 py-2 text-sm rounded-md"
             >← Back</Button>
             <h1 class="text-xl font-semibold text-slate-800">
               Query: <span class="text-slate-900">{query.text}</span>

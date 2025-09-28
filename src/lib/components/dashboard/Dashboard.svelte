@@ -176,6 +176,45 @@
     }
   });
 
+  // Format helper for human-friendly datetime
+  function formatDateTime(d: string | Date): string {
+    const dt = d instanceof Date ? d : new Date(d);
+    if (isNaN(dt.getTime())) return '—';
+    return dt.toLocaleString('en-US', {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    });
+  }
+
+  // Derive the most recent analysis run date across available sources
+  const lastAnalysisText = $derived.by(() => {
+    if (runningAnalysis && runningAnalysis.status === 'running') return 'Running…';
+
+    const candidates: number[] = [];
+    if (weeklyCheck?.lastRunDate) candidates.push(new Date(weeklyCheck.lastRunDate).getTime());
+    if (weeklyCheck?.currentWeekRun?.run_date) candidates.push(new Date(weeklyCheck.currentWeekRun.run_date).getTime());
+    if (weeklyCheck?.currentWeekRun?.completed_at) candidates.push(new Date(weeklyCheck.currentWeekRun.completed_at).getTime());
+
+    // Also look through queryHistories to find the max run_date
+    try {
+      for (const list of Object.values(queryHistories || {})) {
+        for (const item of list) {
+          if (item?.run_date) {
+            const t = new Date(item.run_date).getTime();
+            if (!isNaN(t)) candidates.push(t);
+          }
+        }
+      }
+    } catch {}
+
+    if (candidates.length === 0) return 'Never';
+    const maxTs = Math.max(...candidates);
+    return formatDateTime(new Date(maxTs));
+  });
+
   // Event handlers for business selection
   function handleBusinessSelected(selectedBusiness: any) {
     newBusiness = {
@@ -272,15 +311,7 @@
           </Card>
 
           <!-- Metrics Strip -->
-          <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <Card radius="lg" padding="p-4">
-              <p
-                class="text-xs uppercase tracking-wide text-slate-500 font-medium"
-              >
-                Avg Rank
-              </p>
-              <p class="mt-2 text-2xl font-semibold text-slate-800">—</p>
-            </Card>
+          <div class="grid grid-cols-2 md:grid-cols-3 gap-4">
             <Card radius="lg" padding="p-4">
               <p
                 class="text-xs uppercase tracking-wide text-slate-500 font-medium"
@@ -298,11 +329,7 @@
                 Last Analysis
               </p>
               <p class="mt-2 text-lg font-semibold text-slate-800">
-                {runningAnalysis
-                  ? "Running…"
-                  : weeklyCheck?.lastRunDate
-                    ? new Date(weeklyCheck.lastRunDate).toLocaleDateString()
-                    : "Never"}
+                {lastAnalysisText}
               </p>
             </Card>
 
@@ -412,9 +439,6 @@
                 <h3 class="text-sm font-semibold text-slate-700 tracking-wide">
                   Tracked Queries
                 </h3>
-                <p class="text-xs text-slate-500 mt-0.5">
-                  Monitor how you appear in searches across LLM assistants
-                </p>
               </div>
 
             </div>

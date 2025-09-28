@@ -26,6 +26,9 @@
   );
   let selectedRunId = $state<string | null>(null);
   let rankingResults = $state<RankingAttempt[]>([]);
+  // Raw rows from competitor_results for the selected run
+  let rawCompetitorResults = $state<any[]>([]);
+  // Derived table data for display
   let competitorRankings = $state<any[]>([]);
   let llmProviders = $state<LLMProvider[]>(data.llmProviders);
   let selectedProvider = $state<LLMProvider | null>(null);
@@ -53,10 +56,15 @@
       loadingData = true;
       // Try cache first
       const cached = loadRun(queryId, runId);
-      let competitorData: any[] | null = null;
+      let competitorDataRaw: any[] | null = null;
       if (cached) {
         rankingResults = cached.rankingResults;
-        competitorData = cached.competitorRankings;
+        if ((cached as any).v === 2 && (cached as any).rawCompetitorResults) {
+          competitorDataRaw = (cached as any).rawCompetitorResults;
+        } else {
+          // legacy cache lacked raw rows; fetch fresh to enable correct filtering
+          competitorDataRaw = null;
+        }
       } else {
         const { data: rankings, error: rankingsError } = await supabase
           .from("ranking_attempts")
@@ -72,7 +80,7 @@
           );
         rankingResults = rankings || [];
 
-        const { data: competitorDataRaw, error: competitorError } =
+        const { data: competitorRows, error: competitorError } =
           await supabase
             .from("competitor_results")
             .select("*")
@@ -83,69 +91,27 @@
           throw new Error(
             `Failed to fetch competitor rankings: ${competitorError.message}`
           );
-        competitorData = competitorDataRaw || [];
+        competitorDataRaw = competitorRows || [];
       }
+      // Persist raw rows for future quick loads
+      if (!competitorDataRaw) {
+        // We had a legacy cache; fetch raw now
+        const { data: competitorRowsFresh, error: competitorError2 } = await supabase
+          .from('competitor_results')
+          .select('*')
+          .eq('query_id', queryId)
+          .eq('analysis_run_id', runId)
+          .order('average_rank', { ascending: true });
+        if (competitorError2) throw new Error(`Failed to fetch competitor rankings: ${competitorError2.message}`);
+        competitorDataRaw = competitorRowsFresh || [];
+      }
+      rawCompetitorResults = competitorDataRaw;
 
-      let competitors = competitorData || [];
-      if (selectedProvider) {
-        competitors = competitors.filter(
-          (c) =>
-            c.llm_providers && c.llm_providers.includes(selectedProvider!.name)
-        );
-      } else {
-        const groups = new Map();
-        competitors.forEach((c) => {
-          const key = c.business_name;
-          if (!groups.has(key)) {
-            groups.set(key, {
-              ...c,
-              allRanks: [...c.raw_ranks],
-              allProviders: [...c.llm_providers],
-              totalAppearances: c.appearances_count,
-              totalProviderAttempts: c.total_attempts,
-            });
-          } else {
-            const g = groups.get(key);
-            g.allRanks.push(...c.raw_ranks);
-            c.llm_providers.forEach((p: string) => {
-              if (!g.allProviders.includes(p)) g.allProviders.push(p);
-            });
-            g.totalAppearances += c.appearances_count;
-            g.totalProviderAttempts += c.total_attempts;
-          }
-        });
-        competitors = Array.from(groups.values()).map((g) => {
-          const providerAverages: number[] = [];
-          const providerWeighted: number[] = [];
-          competitorData?.forEach((c) => {
-            if (c.business_name === g.business_name) {
-              providerAverages.push(c.average_rank);
-              providerWeighted.push(c.weighted_score);
-            }
-          });
-          const avg =
-            providerAverages.reduce((s, v) => s + v, 0) /
-            providerAverages.length;
-          const weighted =
-            providerWeighted.reduce((s, v) => s + v, 0) /
-            providerWeighted.length;
-          return {
-            ...g,
-            average_rank: Number(avg.toFixed(2)),
-            best_rank: Math.min(...g.allRanks),
-            worst_rank: Math.max(...g.allRanks),
-            appearances_count: g.totalAppearances,
-            total_attempts: g.totalProviderAttempts,
-            weighted_score: Number(weighted.toFixed(2)),
-            llm_providers: g.allProviders,
-            raw_ranks: g.allRanks,
-          };
-        });
-      }
-      competitorRankings = competitors;
-      // Save to cache if freshly fetched (no cache before)
-      if (!cached) {
-        saveRun(queryId, runId, rankingResults, competitorRankings);
+      // Build display data based on selection from RAW rows
+      competitorRankings = buildCompetitorDisplay(rawCompetitorResults, selectedProvider?.name || null);
+      // Save to cache if freshly fetched (no cache before) or upgrading legacy cache
+      if (!cached || (cached as any).v === 1) {
+        saveRun(queryId, runId, rankingResults, rawCompetitorResults);
       }
     } catch (e: any) {
       console.error("Error loading run data", e);
@@ -157,7 +123,9 @@
 
   async function onProviderChange(provider: LLMProvider | null) {
     selectedProvider = provider;
-    if (selectedRunId) await loadRunData(selectedRunId);
+    // Recompute display table from cached raw rows
+    competitorRankings = buildCompetitorDisplay(rawCompetitorResults, selectedProvider?.name || null);
+    if (selectedRunId && rankingResults.length === 0) await loadRunData(selectedRunId);
   }
   async function selectRun(runId: string) {
     if (runId !== selectedRunId) {
@@ -176,6 +144,71 @@
       hour: "2-digit",
       minute: "2-digit",
     });
+  }
+
+  // Helper: build display table from raw competitor rows, optionally filtered by provider name
+  function buildCompetitorDisplay(rawRows: any[], providerName: string | null): any[] {
+    if (!Array.isArray(rawRows) || rawRows.length === 0) return [];
+
+    // If filtering by a provider, restrict to rows that include that provider
+    const rows = providerName
+      ? rawRows.filter((r) => Array.isArray(r.llm_providers) && r.llm_providers.includes(providerName))
+      : rawRows;
+
+    if (!providerName) {
+      // Combined view: group by business and average across providers
+      const groups = new Map<string, any>();
+      rows.forEach((c) => {
+        const key = c.business_name;
+        if (!groups.has(key)) {
+          groups.set(key, {
+            ...c,
+            allRanks: [...(c.raw_ranks || [])],
+            allProviders: [...(c.llm_providers || [])],
+            totalAppearances: c.appearances_count,
+            totalProviderAttempts: c.total_attempts,
+          });
+        } else {
+          const g = groups.get(key);
+          g.allRanks.push(...(c.raw_ranks || []));
+          (c.llm_providers || []).forEach((p: string) => {
+            if (!g.allProviders.includes(p)) g.allProviders.push(p);
+          });
+          g.totalAppearances += c.appearances_count;
+          g.totalProviderAttempts += c.total_attempts;
+        }
+      });
+      return Array.from(groups.values()).map((g) => {
+        const providerAverages: number[] = [];
+        const providerWeighted: number[] = [];
+        rows.forEach((c) => {
+          if (c.business_name === g.business_name) {
+            providerAverages.push(c.average_rank);
+            providerWeighted.push(c.weighted_score);
+          }
+        });
+        const avg = providerAverages.length > 0
+          ? providerAverages.reduce((s, v) => s + v, 0) / providerAverages.length
+          : NaN;
+        const weighted = providerWeighted.length > 0
+          ? providerWeighted.reduce((s, v) => s + v, 0) / providerWeighted.length
+          : NaN;
+        return {
+          ...g,
+          average_rank: Number.isFinite(avg) ? Number(avg.toFixed(2)) : null,
+          best_rank: Math.min(...g.allRanks),
+          worst_rank: Math.max(...g.allRanks),
+          appearances_count: g.totalAppearances,
+          total_attempts: g.totalProviderAttempts,
+          weighted_score: Number.isFinite(weighted) ? Number(weighted.toFixed(2)) : null,
+          llm_providers: g.allProviders,
+          raw_ranks: g.allRanks,
+        };
+      });
+    }
+
+    // Single-provider view: rows already per-business for that provider; pass through
+    return rows.map((c) => ({ ...c }));
   }
 </script>
 

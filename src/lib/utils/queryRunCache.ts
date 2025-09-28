@@ -17,12 +17,23 @@
 import { browser } from '$app/environment';
 import type { RankingAttempt } from '$lib/types';
 
-export interface CachedRunData {
-  v: 1; // version for future migrations
+// Legacy V1 (stored already in some browsers): held the transformed competitor list
+export interface CachedRunDataV1 {
+  v: 1;
   rankingResults: RankingAttempt[];
-  competitorRankings: any[]; // Keeping original shape; could add a type later
-  savedAt: string; // ISO timestamp
+  competitorRankings: any[];
+  savedAt: string;
 }
+
+// V2: store RAW competitor_results rows so we can re-derive filtered/aggregated views correctly
+export interface CachedRunDataV2 {
+  v: 2;
+  rankingResults: RankingAttempt[];
+  rawCompetitorResults: any[];
+  savedAt: string;
+}
+
+export type CachedRunData = CachedRunDataV1 | CachedRunDataV2;
 
 const PREFIX = 'ranklens:queryRun:'; // Full key: PREFIX + queryId + ':' + runId
 
@@ -37,7 +48,8 @@ export function loadRun(queryId: string, runId: string, maxAgeMinutes = 60): Cac
     const raw = localStorage.getItem(key(queryId, runId));
     if (!raw) return null;
     const parsed = JSON.parse(raw) as CachedRunData;
-    if (parsed.v !== 1) return null;
+    // Accept v1 or v2 formats
+    if (parsed.v !== 1 && parsed.v !== 2) return null;
     const ageMs = Date.now() - new Date(parsed.savedAt).getTime();
     if (ageMs > maxAgeMinutes * 60 * 1000) return null; // expired
     return parsed;
@@ -47,13 +59,13 @@ export function loadRun(queryId: string, runId: string, maxAgeMinutes = 60): Cac
 }
 
 // Save run data immediately after a successful fresh fetch.
-export function saveRun(queryId: string, runId: string, rankingResults: RankingAttempt[], competitorRankings: any[]) {
+export function saveRun(queryId: string, runId: string, rankingResults: RankingAttempt[], rawCompetitorResults: any[]) {
   if (!browser) return;
-  const payload: CachedRunData = {
-    v: 1,
+  const payload: CachedRunDataV2 = {
+    v: 2,
     rankingResults,
-    competitorRankings,
-    savedAt: new Date().toISOString()
+    rawCompetitorResults,
+    savedAt: new Date().toISOString(),
   };
   try { localStorage.setItem(key(queryId, runId), JSON.stringify(payload)); } catch {}
 }

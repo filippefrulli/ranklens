@@ -54,6 +54,12 @@
         data: { session },
       } = await supabase.auth.getSession();
       hasRecoverySession = Boolean(session);
+
+      // Clean the URL to remove code/hash tokens after we have a session
+      try {
+        const cleanUrl = `${url.origin}${url.pathname}`;
+        window.history.replaceState({}, document.title, cleanUrl);
+      } catch {}
     } catch (e) {
       console.warn('Recovery session bootstrap failed:', e);
       hasRecoverySession = false;
@@ -130,9 +136,8 @@
 
     loading = true;
     try {
-      const { error: updateError } = await withTimeout(
-        supabase.auth.updateUser({ password: trimmed })
-      );
+      // Call updateUser directly to avoid false timeouts; backend may succeed even if the client cuts off
+      const { error: updateError } = await supabase.auth.updateUser({ password: trimmed });
       if (updateError) throw updateError;
 
       success = true;

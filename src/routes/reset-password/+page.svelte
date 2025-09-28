@@ -13,6 +13,12 @@
   let success = $state(false)
   let hasRecoverySession = $state(false)
 
+  // Live validation helpers
+  const newTrim = $derived((newPassword?.trim?.() ?? ''))
+  const confirmTrim = $derived((confirmPassword?.trim?.() ?? ''))
+  const tooShort = $derived(newTrim.length > 0 && newTrim.length < 10)
+  const mismatch = $derived(confirmTrim.length > 0 && newTrim !== confirmTrim)
+
   onMount(async () => {
     // Detect if we have a recovery session. The client auto-detects tokens in URL.
     const { data: { session } } = await supabase.auth.getSession()
@@ -94,11 +100,24 @@
       <form onsubmit={(e) => { e.preventDefault(); updatePassword(); }} class="space-y-4">
         <div>
           <label class="block text-sm font-medium text-slate-700 mb-1" for="new-password">New password</label>
-          <input id="new-password" type="password" bind:value={newPassword} minlength={10} required class="w-full px-4 py-2.5 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[rgb(var(--color-primary))]/50 focus:border-transparent" />
+          <input id="new-password" type="password" bind:value={newPassword} minlength={10} required class="w-full px-4 py-2.5 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[rgb(var(--color-primary))]/50 focus:border-transparent" class:border-red-300={tooShort} aria-invalid={tooShort} />
+          <div class="mt-1 flex items-center justify-between">
+            <p class="text-xs text-slate-500">Minimum 10 characters</p>
+            {#if tooShort}
+              <p class="text-xs text-red-600">Password is too short</p>
+            {/if}
+          </div>
         </div>
         <div>
           <label class="block text-sm font-medium text-slate-700 mb-1" for="confirm-password">Confirm password</label>
-          <input id="confirm-password" type="password" bind:value={confirmPassword} minlength={10} required class="w-full px-4 py-2.5 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[rgb(var(--color-primary))]/50 focus:border-transparent" />
+          <input id="confirm-password" type="password" bind:value={confirmPassword} minlength={10} required class="w-full px-4 py-2.5 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[rgb(var(--color-primary))]/50 focus:border-transparent" class:border-red-300={mismatch} aria-invalid={mismatch} />
+          {#if confirmTrim.length > 0}
+            <div class="mt-1">
+              {#if mismatch}
+                <p class="text-xs text-red-600">Passwords do not match</p>
+              {/if}
+            </div>
+          {/if}
         </div>
 
         {#if error}
@@ -108,7 +127,7 @@
           <div class="p-2.5 rounded-lg border border-emerald-200 bg-emerald-50 text-emerald-700 text-sm">Password updated. Redirecting…</div>
         {/if}
 
-        <button type="submit" disabled={!hasRecoverySession || loading} class="w-full bg-[rgb(var(--color-primary))] hover:brightness-95 disabled:opacity-50 disabled:cursor-not-allowed text-white font-medium py-2.5 px-4 rounded-lg transition-colors cursor-pointer">
+        <button type="submit" disabled={!hasRecoverySession || loading || tooShort || mismatch} class="w-full bg-[rgb(var(--color-primary))] hover:brightness-95 disabled:opacity-50 disabled:cursor-not-allowed text-white font-medium py-2.5 px-4 rounded-lg transition-colors cursor-pointer">
           {loading ? 'Updating…' : 'Update password'}
         </button>
       </form>

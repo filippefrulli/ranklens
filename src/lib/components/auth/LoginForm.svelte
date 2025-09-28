@@ -16,6 +16,11 @@
   let mode = $state<'signin' | 'signup'>('signin')
   let showForgotPassword = $state(false)
 
+  // Derived validation state
+  const isSignup = $derived(mode === 'signup')
+  const passwordTrimmed = $derived((password?.trim?.() ?? ''))
+  const passwordTooShort = $derived(isSignup && passwordTrimmed.length > 0 && passwordTrimmed.length < 10)
+
   async function handleGoogleAuth() {
     error = null
     
@@ -40,7 +45,7 @@
       error = 'Email and password are required'
       return
     }
-    if ((password?.trim()?.length ?? 0) < 10 && mode === 'signup') {
+    if (isSignup && passwordTrimmed.length < 10) {
       error = 'Password must be at least 10 characters.'
       return
     }
@@ -198,14 +203,24 @@
               bind:value={password}
               required
                 class="w-full px-4 py-3 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[rgb(var(--color-primary))]/50 focus:border-transparent"
-                minlength={mode === 'signup' ? 10 : undefined}
+                class:border-red-300={passwordTooShort}
+                minlength={isSignup ? 10 : undefined}
+                aria-invalid={passwordTooShort}
               placeholder="Password"
             />
+            {#if isSignup}
+              <div class="mt-1 flex items-center justify-between">
+                <p class="text-xs text-slate-500">Minimum 10 characters</p>
+                {#if passwordTooShort}
+                  <p class="text-xs text-red-600">Password is too short</p>
+                {/if}
+              </div>
+            {/if}
           </div>
 
           <button
             type="submit"
-            disabled={loading}
+            disabled={loading || (isSignup && passwordTrimmed.length < 10)}
             class="w-full bg-black hover:bg-gray-800 disabled:bg-gray-400 text-white font-medium py-3 px-4 rounded-lg transition-colors cursor-pointer"
           >
             {loading ? 'Loading...' : mode === 'signin' ? 'Sign in' : 'Create account'}

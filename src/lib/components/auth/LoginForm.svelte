@@ -12,6 +12,7 @@
   let password = $state('')
   let loading = $state(false)
   let error = $state<string | null>(null)
+  let success = $state<string | null>(null)
   let mode = $state<'signin' | 'signup'>('signin')
   let showForgotPassword = $state(false)
 
@@ -53,22 +54,27 @@
       } else {
         result = await supabase.auth.signUp({
           email,
-          password
+          password,
+          options: {
+            // Redirect where the user lands after clicking the confirmation link
+            emailRedirectTo: `${window.location.origin}/`
+          }
         })
       }
 
       if (result.error) {
         error = result.error.message || 'Authentication failed'
+        success = null
       } else if (mode === 'signup') {
         error = null
-        // Show success message for signup
-        alert('Check your email for a confirmation link!')
+        success = 'Check your email for a confirmation link to activate your account.'
       } else {
         // Successful sign in, redirect to home (SSR will handle user state)
         goto('/')
       }
     } catch (err: any) {
       error = err?.message || 'An unexpected error occurred'
+      success = null
     } finally {
       loading = false
     }
@@ -91,11 +97,12 @@
       if (error) {
         throw error
       } else {
-        alert('Password reset link sent to your email!')
+        success = 'Password reset link sent. Check your email.'
         showForgotPassword = false
       }
     } catch (err: any) {
       error = err?.message || 'Password reset failed'
+      success = null
     } finally {
       loading = false
     }
@@ -219,11 +226,12 @@
         </form>
       {/if}
 
-      <!-- Error Display -->
+      <!-- Status Messages -->
       {#if error}
-        <div class="p-3 bg-red-50 border border-red-200 text-red-600 rounded-lg text-sm text-center">
-          {error}
-        </div>
+        <div class="p-3 bg-red-50 border border-red-200 text-red-600 rounded-lg text-sm text-center">{error}</div>
+      {/if}
+      {#if success}
+        <div class="p-3 bg-emerald-50 border border-emerald-200 text-emerald-700 rounded-lg text-sm text-center">{success}</div>
       {/if}
     </div>
   </div>

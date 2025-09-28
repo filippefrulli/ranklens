@@ -19,29 +19,54 @@
     hasRecoverySession = Boolean(session)
   })
 
+  function mapSupabaseErrorMessage(e: any): string {
+    const msg = (e?.message || '').toString().toLowerCase()
+    if (msg.includes('same') && msg.includes('password')) {
+      return 'Your new password must be different from the current password.'
+    }
+    if (msg.includes('password') && (msg.includes('short') || msg.includes('at least'))) {
+      return 'Password is too short. Please use at least 10 characters.'
+    }
+    if (msg.includes('expired') || msg.includes('invalid') || msg.includes('session')) {
+      return 'This reset link is invalid or expired. Please request a new password reset email.'
+    }
+    if (msg.includes('rate') && msg.includes('limit')) {
+      return 'Too many attempts. Please wait a moment and try again.'
+    }
+    return e?.message || 'Failed to update password. Please try again.'
+  }
+
+  function withTimeout<T>(p: Promise<T>, ms = 15000): Promise<T> {
+    return new Promise((resolve, reject) => {
+      const t = setTimeout(() => reject(new Error('Request timed out. Check your connection and try again.')), ms)
+      p.then((v) => { clearTimeout(t); resolve(v) }).catch((e) => { clearTimeout(t); reject(e) })
+    })
+  }
+
   async function updatePassword() {
     error = null
     success = false
 
-    if (!newPassword || newPassword.length < 8) {
-      error = 'Password must be at least 8 characters.'
+    const trimmed = newPassword?.trim() ?? ''
+    if (!trimmed || trimmed.length < 10) {
+      error = 'Password must be at least 10 characters.'
       return
     }
-    if (newPassword !== confirmPassword) {
+    if (trimmed !== (confirmPassword?.trim() ?? '')) {
       error = 'Passwords do not match.'
       return
     }
 
     loading = true
     try {
-      const { error: updateError } = await supabase.auth.updateUser({ password: newPassword })
+      const { error: updateError } = await withTimeout(supabase.auth.updateUser({ password: trimmed }))
       if (updateError) throw updateError
 
       success = true
       // Give the UI a moment to show success, then go to sign in or home
       setTimeout(() => goto('/signin', { replaceState: true }), 1000)
     } catch (e: any) {
-      error = e?.message ?? 'Failed to update password. Please try again.'
+      error = mapSupabaseErrorMessage(e)
     } finally {
       loading = false
     }
@@ -69,11 +94,11 @@
       <form onsubmit={(e) => { e.preventDefault(); updatePassword(); }} class="space-y-4">
         <div>
           <label class="block text-sm font-medium text-slate-700 mb-1" for="new-password">New password</label>
-          <input id="new-password" type="password" bind:value={newPassword} minlength={8} required class="w-full px-4 py-2.5 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[rgb(var(--color-primary))]/50 focus:border-transparent" />
+          <input id="new-password" type="password" bind:value={newPassword} minlength={10} required class="w-full px-4 py-2.5 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[rgb(var(--color-primary))]/50 focus:border-transparent" />
         </div>
         <div>
           <label class="block text-sm font-medium text-slate-700 mb-1" for="confirm-password">Confirm password</label>
-          <input id="confirm-password" type="password" bind:value={confirmPassword} minlength={8} required class="w-full px-4 py-2.5 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[rgb(var(--color-primary))]/50 focus:border-transparent" />
+          <input id="confirm-password" type="password" bind:value={confirmPassword} minlength={10} required class="w-full px-4 py-2.5 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[rgb(var(--color-primary))]/50 focus:border-transparent" />
         </div>
 
         {#if error}

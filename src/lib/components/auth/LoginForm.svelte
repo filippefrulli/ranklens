@@ -40,6 +40,10 @@
       error = 'Email and password are required'
       return
     }
+    if ((password?.trim()?.length ?? 0) < 10 && mode === 'signup') {
+      error = 'Password must be at least 10 characters.'
+      return
+    }
 
     loading = true
     error = null
@@ -193,7 +197,8 @@
               type="password"
               bind:value={password}
               required
-              class="w-full px-4 py-3 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[rgb(var(--color-primary))]/50 focus:border-transparent"
+                class="w-full px-4 py-3 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[rgb(var(--color-primary))]/50 focus:border-transparent"
+                minlength={mode === 'signup' ? 10 : undefined}
               placeholder="Password"
             />
           </div>

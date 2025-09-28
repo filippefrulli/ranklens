@@ -1,12 +1,17 @@
 import { LLMService } from './llm-service'
 import { DatabaseService } from './database-service'
 import type { Business, Query, LLMProvider, AnalysisRun } from '../types'
-import type { SupabaseClient } from '@supabase/supabase-js'
+import { createClient, type SupabaseClient } from '@supabase/supabase-js'
+import { PUBLIC_SUPABASE_URL, PUBLIC_SUPABASE_ANON_KEY } from '$env/static/public'
 
 export class AnalysisService {
   private dbService: DatabaseService
+  private supabase: SupabaseClient
+  private userId: string
 
   constructor(supabase: SupabaseClient, userId: string) {
+    this.supabase = supabase
+    this.userId = userId
     this.dbService = new DatabaseService(supabase, userId)
   }
 
@@ -46,13 +51,33 @@ export class AnalysisService {
         return { success: false, error: 'No active LLM providers found' }
       }
 
-      // Create analysis run
+  // Create analysis run
       const analysisRun = await this.dbService.createAnalysisRun(businessId, queries.length)
 
       console.log(`✅ Analysis setup complete for "${business.name}": ${queries.length} queries × ${providers.length} providers × 5 attempts = ${queries.length * providers.length * 5} total LLM calls`)
       
-      // Start the analysis in the background
-      this.runAnalysisInBackground(analysisRun, business, queries, providers)
+      // Create a cookie-less background Supabase client to avoid cookies.set after response
+      let backgroundDb = this.dbService
+      try {
+        const { data: { session } } = await this.supabase.auth.getSession()
+        const accessToken = session?.access_token
+        const backgroundSupabase = createClient(PUBLIC_SUPABASE_URL, PUBLIC_SUPABASE_ANON_KEY, {
+          auth: {
+            persistSession: false,
+            autoRefreshToken: false,
+            detectSessionInUrl: false
+          },
+          global: {
+            headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : {}
+          }
+        })
+        backgroundDb = new DatabaseService(backgroundSupabase as any, this.userId)
+      } catch (e) {
+        console.warn('Failed to initialize background Supabase client; falling back to request-bound client:', e)
+      }
+
+      // Start the analysis in the background with the background client
+      this.runAnalysisInBackground(analysisRun, business, queries, providers, backgroundDb)
 
       return { success: true, analysisRunId: analysisRun.id }
 
@@ -70,7 +95,8 @@ export class AnalysisService {
     analysisRun: AnalysisRun,
     business: Business,
     queries: Query[],
-    providers: LLMProvider[]
+    providers: LLMProvider[],
+    db: DatabaseService
   ) {
     const startTime = Date.now()
     console.log(`🔄 Background analysis started for "${business.name}"`)
@@ -82,7 +108,7 @@ export class AnalysisService {
       let failedCalls = 0
 
       // Update total calls in analysis run
-      await this.dbService.updateAnalysisRun(analysisRun.id, {
+      await db.updateAnalysisRun(analysisRun.id, {
         total_llm_calls: totalCalls
       })
 
@@ -119,7 +145,7 @@ export class AnalysisService {
               // Update progress in database every 5 calls or at the end
               if (completedCalls % 5 === 0 || completedCalls === totalCalls) {
                 try {
-                  await this.dbService.updateAnalysisRun(analysisRun.id, {
+                  await db.updateAnalysisRun(analysisRun.id, {
                     completed_llm_calls: completedCalls
                   })
                 } catch (updateError) {
@@ -153,7 +179,7 @@ export class AnalysisService {
               // Update progress even on error
               if (completedCalls % 5 === 0 || completedCalls === totalCalls) {
                 try {
-                  await this.dbService.updateAnalysisRun(analysisRun.id, {
+                  await db.updateAnalysisRun(analysisRun.id, {
                     completed_llm_calls: completedCalls
                   })
                 } catch (updateError) {
@@ -184,7 +210,7 @@ export class AnalysisService {
                 }
                 
                 try {
-                  await this.dbService.updateAnalysisRun(analysisRun.id, {
+                  await db.updateAnalysisRun(analysisRun.id, {
                     completed_llm_calls: completedCalls
                   })
                 } catch (updateError) {
@@ -204,7 +230,7 @@ export class AnalysisService {
         // Save ranking attempts for this query
         if (rankingAttempts.length > 0) {
           try {
-            await this.dbService.saveRankingAttempts(rankingAttempts)
+            await db.saveRankingAttempts(rankingAttempts)
           } catch (saveError) {
             console.warn(`⚠️ Failed to save ranking attempts for query "${query.text}":`, saveError instanceof Error ? saveError.message : saveError)
             // Continue analysis even if saving attempts fails
@@ -215,7 +241,7 @@ export class AnalysisService {
 
         // Update completed queries
         try {
-          await this.dbService.updateAnalysisRun(analysisRun.id, {
+          await db.updateAnalysisRun(analysisRun.id, {
             completed_queries: queryIndex + 1
           })
         } catch (updateError) {
@@ -226,7 +252,7 @@ export class AnalysisService {
 
       // Mark analysis as completed
       try {
-        await this.dbService.updateAnalysisRun(analysisRun.id, {
+        await db.updateAnalysisRun(analysisRun.id, {
           status: 'completed',
           completed_queries: queries.length,
           completed_llm_calls: totalCalls,
@@ -239,7 +265,7 @@ export class AnalysisService {
       }
 
       try {
-        const competitorResultsCount = await this.dbService.populateCompetitorResultsForAnalysisRun(analysisRun.id)
+        const competitorResultsCount = await db.populateCompetitorResultsForAnalysisRun(analysisRun.id)
         
         const duration = Math.round((Date.now() - startTime) / 1000)
         console.log(`🎉 ANALYSIS COMPLETED for "${business.name}" in ${duration}s`)
@@ -263,7 +289,7 @@ export class AnalysisService {
       
       // Mark analysis as failed
       try {
-        await this.dbService.updateAnalysisRun(analysisRun.id, {
+        await db.updateAnalysisRun(analysisRun.id, {
           status: 'failed',
           error_message: err instanceof Error ? err.message : 'Unknown error',
           completed_at: new Date().toISOString()

@@ -22,6 +22,8 @@
   import { browser } from "$app/environment";
   import { loadSuggestions, saveSuggestions } from "$lib/utils/suggestionsCache";
   import LLMLogo from '$lib/components/logos/LLMLogo.svelte';
+  import { createBrowserClient } from '@supabase/ssr';
+  import { PUBLIC_SUPABASE_URL, PUBLIC_SUPABASE_ANON_KEY } from '$env/static/public';
 
   interface Props {
     form?: any;
@@ -111,6 +113,72 @@
       return () => hideTimeout && clearTimeout(hideTimeout);
     } else if (hideTimeout) {
       clearTimeout(hideTimeout);
+    }
+  });
+
+  // Live progress: subscribe to analysis_runs updates and poll as a fallback
+  let progressChannel: any = null;
+  let pollInterval: any = null;
+  const supabaseRT = browser ? createBrowserClient(PUBLIC_SUPABASE_URL, PUBLIC_SUPABASE_ANON_KEY) : null;
+
+  function startProgressTracking() {
+    if (!browser || !runningAnalysis?.id || !supabaseRT) return;
+
+    // Clear existing
+    stopProgressTracking();
+
+    // Realtime channel on analysis_runs for this ID
+    progressChannel = supabaseRT
+      .channel(`analysis_runs:${runningAnalysis.id}`)
+      .on('postgres_changes', {
+        event: '*',
+        schema: 'public',
+        table: 'analysis_runs',
+        filter: `id=eq.${runningAnalysis.id}`
+      }, (payload: any) => {
+        const newRec = payload?.new;
+        if (!newRec) return;
+        // Patch runningAnalysis object with new fields (
+        runningAnalysis = { ...runningAnalysis, ...newRec } as any;
+        // Auto-stop when completed/failed and hide the bar
+        if (runningAnalysis && (runningAnalysis.status === 'completed' || runningAnalysis.status === 'failed')) {
+          stopProgressTracking();
+          runningAnalysis = null;
+        }
+      })
+      .subscribe();
+
+    // Poll every 5s as backup (in case realtime is disabled)
+    pollInterval = setInterval(async () => {
+      if (!runningAnalysis?.id || !supabaseRT) return;
+      const { data, error } = await supabaseRT
+        .from('analysis_runs')
+        .select('*')
+        .eq('id', runningAnalysis.id)
+        .single();
+      if (!error && data) {
+        runningAnalysis = { ...runningAnalysis, ...data } as any;
+      }
+      if (runningAnalysis?.status === 'completed' || runningAnalysis?.status === 'failed') {
+        stopProgressTracking();
+        runningAnalysis = null;
+      }
+    }, 5000);
+  }
+
+  function stopProgressTracking() {
+    try { progressChannel && supabaseRT?.removeChannel(progressChannel); } catch {}
+    progressChannel = null;
+    if (pollInterval) { clearInterval(pollInterval); pollInterval = null; }
+  }
+
+  $effect(() => {
+    // (Re)start tracking whenever a run is present with a real id
+    if (browser && runningAnalysis && (runningAnalysis.status === 'running' || runningAnalysis.status === 'pending') && runningAnalysis.id && runningAnalysis.id !== 'temp') {
+      startProgressTracking();
+      return () => stopProgressTracking();
+    } else {
+      stopProgressTracking();
     }
   });
 
@@ -293,12 +361,6 @@
             </div>
             <div class="flex items-center gap-3">
               <Button
-                variant="subtle"
-                size="md"
-                ariaLabel="Change business"
-                on:click={() => (showGoogleSearch = true)}>Change</Button
-              >
-              <Button
                 variant="primary"
                 size="md"
                 ariaLabel="Add query"
@@ -361,9 +423,13 @@
           <!-- Queries Section -->
           <!-- Tracked Queries card moved to its own full-width row -->
           <!-- Analysis Controls: compact button when idle, expanded card when running -->
-          {#if runningAnalysis}
+          {#if runningAnalysis && (runningAnalysis.status === 'running' || runningAnalysis.status === 'pending')}
             <div class="mt-2 flex flex-wrap items-center gap-3">
-              <AnalysisProgressBar estimation={estimation} />
+              <AnalysisProgressBar 
+                estimation={estimation}
+                completedCalls={runningAnalysis?.completed_llm_calls || 0}
+                totalCalls={runningAnalysis?.total_llm_calls || 0}
+              />
               <div class="flex -space-x-1">
                 {#if llmProviders.length > 4}
                   <span class="inline-flex h-6 w-6 items-center justify-center rounded-full border border-white bg-slate-100 text-[10px] font-medium text-slate-600 ring-1 ring-slate-300">+{llmProviders.length - 4}</span>
@@ -381,24 +447,52 @@
                   if (loading) return;
                   loading = true;
                   try {
+                    // Immediately show a local placeholder so the UI switches to a 0% bar
+                    const providerCount = Math.max(1, llmProviders?.length || 0);
+                    const expectedTotalCalls = (queries?.length || 0) * providerCount * 5;
+                    runningAnalysis = {
+                      id: 'temp',
+                      business_id: business.id,
+                      run_date: new Date().toISOString(),
+                      status: 'pending',
+                      total_queries: queries.length,
+                      completed_queries: 0,
+                      total_llm_calls: expectedTotalCalls,
+                      completed_llm_calls: 0,
+                      created_at: new Date().toISOString()
+                    } as any;
+
                     const formData = new FormData();
                     formData.set('businessId', business.id);
                     const res = await fetch('?/runAnalysis', { method: 'POST', body: formData });
                     if (!res.ok) {
                       console.error('Failed to start analysis');
+                      // Revert the optimistic placeholder on failure
+                      runningAnalysis = null;
                     } else {
-                      // Set a local runningAnalysis placeholder to trigger estimation UI
-                      runningAnalysis = {
-                        id: 'temp',
-                        business_id: business.id,
-                        run_date: new Date().toISOString(),
-                        status: 'running',
-                        total_queries: queries.length,
-                        completed_queries: 0,
-                        total_llm_calls: 0,
-                        completed_llm_calls: 0,
-                        created_at: new Date().toISOString()
-                      } as any;
+                      // Try to parse the returned id
+                      let payload: any = null;
+                      try { payload = await res.json(); } catch {}
+                      const analysisRunId = payload?.analysisRunId;
+                      if (analysisRunId) {
+                        // Replace temp with real id
+                        runningAnalysis = { ...runningAnalysis, id: analysisRunId } as any;
+                        // Fetch the row immediately to hydrate totals/status from DB
+                        try {
+                          if (supabaseRT) {
+                            const { data, error } = await supabaseRT
+                              .from('analysis_runs')
+                              .select('*')
+                              .eq('id', analysisRunId)
+                              .single();
+                            if (!error && data) {
+                              runningAnalysis = { ...runningAnalysis, ...data } as any;
+                            }
+                          }
+                        } catch (e) {
+                          console.warn('Unable to prefetch analysis_runs row:', e);
+                        }
+                      }
                     }
                   } catch (e) {
                     console.error('Error starting analysis', e);

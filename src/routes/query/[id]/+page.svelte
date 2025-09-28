@@ -11,6 +11,7 @@
   import Card from "$lib/components/ui/Card.svelte";
   import Button from "$lib/components/ui/Button.svelte";
   import { loadRun, saveRun } from "$lib/utils/queryRunCache";
+  import LLMLogo from "$lib/components/logos/LLMLogo.svelte";
 
   interface Props {
     data: PageData;
@@ -37,6 +38,7 @@
     const providerId = selectedProvider?.id;
     return rankingResults.filter((r) => r.llm_provider_id === providerId);
   });
+
 
   onMount(() => {
     if (analysisRuns.length > 0) {
@@ -209,16 +211,20 @@
             variant="subtle"
             size="sm"
             onClick={() => onProviderChange(null)}
-            class="px-3 py-1.5 rounded-full text-xs font-medium border transition-colors {selectedProvider === null ? 'bg-[rgb(var(--color-primary))] text-black border-[rgb(var(--color-primary))]' : 'border-slate-300 text-slate-600 hover:bg-slate-100'}"
-          >All</Button>
+            class="px-3.5 py-2 rounded-full text-sm font-medium border transition-colors flex items-center gap-2 {selectedProvider === null ? 'bg-[rgb(var(--color-primary))] text-slate-900 !border-[rgb(var(--color-primary))]' : 'border-slate-300 text-slate-600 hover:bg-slate-100'}"
+          >
+            <LLMLogo provider="all" size={20} alt="All providers" />
+            <span>All</span>
+          </Button>
           {#each llmProviders as provider}
             <Button
               variant="subtle"
               size="sm"
               onClick={() => onProviderChange(provider)}
-              class="px-3 py-1.5 rounded-full text-xs font-medium border transition-colors flex items-center gap-1 {selectedProvider?.id === provider.id ? 'bg-[rgb(var(--color-primary))] text-white border-[rgb(var(--color-primary))]' : 'border-slate-300 text-slate-600 hover:bg-slate-100'}"
+              class="px-3.5 py-2 rounded-full text-sm font-medium border transition-colors flex items-center gap-2 {selectedProvider?.id === provider.id ? 'bg-[rgb(var(--color-primary))] text-slate-900 !border-[rgb(var(--color-primary))]' : 'border-slate-300 text-slate-600 hover:bg-slate-100'}"
             >
-              {@const _=null}<span class="inline-flex h-4 w-4 items-center justify-center rounded-full bg-gradient-to-br from-slate-200 to-slate-300 text-[10px] font-semibold text-slate-600">{provider.name?.[0] || 'P'}</span>{provider.name}
+              <LLMLogo provider={provider.name} size={20} alt={provider.name} />
+              <span>{provider.name}</span>
             </Button>
           {/each}
         </div>

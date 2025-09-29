@@ -46,12 +46,42 @@
     queries = [],
     queryHistories = {},
     weeklyCheck = null,
-    runningAnalysis = null,
+    runningAnalysis: runningAnalysisProp = null,
     llmProviders = [],
     querySuggestions: serverSuggestions = [],
     needsOnboarding = false,
     error = null,
   }: Props = $props();
+
+  // Convert runningAnalysis to local reactive state for proper UI updates
+  let runningAnalysis = $state<AnalysisRun | null>(runningAnalysisProp);
+  
+  // Track completed analysis IDs to prevent re-syncing them
+  let completedAnalysisIds = $state<Set<string>>(new Set());
+
+  // Sync local state with prop changes, but be very careful not to overwrite live progress
+  $effect(() => {
+    // Don't sync if this analysis ID has already been completed
+    if (runningAnalysisProp?.id && completedAnalysisIds.has(runningAnalysisProp.id)) {
+      console.log('🚫 Ignoring already completed analysis:', runningAnalysisProp.id);
+      return;
+    }
+    
+    // Only sync if:
+    // 1. We have a real analysis from server (not temp)
+    // 2. It's a different analysis ID (new analysis started)
+    // 3. We don't have any current analysis or it's not completed/failed
+    // 4. Don't overwrite live progress with stale server data
+    if (runningAnalysisProp?.id && 
+        runningAnalysisProp.id !== 'temp' && 
+        runningAnalysisProp.id !== runningAnalysis?.id &&
+        (!runningAnalysis || (runningAnalysis.status !== 'completed' && runningAnalysis.status !== 'failed'))) {
+      console.log('🔄 Syncing NEW analysis from server:', runningAnalysisProp);
+      runningAnalysis = runningAnalysisProp;
+    } else if (runningAnalysisProp?.id === runningAnalysis?.id && runningAnalysis?.status === 'completed') {
+      console.log('🚫 Skipping sync - local analysis is completed, server data is stale');
+    }
+  });
 
   // UI state
   let loading = $state(false);
@@ -116,68 +146,103 @@
     }
   });
 
-  // Live progress: subscribe to analysis_runs updates and poll as a fallback
-  let progressChannel: any = null;
+  // Server-side polling approach - hit our API endpoint every 5 seconds
   let pollInterval: any = null;
-  const supabaseRT = browser ? createBrowserClient(PUBLIC_SUPABASE_URL, PUBLIC_SUPABASE_ANON_KEY) : null;
 
   function startProgressTracking() {
-    if (!browser || !runningAnalysis?.id || !supabaseRT) return;
+    if (!browser || !runningAnalysis?.id || runningAnalysis.id === 'temp') return;
 
-    // Clear existing
-    stopProgressTracking();
+    console.log('🔄 Starting server-side progress tracking for analysis:', runningAnalysis.id);
+    
+    // Clear any existing polling
+    if (pollInterval) {
+      clearInterval(pollInterval);
+      pollInterval = null;
+    }
 
-    // Realtime channel on analysis_runs for this ID
-    progressChannel = supabaseRT
-      .channel(`analysis_runs:${runningAnalysis.id}`)
-      .on('postgres_changes', {
-        event: '*',
-        schema: 'public',
-        table: 'analysis_runs',
-        filter: `id=eq.${runningAnalysis.id}`
-      }, (payload: any) => {
-        const newRec = payload?.new;
-        if (!newRec) return;
-        // Patch runningAnalysis object with new fields (
-        runningAnalysis = { ...runningAnalysis, ...newRec } as any;
-        // Auto-stop when completed/failed and hide the bar
-        if (runningAnalysis && (runningAnalysis.status === 'completed' || runningAnalysis.status === 'failed')) {
-          stopProgressTracking();
-          runningAnalysis = null;
-        }
-      })
-      .subscribe();
-
-    // Poll every 5s as backup (in case realtime is disabled)
+    // Poll every 5 seconds using our server API
     pollInterval = setInterval(async () => {
-      if (!runningAnalysis?.id || !supabaseRT) return;
-      const { data, error } = await supabaseRT
-        .from('analysis_runs')
-        .select('*')
-        .eq('id', runningAnalysis.id)
-        .single();
-      if (!error && data) {
+      if (!runningAnalysis?.id || runningAnalysis.id === 'temp') return;
+      
+      try {
+        // Fetch from our server API with cache busting
+        const response = await fetch(`/api/analysis-status/${runningAnalysis.id}?t=${Date.now()}`, {
+          headers: {
+            'Cache-Control': 'no-cache',
+            'Pragma': 'no-cache'
+          }
+        });
+        
+        if (!response.ok) {
+          console.error('❌ Server API error:', response.status, response.statusText);
+          return;
+        }
+        
+        const data = await response.json();
+        
+        if (data.error) {
+          console.error('❌ API returned error:', data.error);
+          return;
+        }
+        
+        console.log('📊 Server progress update:', {
+          completed: data.completed_llm_calls,
+          total: data.total_llm_calls,
+          status: data.status
+        });
+        
+        // Update the state
         runningAnalysis = { ...runningAnalysis, ...data } as any;
-      }
-      if (runningAnalysis?.status === 'completed' || runningAnalysis?.status === 'failed') {
-        stopProgressTracking();
-        runningAnalysis = null;
+        
+        // Stop polling when complete
+        if (data.status === 'completed' || data.status === 'failed' || 
+            (data.completed_llm_calls > 0 && data.completed_llm_calls >= data.total_llm_calls)) {
+          console.log('✅ Analysis completed, stopping server polling and marking as done');
+          
+          // Update state to completed BEFORE stopping to prevent restart
+          runningAnalysis = { ...runningAnalysis, ...data, status: 'completed' } as any;
+          
+          // Mark this analysis ID as completed to prevent future re-syncing
+          if (runningAnalysis?.id) {
+            completedAnalysisIds.add(runningAnalysis.id);
+            console.log('📝 Marked analysis as completed:', runningAnalysis.id);
+          }
+          
+          stopProgressTracking();
+          
+          // Keep the progress bar visible for 3 seconds then hide it
+          setTimeout(() => {
+            console.log('🚫 Hiding completed progress bar for:', runningAnalysis?.id);
+            runningAnalysis = null;
+          }, 3000);
+        }
+        
+      } catch (e) {
+        console.error('❌ Server polling exception:', e);
       }
     }, 5000);
   }
 
   function stopProgressTracking() {
-    try { progressChannel && supabaseRT?.removeChannel(progressChannel); } catch {}
-    progressChannel = null;
-    if (pollInterval) { clearInterval(pollInterval); pollInterval = null; }
+    if (pollInterval) {
+      console.log('🛑 Stopping progress tracking');
+      clearInterval(pollInterval);
+      pollInterval = null;
+    }
   }
 
   $effect(() => {
-    // (Re)start tracking whenever a run is present with a real id
-    if (browser && runningAnalysis && (runningAnalysis.status === 'running' || runningAnalysis.status === 'pending') && runningAnalysis.id && runningAnalysis.id !== 'temp') {
+    // Start polling when we have a real analysis ID (not temp) and it's not already completed
+    if (browser && runningAnalysis && 
+        (runningAnalysis.status === 'running' || runningAnalysis.status === 'pending') && 
+        runningAnalysis.id && runningAnalysis.id !== 'temp') {
+      console.log('🎯 Effect triggering polling for status:', runningAnalysis.status);
       startProgressTracking();
       return () => stopProgressTracking();
     } else {
+      if (runningAnalysis?.status === 'completed' || runningAnalysis?.status === 'failed') {
+        console.log('🛑 Effect NOT starting polling - analysis is', runningAnalysis.status);
+      }
       stopProgressTracking();
     }
   });
@@ -448,6 +513,7 @@
                   loading = true;
                   try {
                     // Immediately show a local placeholder so the UI switches to a 0% bar
+                    console.log('🚀 Starting analysis...');
                     const providerCount = Math.max(1, llmProviders?.length || 0);
                     const expectedTotalCalls = (queries?.length || 0) * providerCount * 5;
                     runningAnalysis = {
@@ -461,6 +527,7 @@
                       completed_llm_calls: 0,
                       created_at: new Date().toISOString()
                     } as any;
+                    console.log('✨ Set optimistic runningAnalysis:', runningAnalysis);
 
                     const formData = new FormData();
                     formData.set('businessId', business.id);
@@ -475,17 +542,17 @@
                       try { payload = await res.json(); } catch {}
                       const analysisRunId = payload?.analysisRunId;
                       if (analysisRunId) {
+                        console.log('🆔 Got real analysis ID:', analysisRunId);
                         // Replace temp with real id
                         runningAnalysis = { ...runningAnalysis, id: analysisRunId } as any;
-                        // Fetch the row immediately to hydrate totals/status from DB
+                        
+                        // Fetch the initial state from our server API
                         try {
-                          if (supabaseRT) {
-                            const { data, error } = await supabaseRT
-                              .from('analysis_runs')
-                              .select('*')
-                              .eq('id', analysisRunId)
-                              .single();
-                            if (!error && data) {
+                          const response = await fetch(`/api/analysis-status/${analysisRunId}?t=${Date.now()}`);
+                          if (response.ok) {
+                            const data = await response.json();
+                            if (!data.error) {
+                              console.log('💾 Initial server analysis state:', data);
                               runningAnalysis = { ...runningAnalysis, ...data } as any;
                             }
                           }

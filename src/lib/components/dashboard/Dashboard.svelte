@@ -150,7 +150,10 @@
   let pollInterval: any = null;
 
   function startProgressTracking() {
-    if (!browser || !runningAnalysis?.id || runningAnalysis.id === 'temp') return;
+    if (!browser || !runningAnalysis?.id || runningAnalysis.id === 'temp') {
+      console.log('🚫 Cannot start tracking:', { browser, id: runningAnalysis?.id, status: runningAnalysis?.status });
+      return;
+    }
 
     console.log('🔄 Starting server-side progress tracking for analysis:', runningAnalysis.id);
     
@@ -232,18 +235,43 @@
   }
 
   $effect(() => {
+    console.log('🔄 Effect running with analysis:', { 
+      id: runningAnalysis?.id, 
+      status: runningAnalysis?.status,
+      browser,
+      hasAnalysis: !!runningAnalysis 
+    });
+    
     // Start polling when we have a real analysis ID (not temp) and it's not already completed
     if (browser && runningAnalysis && 
         (runningAnalysis.status === 'running' || runningAnalysis.status === 'pending') && 
         runningAnalysis.id && runningAnalysis.id !== 'temp') {
       console.log('🎯 Effect triggering polling for status:', runningAnalysis.status);
-      startProgressTracking();
-      return () => stopProgressTracking();
+      
+      // Only start if not already polling
+      if (!pollInterval) {
+        startProgressTracking();
+      } else {
+        console.log('📋 Polling already active, skipping effect start');
+      }
+      
+      return () => {
+        console.log('🧹 Effect cleanup called');
+        stopProgressTracking();
+      };
     } else {
       if (runningAnalysis?.status === 'completed' || runningAnalysis?.status === 'failed') {
         console.log('🛑 Effect NOT starting polling - analysis is', runningAnalysis.status);
+      } else if (runningAnalysis?.id === 'temp') {
+        console.log('🕰️ Effect NOT starting polling - temp ID');
+      } else if (!runningAnalysis) {
+        console.log('🚫 Effect NOT starting polling - no analysis');
       }
-      stopProgressTracking();
+      
+      // Only stop if we're not manually polling
+      if (runningAnalysis?.id !== 'temp') {
+        stopProgressTracking();
+      }
     }
   });
 
@@ -527,24 +555,57 @@
                       completed_llm_calls: 0,
                       created_at: new Date().toISOString()
                     } as any;
-                    console.log('✨ Set optimistic runningAnalysis:', runningAnalysis);
+                    console.log('✨ Set optimistic runningAnalysis (temp):', runningAnalysis);
+                    console.log('📊 Effect should run now with temp state');
 
                     const formData = new FormData();
                     formData.set('businessId', business.id);
+                    console.log('📤 Sending runAnalysis request...');
                     const res = await fetch('?/runAnalysis', { method: 'POST', body: formData });
+                    console.log('📥 Got response:', res.status, res.statusText);
+                    
                     if (!res.ok) {
-                      console.error('Failed to start analysis');
+                      console.error('❌ Failed to start analysis:', res.status, res.statusText);
                       // Revert the optimistic placeholder on failure
                       runningAnalysis = null;
                     } else {
                       // Try to parse the returned id
-                      let payload: any = null;
-                      try { payload = await res.json(); } catch {}
-                      const analysisRunId = payload?.analysisRunId;
+                      let analysisRunId: string | null = null;
+                      try { 
+                        const text = await res.text();
+                        console.log('📄 Response text:', text);
+                        const response = JSON.parse(text);
+                        console.log('📦 Parsed response:', response);
+                        
+                        // Handle SvelteKit action response format
+                        if (response.type === 'success' && response.data) {
+                          // The data is a stringified array, parse it
+                          const dataArray = JSON.parse(response.data);
+                          console.log('📋 Data array:', dataArray);
+                          
+                          // The real analysis run ID is in the third element (UUID format)
+                          if (dataArray && dataArray[2] && typeof dataArray[2] === 'string' && dataArray[2].includes('-')) {
+                            analysisRunId = dataArray[2];
+                            console.log('✅ Found UUID in position [2]:', analysisRunId);
+                          }
+                          
+                          // Fallback to the first object's analysisRunId (but this seems to be just a counter)
+                          if (!analysisRunId && dataArray && dataArray[0] && typeof dataArray[0] === 'object') {
+                            analysisRunId = dataArray[0].analysisRunId?.toString();
+                            console.log('⚠️ Using fallback ID from position [0]:', analysisRunId);
+                          }
+                        }
+                        
+                        console.log('🔍 Extracted analysisRunId:', analysisRunId);
+                      } catch (e) {
+                        console.error('❌ Failed to parse response:', e);
+                      }
+                      
                       if (analysisRunId) {
                         console.log('🆔 Got real analysis ID:', analysisRunId);
                         // Replace temp with real id
                         runningAnalysis = { ...runningAnalysis, id: analysisRunId } as any;
+                        console.log('🔄 Updated to real ID, effect should trigger:', runningAnalysis);
                         
                         // Fetch the initial state from our server API
                         try {
@@ -554,11 +615,23 @@
                             if (!data.error) {
                               console.log('💾 Initial server analysis state:', data);
                               runningAnalysis = { ...runningAnalysis, ...data } as any;
+                              
+                              // Explicitly start polling now that we have the real ID and initial data
+                              console.log('🚀 About to manually start polling. Current state:', {
+                                id: runningAnalysis?.id,
+                                status: runningAnalysis?.status,
+                                pollInterval: !!pollInterval
+                              });
+                              startProgressTracking();
+                              console.log('🚀 Manual polling started, pollInterval exists:', !!pollInterval);
                             }
                           }
                         } catch (e) {
                           console.warn('Unable to prefetch analysis_runs row:', e);
                         }
+                      } else {
+                        console.error('❌ No analysisRunId in response');
+                        console.log('🔄 Keeping temp state, analysis might still be starting...');
                       }
                     }
                   } catch (e) {

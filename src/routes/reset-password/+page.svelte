@@ -15,18 +15,7 @@
   let hasRecoverySession = $state(false);
   let sessionLoading = $state(true);
 
-  // Debug state changes
-  $effect(() => {
-    console.log("State change - loading:", loading);
-  });
 
-  $effect(() => {
-    console.log("State change - success:", success);
-  });
-
-  $effect(() => {
-    console.log("State change - error:", error);
-  });
 
   const supabase = createBrowserClient(
     PUBLIC_SUPABASE_URL,
@@ -170,30 +159,23 @@
   }
 
   async function updatePassword() {
-    console.log("=== updatePassword function started ===");
     error = null;
     success = false;
 
     const trimmed = newPassword?.trim() ?? "";
-    console.log("Password length:", trimmed.length);
     
     if (!trimmed || trimmed.length < 10) {
-      console.log("Password too short, returning early");
       error = "Password must be at least 10 characters.";
       return;
     }
     if (trimmed !== (confirmPassword?.trim() ?? "")) {
-      console.log("Passwords don't match, returning early");
       error = "Passwords do not match.";
       return;
     }
 
-    console.log("Setting loading = true");
     loading = true;
     
     try {
-      console.log("Making server-side password update request");
-      
       const response = await fetch('/api/update-password', {
         method: 'POST',
         headers: {
@@ -202,25 +184,19 @@
         body: JSON.stringify({ password: trimmed })
       });
 
-      console.log("Server response status:", response.status);
       const result = await response.json();
-      console.log("Server response:", result);
 
       if (!response.ok) {
         throw new Error(result.error || 'Password update failed');
       }
 
-      console.log("Password update successful, showing success message");
       success = true;
       
     } catch (e: any) {
-      console.log("Caught error in updatePassword:", e);
       error = mapSupabaseErrorMessage(e);
     } finally {
       loading = false;
-      console.log("Set loading = false in finally block");
     }
-    console.log("=== updatePassword function finished ===");
   }
 </script>
 

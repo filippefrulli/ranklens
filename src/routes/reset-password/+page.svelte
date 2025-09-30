@@ -1,16 +1,11 @@
 <script lang="ts">
-  import { onMount, onDestroy } from "svelte";
-  import { goto } from "$app/navigation";
+  import { onMount } from "svelte";
+  import { goto, replaceState } from "$app/navigation";
   import { createBrowserClient } from "@supabase/ssr";
   import {
     PUBLIC_SUPABASE_URL,
     PUBLIC_SUPABASE_ANON_KEY,
   } from "$env/static/public";
-
-  const supabase = createBrowserClient(
-    PUBLIC_SUPABASE_URL,
-    PUBLIC_SUPABASE_ANON_KEY
-  );
 
   let newPassword = $state("");
   let confirmPassword = $state("");
@@ -18,63 +13,117 @@
   let error = $state<string | null>(null);
   let success = $state(false);
   let hasRecoverySession = $state(false);
+  let sessionLoading = $state(true);
+
+  // Debug state changes
+  $effect(() => {
+    console.log("State change - loading:", loading);
+  });
+
+  $effect(() => {
+    console.log("State change - success:", success);
+  });
+
+  $effect(() => {
+    console.log("State change - error:", error);
+  });
+
+  const supabase = createBrowserClient(
+    PUBLIC_SUPABASE_URL,
+    PUBLIC_SUPABASE_ANON_KEY
+  );
 
   // Live validation helpers
   const newTrim = $derived(newPassword?.trim?.() ?? "");
   const confirmTrim = $derived(confirmPassword?.trim?.() ?? "");
-  const tooShort = $derived(newTrim.length > 0 && newTrim.length < 10);
+  const tooShort = $derived(newTrim.length < 10);
   const mismatch = $derived(confirmTrim.length > 0 && newTrim !== confirmTrim);
+  const passwordsEmpty = $derived(newTrim.length === 0 || confirmTrim.length === 0);
 
-  onMount(async () => {
-    // Ensure we have a valid session for recovery. Depending on the email link, Supabase may
-    // use PKCE (code in query) or tokens in the hash. Handle both, then check for a session.
-    try {
-      const url = new URL(window.location.href);
-      const qs = url.searchParams;
-      const hashParams = new URLSearchParams(url.hash?.startsWith('#') ? url.hash.slice(1) : url.hash);
-
-      const code = qs.get('code') || hashParams.get('code');
-      const access_token = hashParams.get('access_token');
-      const refresh_token = hashParams.get('refresh_token');
-
-      if (code) {
-        // PKCE flow: exchange code for a session
-        const { error } = await withTimeout(supabase.auth.exchangeCodeForSession(code), 15000);
-        if (error) console.warn('exchangeCodeForSession error:', error);
-      } else if (access_token && refresh_token) {
-        // Hash tokens flow: explicitly set the session if provided
-        const { error } = await withTimeout(
-          supabase.auth.setSession({ access_token, refresh_token }),
-          15000
-        );
-        if (error) console.warn('setSession error:', error);
-      }
-
-      const {
-        data: { session },
-      } = await supabase.auth.getSession();
-      hasRecoverySession = Boolean(session);
-
-      // Clean the URL to remove code/hash tokens after we have a session
-      try {
-        const cleanUrl = `${url.origin}${url.pathname}`;
-        window.history.replaceState({}, document.title, cleanUrl);
-      } catch {}
-    } catch (e) {
-      console.warn('Recovery session bootstrap failed:', e);
-      hasRecoverySession = false;
-    }
-
-    // Listen for PASSWORD_RECOVERY and other auth events in case the library processes tokens later
-    const { data: sub } = supabase.auth.onAuthStateChange((event) => {
+  onMount(() => {
+    // Set up auth state listener first
+    const { data: sub } = supabase.auth.onAuthStateChange((event: string) => {
       if (event === 'PASSWORD_RECOVERY' || event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
         hasRecoverySession = true;
       }
     });
 
-    onDestroy(() => {
-      sub.subscription.unsubscribe();
-    });
+    // Handle session recovery asynchronously
+    (async () => {
+      // Ensure we have a valid session for recovery. Depending on the email link, Supabase may
+      // use PKCE (code in query) or tokens in the hash. Handle both, then check for a session.
+      try {
+        const url = new URL(window.location.href);
+        const qs = url.searchParams;
+        const hashParams = new URLSearchParams(url.hash?.startsWith('#') ? url.hash.slice(1) : url.hash);
+
+        const code = qs.get('code') || hashParams.get('code');
+        const access_token = hashParams.get('access_token');
+        const refresh_token = hashParams.get('refresh_token');
+
+        let authError = null;
+
+        if (code) {
+          // PKCE flow: exchange code for a session
+          const result = await withTimeout(supabase.auth.exchangeCodeForSession(code), 15000);
+          const exchangeError = (result as any)?.error;
+          if (exchangeError) {
+            console.error('PKCE exchange failed:', exchangeError);
+            authError = exchangeError;
+            // Check for specific error types
+            if (exchangeError.message?.includes('invalid_grant') || exchangeError.message?.includes('expired')) {
+              error = "This password reset link has expired or has already been used. Please request a new password reset.";
+            } else if (exchangeError.message?.includes('invalid_request')) {
+              error = "Invalid password reset link. Please request a new password reset.";
+            }
+          }
+        } else if (access_token && refresh_token) {
+          // Hash tokens flow: explicitly set the session if provided
+          const sessionResult = await withTimeout(
+            supabase.auth.setSession({ access_token, refresh_token }),
+            15000
+          );
+          const sessionError = (sessionResult as any)?.error;
+          if (sessionError) {
+            console.error('Session set failed:', sessionError);
+            authError = sessionError;
+          }
+        }
+
+        const {
+          data: { session },
+        } = await supabase.auth.getSession();
+        
+        hasRecoverySession = Boolean(session);
+        
+        // If we don't have a session and encountered an auth error, show user-friendly message
+        if (!hasRecoverySession && !error) {
+          if (authError) {
+            error = "Unable to verify your password reset request. Please try requesting a new password reset.";
+          } else if (!code && !access_token) {
+            error = "This page requires a valid password reset link. Please check your email and click the reset link.";
+          }
+        }
+
+        // Clean the URL to remove code/hash tokens after we have a session
+        try {
+          replaceState('/reset-password', {});
+        } catch {}
+      } catch (e) {
+        console.error('Recovery session bootstrap failed:', e);
+        hasRecoverySession = false;
+        if (!error) {
+          error = "Failed to process password reset link. Please try again or request a new reset link.";
+        }
+      } finally {
+        sessionLoading = false;
+      }
+    })();
+
+    // Return cleanup function synchronously
+    return () => {
+      sub?.subscription?.unsubscribe();
+    };
   });
 
   function mapSupabaseErrorMessage(e: any): string {
@@ -121,33 +170,57 @@
   }
 
   async function updatePassword() {
+    console.log("=== updatePassword function started ===");
     error = null;
     success = false;
 
     const trimmed = newPassword?.trim() ?? "";
+    console.log("Password length:", trimmed.length);
+    
     if (!trimmed || trimmed.length < 10) {
+      console.log("Password too short, returning early");
       error = "Password must be at least 10 characters.";
       return;
     }
     if (trimmed !== (confirmPassword?.trim() ?? "")) {
+      console.log("Passwords don't match, returning early");
       error = "Passwords do not match.";
       return;
     }
 
+    console.log("Setting loading = true");
     loading = true;
+    
     try {
-      // Call updateUser directly to avoid false timeouts; backend may succeed even if the client cuts off
-      const { error: updateError } = await supabase.auth.updateUser({ password: trimmed });
-      if (updateError) throw updateError;
+      console.log("Making server-side password update request");
+      
+      const response = await fetch('/api/update-password', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ password: trimmed })
+      });
 
+      console.log("Server response status:", response.status);
+      const result = await response.json();
+      console.log("Server response:", result);
+
+      if (!response.ok) {
+        throw new Error(result.error || 'Password update failed');
+      }
+
+      console.log("Password update successful, showing success message");
       success = true;
-      // Give the UI a moment to show success, then go to sign in or home
-      setTimeout(() => goto("/signin", { replaceState: true }), 1000);
+      
     } catch (e: any) {
+      console.log("Caught error in updatePassword:", e);
       error = mapSupabaseErrorMessage(e);
     } finally {
       loading = false;
+      console.log("Set loading = false in finally block");
     }
+    console.log("=== updatePassword function finished ===");
   }
 </script>
 
@@ -167,14 +240,16 @@
         Set a new password
       </h1>
       <p class="text-sm text-slate-600 mb-6">
-        {#if hasRecoverySession}
+        {#if sessionLoading}
+          Verifying your password reset request...
+        {:else if hasRecoverySession}
           Enter a new password for your account.
         {:else}
-          This page is intended to be opened from the reset link in your email.
-          Please re-open the link from your inbox to continue.
+          This page requires a valid password reset link from your email.
         {/if}
       </p>
 
+      {#if !sessionLoading}
       <form
         onsubmit={(e) => {
           e.preventDefault();
@@ -182,6 +257,16 @@
         }}
         class="space-y-4"
       >
+        <!-- Hidden username field for accessibility -->
+        <input
+          type="text"
+          name="username"
+          autocomplete="username"
+          style="display: none;"
+          readonly
+          tabindex="-1"
+          aria-hidden="true"
+        />
         <div>
           <label
             class="block text-sm font-medium text-slate-700 mb-1"
@@ -191,6 +276,7 @@
             id="new-password"
             type="password"
             bind:value={newPassword}
+            autocomplete="new-password"
             minlength={10}
             required
             class="w-full px-4 py-2.5 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[rgb(var(--color-primary))]/50 focus:border-transparent"
@@ -213,6 +299,7 @@
             id="confirm-password"
             type="password"
             bind:value={confirmPassword}
+            autocomplete="new-password"
             minlength={10}
             required
             class="w-full px-4 py-2.5 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[rgb(var(--color-primary))]/50 focus:border-transparent"
@@ -233,24 +320,67 @@
             class="p-2.5 rounded-lg border border-red-200 bg-red-50 text-red-700 text-sm"
           >
             {error}
+            {#if !hasRecoverySession && !sessionLoading}
+              <div class="mt-2">
+                <a 
+                  href="/signin?tab=reset" 
+                  class="text-red-800 underline hover:no-underline cursor-pointer"
+                >
+                  Request a new password reset
+                </a>
+              </div>
+            {/if}
           </div>
         {/if}
         {#if success}
           <div
-            class="p-2.5 rounded-lg border border-emerald-200 bg-emerald-50 text-emerald-700 text-sm"
+            class="p-3 rounded-lg border border-emerald-200 bg-emerald-50 text-emerald-700 text-sm text-center"
           >
-            Password updated. Redirecting…
+            <div class="flex items-center justify-center gap-2 mb-3">
+              <svg class="w-5 h-5 text-emerald-600" fill="currentColor" viewBox="0 0 20 20">
+                <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd" />
+              </svg>
+              <span class="font-medium">Password updated successfully!</span>
+            </div>
+            <a 
+              href="/" 
+              class="inline-block w-full bg-emerald-600 text-white py-2.5 px-4 rounded-lg font-medium hover:bg-emerald-700 cursor-pointer transition-colors"
+            >
+              Continue to Dashboard
+            </a>
           </div>
         {/if}
 
+        {#if !success}
         <button
           type="submit"
-          disabled={!hasRecoverySession || loading || tooShort || mismatch}
+          disabled={sessionLoading || !hasRecoverySession || loading || tooShort || mismatch || passwordsEmpty}
           class="w-full bg-[rgb(var(--color-primary))] hover:brightness-95 disabled:opacity-50 disabled:cursor-not-allowed text-white font-medium py-2.5 px-4 rounded-lg transition-colors cursor-pointer"
         >
-          {loading ? "Updating…" : "Update password"}
+          {#if sessionLoading}
+            Verifying link...
+          {:else if loading}
+            Updating password...
+          {:else}
+            Update password
+          {/if}
         </button>
+        {/if}
       </form>
+      {:else}
+      <!-- Loading state while verifying session -->
+      <div class="space-y-4">
+        <div class="animate-pulse">
+          <div class="h-4 bg-slate-200 rounded w-24 mb-2"></div>
+          <div class="h-10 bg-slate-200 rounded"></div>
+        </div>
+        <div class="animate-pulse">
+          <div class="h-4 bg-slate-200 rounded w-32 mb-2"></div>
+          <div class="h-10 bg-slate-200 rounded"></div>
+        </div>
+        <div class="h-10 bg-slate-200 rounded animate-pulse"></div>
+      </div>
+      {/if}
     </div>
   </div>
 </main>

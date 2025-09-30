@@ -1,7 +1,6 @@
 <script lang="ts">
   import { onMount } from "svelte";
   import { goto } from "$app/navigation";
-  import { enhance } from "$app/forms";
   import type { Session } from "@supabase/supabase-js";
 
   interface Props {
@@ -40,20 +39,7 @@
     }
   }
 
-  function handleSignOutSubmit() {
-    isSigningOut = true;
-    return async ({ update }: { update: () => Promise<void> }) => {
-      try {
-        await update();
-        showDropdown = false;
-        // The redirect will be handled by the server action
-      } catch (error) {
-        console.error("Error during sign out:", error);
-      } finally {
-        isSigningOut = false;
-      }
-    };
-  }
+
 
   function toggleDropdown() {
     showDropdown = !showDropdown;
@@ -92,11 +78,7 @@
 
         <div class="h-px bg-gray-100 my-2"></div>
 
-        <form
-          method="POST"
-          action="/auth/signout"
-          use:enhance={handleSignOutSubmit}
-        >
+        <form method="POST" action="/auth/signout" class="w-full">
           <button
             type="submit"
             disabled={isSigningOut}

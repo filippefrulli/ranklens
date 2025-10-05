@@ -51,7 +51,6 @@ export const load: PageServerLoad = async ({ locals, params }) => {
       llmProviders
     }
   } catch (err) {
-    console.error('Error loading query data:', err)
     throw error(500, 'Failed to load query data')
   }
 }

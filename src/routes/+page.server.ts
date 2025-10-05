@@ -41,7 +41,6 @@ export const load: PageServerLoad = async ({ locals }) => {
       try {
         queryHistories[query.id] = await dbService.getQueryRankingHistory(query.id, 10)
       } catch (error) {
-        console.error(`Failed to load history for query ${query.id}:`, error)
         queryHistories[query.id] = []
       }
     }
@@ -61,7 +60,6 @@ export const load: PageServerLoad = async ({ locals }) => {
       querySuggestions
     }
   } catch (err) {
-    console.error('Error loading dashboard data:', err)
     return {
       user: locals.user,
       business: null,
@@ -73,8 +71,6 @@ export const load: PageServerLoad = async ({ locals }) => {
 export const actions: Actions = {
   // Create business action
   createBusiness: async ({ locals, request }) => {
-    console.log('createBusiness action called')
-    
     if (!locals.user || !locals.supabase) {
       return fail(401, { error: 'Unauthorized' })
     }
@@ -96,11 +92,8 @@ export const actions: Actions = {
         google_place_id: googlePlaceId,
         city
       })
-
-      console.log('Business created successfully, redirecting...')
       
     } catch (err) {
-      console.error('Error creating business:', err)
       return fail(500, { error: 'Failed to create business' })
     }
 
@@ -129,7 +122,6 @@ export const actions: Actions = {
       }
 
     } catch (err) {
-      console.error('Error generating query suggestions:', err)
       return fail(500, { error: 'Failed to generate query suggestions' })
     }
   },
@@ -176,7 +168,6 @@ export const actions: Actions = {
       }
 
     } catch (err) {
-      console.error('Error adding query:', err)
       return fail(500, { error: 'Failed to add query' })
     }
   },
@@ -224,7 +215,6 @@ export const actions: Actions = {
       }
 
     } catch (err) {
-      console.error('Error running analysis:', err)
       return fail(500, { error: 'Failed to run analysis' })
     }
   }

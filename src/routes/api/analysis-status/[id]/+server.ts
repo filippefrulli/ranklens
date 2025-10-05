@@ -12,16 +12,20 @@ export const GET: RequestHandler = async ({ params, locals }) => {
     // Get the analysis run from the database
     const { data, error } = await locals.supabase
       .from('analysis_runs')
-      .select('*')
+      .select('*, business:businesses!inner(user_id)')
       .eq('id', id)
       .single();
 
     if (error) {
-      console.error('Error fetching analysis status:', error);
       return json({ error: 'Analysis not found' }, { status: 404 });
     }
 
-    // Return the analysis data
+    // Verify that the analysis belongs to the current user's business
+    if (!data.business || data.business.user_id !== locals.user.id) {
+      return json({ error: 'Access denied' }, { status: 403 });
+    }
+
+    // Return the analysis data (without business info)
     return json({
       id: data.id,
       status: data.status,
@@ -34,7 +38,6 @@ export const GET: RequestHandler = async ({ params, locals }) => {
     });
 
   } catch (error) {
-    console.error('Unexpected error:', error);
     return json({ error: 'Internal server error' }, { status: 500 });
   }
 };

@@ -25,13 +25,15 @@ export const POST: RequestHandler = async ({ request, locals }) => {
     });
 
     if (error) {
-      console.error('Password update error:', error);
-      return json({ error: error.message }, { status: 400 });
+      // Sanitize error messages - don't expose internal details
+      const sanitizedMessage = error.message?.includes('same password') 
+        ? 'New password must be different from current password'
+        : 'Failed to update password. Please try again.';
+      return json({ error: sanitizedMessage }, { status: 400 });
     }
 
     return json({ success: true });
   } catch (error) {
-    console.error('Update password API error:', error);
     return json({ error: 'Internal server error' }, { status: 500 });
   }
 };

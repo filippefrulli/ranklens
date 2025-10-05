@@ -8,7 +8,7 @@ export const actions: Actions = {
         await locals.supabase.auth.signOut()
       }
     } catch (error) {
-      console.error('Error signing out:', error)
+      // Silent fail - always redirect even if signout fails
     }
     
     // Always redirect to home page after signout, regardless of success/failure

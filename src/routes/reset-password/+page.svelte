@@ -57,7 +57,6 @@
           const result = await withTimeout(supabase.auth.exchangeCodeForSession(code), 15000);
           const exchangeError = (result as any)?.error;
           if (exchangeError) {
-            console.error('PKCE exchange failed:', exchangeError);
             authError = exchangeError;
             // Check for specific error types
             if (exchangeError.message?.includes('invalid_grant') || exchangeError.message?.includes('expired')) {
@@ -74,7 +73,6 @@
           );
           const sessionError = (sessionResult as any)?.error;
           if (sessionError) {
-            console.error('Session set failed:', sessionError);
             authError = sessionError;
           }
         }
@@ -99,7 +97,6 @@
           replaceState('/reset-password', {});
         } catch {}
       } catch (e) {
-        console.error('Recovery session bootstrap failed:', e);
         hasRecoverySession = false;
         if (!error) {
           error = "Failed to process password reset link. Please try again or request a new reset link.";

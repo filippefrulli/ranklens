@@ -70,15 +70,6 @@
     >
       <!-- Hero -->
       <section class="text-center max-w-3xl mx-auto">
-        <div
-          class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/70 backdrop-blur border border-slate-200 text-[11px] font-medium text-slate-600 shadow-sm mb-6"
-        >
-          <span
-            class="inline-flex h-5 w-5 items-center justify-center rounded-full bg-[rgb(var(--color-primary))] text-white text-[10px]"
-            >AI</span
-          >
-          Track how AI mentions you
-        </div>
         <h1
           class="text-4xl sm:text-5xl font-semibold leading-tight text-slate-900 tracking-tight"
         >

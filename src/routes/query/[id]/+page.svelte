@@ -56,66 +56,33 @@
       loadingData = true;
       // Try cache first
       const cached = loadRun(queryId, runId);
-      let competitorDataRaw: any[] | null = null;
-      if (cached) {
+      if (cached && (cached as any).v === 2 && (cached as any).rawCompetitorResults) {
+        // Cache hit with current version
         rankingResults = cached.rankingResults;
-        if ((cached as any).v === 2 && (cached as any).rawCompetitorResults) {
-          competitorDataRaw = (cached as any).rawCompetitorResults;
-        } else {
-          // legacy cache lacked raw rows; fetch fresh to enable correct filtering
-          competitorDataRaw = null;
-        }
+        rawCompetitorResults = (cached as any).rawCompetitorResults;
       } else {
-        const { data: rankings, error: rankingsError } = await supabase
-          .from("ranking_attempts")
-          .select(
-            `*, analysis_runs!inner(id, created_at), llm_providers!inner(id, name)`
-          )
-          .eq("query_id", queryId)
-          .eq("analysis_run_id", runId)
-          .order("created_at", { ascending: false });
-        if (rankingsError)
-          throw new Error(
-            `Failed to fetch ranking results: ${rankingsError.message}`
-          );
-        rankingResults = rankings || [];
-
-        const { data: competitorRows, error: competitorError } =
-          await supabase
-            .from("competitor_results")
-            .select("*")
-            .eq("query_id", queryId)
-            .eq("analysis_run_id", runId)
-            .order("average_rank", { ascending: true });
-        if (competitorError)
-          throw new Error(
-            `Failed to fetch competitor rankings: ${competitorError.message}`
-          );
-        competitorDataRaw = competitorRows || [];
+        // Fetch from server API endpoint
+        const response = await fetch(
+          `/api/query/${encodeURIComponent(queryId)}/run-data?runId=${encodeURIComponent(runId)}&_=${Date.now()}`,
+          { credentials: 'include' }
+        );
+        
+        if (!response.ok) {
+          throw new Error('Failed to load run data');
+        }
+        
+        const data = await response.json();
+        rankingResults = data.rankingResults;
+        rawCompetitorResults = data.competitorResults;
+        
+        // Save to cache
+        saveRun(queryId, runId, rankingResults, rawCompetitorResults);
       }
-      // Persist raw rows for future quick loads
-      if (!competitorDataRaw) {
-        // We had a legacy cache; fetch raw now
-        const { data: competitorRowsFresh, error: competitorError2 } = await supabase
-          .from('competitor_results')
-          .select('*')
-          .eq('query_id', queryId)
-          .eq('analysis_run_id', runId)
-          .order('average_rank', { ascending: true });
-        if (competitorError2) throw new Error(`Failed to fetch competitor rankings: ${competitorError2.message}`);
-        competitorDataRaw = competitorRowsFresh || [];
-      }
-      rawCompetitorResults = competitorDataRaw;
 
       // Build display data based on selection from RAW rows
       competitorRankings = buildCompetitorDisplay(rawCompetitorResults, selectedProvider?.name || null);
-      // Save to cache if freshly fetched (no cache before) or upgrading legacy cache
-      if (!cached || (cached as any).v === 1) {
-        saveRun(queryId, runId, rankingResults, rawCompetitorResults);
-      }
     } catch (e: any) {
-      console.error("Error loading run data", e);
-      error = e.message || "Failed to load run data";
+      error = 'Failed to load run data';
     } finally {
       loadingData = false;
     }

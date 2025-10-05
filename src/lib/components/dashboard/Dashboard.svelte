@@ -22,8 +22,6 @@
   import { browser } from "$app/environment";
   import { loadSuggestions, saveSuggestions } from "$lib/utils/suggestionsCache";
   import LLMLogo from '$lib/components/logos/LLMLogo.svelte';
-  import { createBrowserClient } from '@supabase/ssr';
-  import { PUBLIC_SUPABASE_URL, PUBLIC_SUPABASE_ANON_KEY } from '$env/static/public';
 
   interface Props {
     form?: any;

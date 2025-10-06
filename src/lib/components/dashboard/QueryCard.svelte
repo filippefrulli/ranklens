@@ -1,5 +1,6 @@
 <script lang="ts">
   import type { Query, RankingAnalytics, QueryRankingHistory } from '../../types'
+  import RankingChart from './RankingChart.svelte'
   
   export let query: Query
   export let analytics: RankingAnalytics | undefined
@@ -10,19 +11,34 @@
   $: latestRanking = history.length > 0 ? history[history.length - 1] : null
   $: displayRank = latestRanking?.average_rank || analytics?.average_rank
 
-  // Calculate chart height for each bar (lower rank = taller bar)
-  function getBarHeight(avgRank: number | null): number {
-    if (!avgRank) return 8
-    // Invert the ranking so rank 1 = tallest bar, rank 25+ = shortest bar
-    return Math.max(8, 80 - (avgRank - 1) * 3)
-  }
-
   // Format date for display
   function formatDate(dateStr: string): string {
-    return new Date(dateStr).toLocaleDateString('en-US', { 
-      month: 'short', 
-      day: 'numeric' 
-    })
+    // Handle date string from PostgreSQL (can be date or timestamp)
+    try {
+      if (!dateStr) return 'N/A'
+      
+      // Extract date portion (YYYY-MM-DD) from timestamp or use as-is
+      const datePart = dateStr.split('T')[0]
+      
+      // Parse the date in local timezone to avoid shifts
+      if (/^\d{4}-\d{2}-\d{2}$/.test(datePart)) {
+        const [year, month, day] = datePart.split('-').map(Number)
+        const date = new Date(year, month - 1, day) // month is 0-indexed
+        
+        if (isNaN(date.getTime())) {
+          return 'N/A'
+        }
+        
+        return date.toLocaleDateString('en-US', { 
+          month: 'short', 
+          day: 'numeric'
+        })
+      }
+      
+      return 'N/A'
+    } catch (error) {
+      return 'N/A'
+    }
   }
 </script>
 
@@ -73,41 +89,11 @@
       </div>
 
       <!-- Historical Ranking Chart -->
-      <div class="flex-1 max-w-64">
-        <div class="text-sm text-gray-500 mb-2">
-          {history.length > 0 ? 'Ranking History' : 'LLM Breakdown'}
-        </div>
-        <div class="h-32 bg-gray-100 rounded flex items-center justify-center space-x-1 px-2">
-          {#if loadingHistories}
-            <div class="text-xs text-gray-400 flex items-center">
-              <div class="animate-spin rounded-full h-4 w-4 border-b-2 border-gray-400 mr-2"></div>
-              Loading...
-            </div>
-          {:else if history.length > 0}
-            <div class="flex items-end justify-center space-x-1 h-full">
-              {#each history.slice(-8) as run}
-                <div
-                  class="bg-[rgb(var(--color-primary))] w-3 rounded-t transition-all duration-300"
-                  style="height: {getBarHeight(run.average_rank)}px"
-                  title="Rank {run.average_rank?.toFixed(1) || 'N/A'} on {formatDate(run.run_date)}"
-                ></div>
-              {/each}
-            </div>
-          {:else if analytics?.llm_breakdown && analytics.llm_breakdown.length > 0}
-            <div class="flex items-end justify-center space-x-1 h-full">
-              {#each analytics.llm_breakdown.slice(0, 8) as breakdown}
-                <div
-                  class="bg-[rgb(var(--color-primary))]/80 w-3 rounded-t"
-                  style="height: {breakdown.average_rank
-                    ? Math.max(12, 80 - breakdown.average_rank * 3)
-                    : 12}px"
-                  title="LLM: {breakdown.provider_name}, Avg Rank: {breakdown.average_rank?.toFixed(1) || 'N/A'}"
-                ></div>
-              {/each}
-            </div>
-          {/if}
-        </div>
-      </div>
+      <RankingChart 
+        history={history}
+        llmBreakdown={analytics?.llm_breakdown}
+        loading={loadingHistories}
+      />
     {:else}
       <!-- Simple N/A state when no data -->
       <div class="flex-1 text-center">

@@ -15,10 +15,9 @@ export class BusinessNameStandardizationService {
    * Uses LLM to intelligently group similar names and find canonical versions
    */
   static async standardizeBusinessNames(businessNames: string[]): Promise<BusinessNameStandardization[]> {
-    console.log('🔄 BusinessNameStandardizationService.standardizeBusinessNames called with:', businessNames)
     
     if (businessNames.length === 0) {
-      console.log('⚠️ No business names to standardize')
+      console.log('[Service] BusinessNameStandardization: No names to standardize')
       return []
     }
 
@@ -29,29 +28,26 @@ export class BusinessNameStandardizationService {
     for (const name of businessNames) {
       const cached = this.cache.get(name.toLowerCase().trim())
       if (cached) {
-        console.log(`💾 Cache hit for: ${name} -> ${cached}`)
         results.push({
           originalName: name,
           standardizedName: cached,
           confidence: 'high' // Cache hits are high confidence
         })
       } else {
-        console.log(`🆕 Cache miss for: ${name}`)
         uncachedNames.push(name)
       }
     }
 
     if (uncachedNames.length === 0) {
-      console.log('✅ All names found in cache')
+      console.log('[Service] BusinessNameStandardization: All names from cache')
       return results
     }
 
-    console.log(`🤖 Calling LLM for ${uncachedNames.length} uncached names:`, uncachedNames)
+    console.log('[Service] BusinessNameStandardization: Standardizing names', { count: uncachedNames.length })
 
     try {
       // Prepare the prompt for LLM
       const prompt = this.createStandardizationPrompt(uncachedNames)
-      console.log('📝 LLM Prompt:', prompt.substring(0, 200) + '...')
       
       // Use the existing LLM service to standardize names
       const response = await LLMService.queryLLM(
@@ -60,8 +56,6 @@ export class BusinessNameStandardizationService {
         prompt,
         'low'
       )
-      
-      console.log('🤖 LLM Response:', response)
 
       // Parse the LLM response
       const standardizations = this.parseStandardizationResponse(response, uncachedNames)
@@ -76,11 +70,14 @@ export class BusinessNameStandardizationService {
 
       results.push(...standardizations)
       
-  console.log(`✅ Standardized ${standardizations.length} business names via ${PROVIDER_DISPLAY_NAMES[LLMProviderId.OPENAI]}`)
+      console.log('[Service] BusinessNameStandardization: Success', { 
+        standardized: standardizations.length,
+        provider: PROVIDER_DISPLAY_NAMES[LLMProviderId.OPENAI]
+      })
       return results
 
-    } catch (error) {
-      console.error('❌ Error standardizing business names:', error)
+    } catch (error: any) {
+      console.error('[Service] BusinessNameStandardization: Error', { error: error?.message || 'Unknown error' })
       
       // Fallback: return original names if LLM fails
       const fallbackResults = uncachedNames.map(name => ({
@@ -98,15 +95,24 @@ export class BusinessNameStandardizationService {
    * Create a prompt for the LLM to standardize business names
    */
   private static createStandardizationPrompt(businessNames: string[]): string {
-    return `You are a business name standardization expert. Your task is to convert business names to their official Google Business names.
+    return `You are a business name standardization expert. Your task is to standardize business names to their commonly recognized forms while preserving brand identity.
 
 INSTRUCTIONS:
-1. For each business name, provide the official Google Business name
-2. Remove unnecessary descriptors like "A Luxury Collection Hotel", "Autograph Collection", city names, etc.
-3. Keep the core business name that would appear on Google Business listings
-4. For hotels, keep "Hotel" if it's part of the official name, remove it if it's just descriptive
-5. Maintain brand consistency (e.g., "The Ritz-Carlton" not "Ritz Carlton")
-6. If unsure, provide the cleanest, most professional version of the name
+1. Preserve the core brand name with sufficient context for recognition
+2. Remove only redundant descriptors: city/location names, "A Luxury Collection", "Autograph Collection", etc.
+3. Keep essential qualifiers that are part of the brand identity:
+   - Keep "Hotel", "Restaurant", "Bar", etc. if it's part of the official name
+   - Keep "The" if it's part of the brand (e.g., "The Shelbourne Hotel" not just "Shelbourne")
+   - Keep distinguishing words that differentiate locations (e.g., "Merrion Hotel" not just "Merrion")
+4. Maintain consistent formatting:
+   - "The Shelbourne Hotel" (not "The Shelbourne, Dublin" or "Shelbourne Hotel, The")
+   - "The Merrion Hotel" (not "Merrion" or "The Merrion, Dublin")
+5. If a business name is already clean and recognizable, keep it as-is
+6. Brand examples:
+   - "The Shelbourne, A Luxury Collection Hotel, Dublin" → "The Shelbourne Hotel"
+   - "The Merrion Hotel Dublin" → "The Merrion Hotel"
+   - "Wilde Restaurant at The Westbury" → "Wilde Restaurant"
+   - "Chapter One Restaurant" → "Chapter One Restaurant"
 
 BUSINESS NAMES TO STANDARDIZE:
 ${businessNames.map((name, index) => `${index + 1}. ${name}`).join('\n')}
@@ -116,13 +122,14 @@ RESPONSE FORMAT (JSON):
   "standardizations": [
     {
       "original": "The Shelbourne, A Luxury Collection Hotel, Dublin",
-      "standardized": "The Shelbourne",
-      "confidence": "high"
+      "standardized": "The Shelbourne Hotel",
+      "confidence": "high",
+      "reasoning": "Removed luxury collection descriptor and city name, kept hotel designation"
     }
   ]
 }
 
-Respond with valid JSON only. Confidence should be "high" for well-known brands, "medium" for likely matches, "low" for uncertain cases.`
+Respond with valid JSON only. Confidence should be "high" for well-known brands with clear standardization, "medium" for good matches with minor uncertainty, "low" for ambiguous cases.`
   }
 
   /**
@@ -173,7 +180,7 @@ Respond with valid JSON only. Confidence should be "high" for well-known brands,
       return results
 
     } catch (error) {
-      console.error('❌ Error parsing standardization response:', error)
+      console.error('[Service] BusinessNameStandardization: Parse error', { error })
       
       // Fallback: return original names
       return originalNames.map(name => ({

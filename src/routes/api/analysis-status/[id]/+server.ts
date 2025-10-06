@@ -3,6 +3,7 @@ import type { RequestHandler } from './$types';
 
 export const GET: RequestHandler = async ({ params, locals }) => {
   if (!locals.user || !locals.supabase) {
+    console.log('[API] analysis-status: Unauthorized access attempt')
     return json({ error: 'Unauthorized' }, { status: 401 });
   }
 
@@ -22,7 +23,13 @@ export const GET: RequestHandler = async ({ params, locals }) => {
 
     // Verify that the analysis belongs to the current user's business
     if (!data.business || data.business.user_id !== locals.user.id) {
+      console.log('[API] analysis-status: Unauthorized access to analysis', { analysisId: id })
       return json({ error: 'Access denied' }, { status: 403 });
+    }
+
+    // Only log status changes (not running) to reduce noise
+    if (data.status !== 'running') {
+      console.log('[API] analysis-status: Status change', { analysisId: id, status: data.status })
     }
 
     // Return the analysis data (without business info)
@@ -37,7 +44,8 @@ export const GET: RequestHandler = async ({ params, locals }) => {
       created_at: data.created_at
     });
 
-  } catch (error) {
+  } catch (error: any) {
+    console.error('[API] analysis-status: Error', { analysisId: params.id, error: error?.message || 'Unknown error' })
     return json({ error: 'Internal server error' }, { status: 500 });
   }
 };

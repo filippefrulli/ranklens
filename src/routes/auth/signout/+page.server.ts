@@ -4,10 +4,13 @@ import { redirect } from '@sveltejs/kit'
 export const actions: Actions = {
   default: async ({ locals }) => {
     try {
+      console.log('[Auth] Signout: Signing out user')
       if (locals.supabase) {
         await locals.supabase.auth.signOut()
       }
-    } catch (error) {
+      console.log('[Auth] Signout: Success')
+    } catch (error: any) {
+      console.error('[Auth] Signout: Error', { error: error?.message || 'Unknown error' })
       // Silent fail - always redirect even if signout fails
     }
     

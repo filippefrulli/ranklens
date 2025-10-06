@@ -6,11 +6,13 @@ export const load: PageServerLoad = async ({ locals, params }) => {
   const { supabase, session, user } = locals
 
   if (!session || !user) {
+    console.log('[Load] Query detail: Unauthorized access attempt')
     throw error(401, 'Unauthorized')
   }
 
   const queryId = params.id
   if (!queryId) {
+    console.log('[Load] Query detail: Missing query ID')
     throw error(404, 'Query not found')
   }
 
@@ -27,6 +29,7 @@ export const load: PageServerLoad = async ({ locals, params }) => {
     // Verify access - check if the query belongs to the user's business
     const business = await dbService.getBusiness()
     if (!business || queryData.business_id !== business.id) {
+      console.log('[Load] Query detail: Access denied', { queryId })
       throw error(403, 'Access denied')
     }
 
@@ -50,7 +53,8 @@ export const load: PageServerLoad = async ({ locals, params }) => {
       analysisRuns: analysisRuns || [],
       llmProviders
     }
-  } catch (err) {
+  } catch (err: any) {
+    console.error('[Load] Query detail: Error', { queryId: params.id, error: err?.message || 'Unknown error' })
     throw error(500, 'Failed to load query data')
   }
 }

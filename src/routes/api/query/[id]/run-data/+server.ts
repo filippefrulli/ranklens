@@ -5,6 +5,7 @@ export const GET: RequestHandler = async ({ locals, params, url }) => {
   const { supabase, user } = locals
 
   if (!user) {
+    console.log('[API] query/run-data: Unauthorized access attempt')
     throw error(401, 'Unauthorized')
   }
 
@@ -12,6 +13,7 @@ export const GET: RequestHandler = async ({ locals, params, url }) => {
   const runId = url.searchParams.get('runId')
 
   if (!queryId || !runId) {
+    console.log('[API] query/run-data: Missing parameters', { hasQueryId: !!queryId, hasRunId: !!runId })
     throw error(400, 'Missing required parameters')
   }
 
@@ -24,6 +26,7 @@ export const GET: RequestHandler = async ({ locals, params, url }) => {
       .single()
 
     if (!queryData || queryData.business.user_id !== user.id) {
+      console.log('[API] query/run-data: Unauthorized access to query', { queryId, hasQueryData: !!queryData })
       throw error(403, 'Access denied')
     }
 
@@ -55,11 +58,23 @@ export const GET: RequestHandler = async ({ locals, params, url }) => {
       throw new Error('Failed to fetch competitor rankings')
     }
 
+    console.log('[API] query/run-data: Success', { 
+      queryId, 
+      runId, 
+      rankingsCount: rankings?.length || 0, 
+      competitorCount: competitorRows?.length || 0 
+    })
+
     return json({
       rankingResults: rankings || [],
       competitorResults: competitorRows || []
     })
   } catch (e: any) {
+    console.error('[API] query/run-data: Error loading run data', { 
+      queryId, 
+      runId, 
+      error: e.message 
+    })
     throw error(500, 'Failed to load run data')
   }
 }

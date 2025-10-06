@@ -59,7 +59,8 @@ export const load: PageServerLoad = async ({ locals }) => {
       llmProviders,
       querySuggestions
     }
-  } catch (err) {
+  } catch (err: any) {
+    console.error('[Load] Dashboard: Error loading data', { error: err?.message || 'Unknown error' })
     return {
       user: locals.user,
       business: null,
@@ -72,6 +73,7 @@ export const actions: Actions = {
   // Create business action
   createBusiness: async ({ locals, request }) => {
     if (!locals.user || !locals.supabase) {
+      console.log('[Action] createBusiness: Unauthorized attempt')
       return fail(401, { error: 'Unauthorized' })
     }
 
@@ -81,6 +83,7 @@ export const actions: Actions = {
     const city = formData.get('city') as string
 
     if (!name || !googlePlaceId) {
+      console.log('[Action] createBusiness: Missing required fields')
       return fail(400, { error: 'Business name and Google Place ID are required' })
     }
 
@@ -93,7 +96,9 @@ export const actions: Actions = {
         city
       })
       
-    } catch (err) {
+      console.log('[Action] createBusiness: Success', { businessId: business.id })
+    } catch (err: any) {
+      console.error('[Action] createBusiness: Error', { error: err?.message || 'Unknown error' })
       return fail(500, { error: 'Failed to create business' })
     }
 
@@ -175,6 +180,7 @@ export const actions: Actions = {
   // Run weekly analysis action
   runAnalysis: async ({ locals, request }) => {
     if (!locals.user || !locals.supabase) {
+      console.log('[Action] runAnalysis: Unauthorized attempt')
       return fail(401, { error: 'Unauthorized' })
     }
 
@@ -182,20 +188,24 @@ export const actions: Actions = {
     const businessId = formData.get('businessId') as string
 
     if (!businessId) {
+      console.log('[Action] runAnalysis: Missing business ID')
       return fail(400, { error: 'Business ID is required' })
     }
 
     try {
+      console.log('[Action] runAnalysis: Starting analysis', { businessId })
       const dbService = new DatabaseService(locals.supabase, locals.user.id)
       const business = await dbService.getBusiness()
       
       if (!business || business.id !== businessId) {
+        console.log('[Action] runAnalysis: Business not found', { businessId })
         return fail(404, { error: 'Business not found or access denied' })
       }
 
       // Check if analysis can be run (weekly check)
       const weeklyCheck = await dbService.checkWeeklyAnalysis(business.id)
       if (!weeklyCheck.canRun) {
+        console.log('[Action] runAnalysis: Weekly limit reached', { businessId })
         return fail(400, { 
           error: `Analysis was already run this week. Next run available: ${weeklyCheck.nextAllowedDate ? new Date(weeklyCheck.nextAllowedDate).toLocaleDateString() : 'next week'}` 
         })
@@ -206,15 +216,18 @@ export const actions: Actions = {
       const result = await analysisService.runAnalysis(business.id)
 
       if (!result.success) {
+        console.error('[Action] runAnalysis: Analysis failed', { businessId, error: result.error })
         return fail(500, { error: result.error || 'Failed to start analysis' })
       }
 
+      console.log('[Action] runAnalysis: Success', { businessId, analysisRunId: result.analysisRunId })
       return { 
         success: true,
         analysisRunId: result.analysisRunId
       }
 
-    } catch (err) {
+    } catch (err: any) {
+      console.error('[Action] runAnalysis: Exception', { businessId, error: err?.message || 'Unknown error' })
       return fail(500, { error: 'Failed to run analysis' })
     }
   }

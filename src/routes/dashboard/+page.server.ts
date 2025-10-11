@@ -2,6 +2,7 @@ import type { PageServerLoad, Actions } from './$types'
 import { fail, redirect } from '@sveltejs/kit'
 import { DatabaseService } from '$lib/services/database-service'
 import { AnalysisService } from '$lib/services/analysis-service'
+import { QuerySuggestionService } from '$lib/services/query-suggestion-service'
 
 export const load: PageServerLoad = async ({ locals, url }) => {
   // Ensure user is authenticated
@@ -58,35 +59,55 @@ export const actions: Actions = {
   // Run analysis action
   runAnalysis: async ({ locals, request }) => {
     if (!locals.user || !locals.supabase) {
+      console.log('[Action] runAnalysis: Unauthorized attempt')
       return fail(401, { error: 'Unauthorized' })
     }
 
+    const formData = await request.formData()
+    const businessId = formData.get('businessId') as string
+
+    if (!businessId) {
+      console.log('[Action] runAnalysis: Missing business ID')
+      return fail(400, { error: 'Business ID is required' })
+    }
+
     try {
+      console.log('[Action] runAnalysis: Starting analysis', { businessId })
       const dbService = new DatabaseService(locals.supabase, locals.user.id)
       const business = await dbService.getBusiness()
-      if (!business) {
-        return fail(404, { error: 'Business not found' })
+      
+      if (!business || business.id !== businessId) {
+        console.log('[Action] runAnalysis: Business not found', { businessId })
+        return fail(404, { error: 'Business not found or access denied' })
       }
 
-      // Check if analysis can be run
+      // Check if analysis can be run (weekly check)
       const weeklyCheck = await dbService.checkWeeklyAnalysis(business.id)
       if (!weeklyCheck.canRun) {
-        return fail(400, { error: 'Weekly analysis already completed' })
+        console.log('[Action] runAnalysis: Weekly limit reached', { businessId })
+        return fail(400, { 
+          error: `Analysis was already run this week. Next run available: ${weeklyCheck.nextAllowedDate ? new Date(weeklyCheck.nextAllowedDate).toLocaleDateString() : 'next week'}` 
+        })
       }
 
       // Start the analysis
       const analysisService = new AnalysisService(locals.supabase, locals.user.id)
       const result = await analysisService.runAnalysis(business.id)
-      
+
       if (!result.success) {
-        return fail(400, { error: result.error })
+        console.error('[Action] runAnalysis: Analysis failed', { businessId, error: result.error })
+        return fail(500, { error: result.error || 'Failed to start analysis' })
       }
 
-      return { success: true, analysisRunId: result.analysisRunId }
+      console.log('[Action] runAnalysis: Success', { businessId, analysisRunId: result.analysisRunId })
+      return { 
+        success: true,
+        analysisRunId: result.analysisRunId
+      }
 
-    } catch (err) {
-      console.error('Error starting analysis:', err)
-      return fail(500, { error: 'Failed to start analysis' })
+    } catch (err: any) {
+      console.error('[Action] runAnalysis: Exception', { businessId, error: err?.message || 'Unknown error' })
+      return fail(500, { error: 'Failed to run analysis' })
     }
   },
 
@@ -96,28 +117,70 @@ export const actions: Actions = {
       return fail(401, { error: 'Unauthorized' })
     }
 
+    const formData = await request.formData()
+    const queryText = formData.get('query') as string
+
+    if (!queryText || queryText.trim().length === 0) {
+      return fail(400, { error: 'Query text is required' })
+    }
+
     try {
-      const formData = await request.formData()
-      const queryText = formData.get('query')?.toString()
-
-      if (!queryText || queryText.trim().length === 0) {
-        return fail(400, { error: 'Query text is required' })
-      }
-
       const dbService = new DatabaseService(locals.supabase, locals.user.id)
       const business = await dbService.getBusiness()
+      
       if (!business) {
         return fail(404, { error: 'Business not found' })
       }
 
-      // Add query logic here (you'll need to implement this in DatabaseService)
-      // await dbService.addQuery(business.id, queryText.trim())
+      // Check if query already exists for this business
+      const existingQueries = await dbService.getQueriesForBusiness(business.id)
+      const duplicateQuery = existingQueries.find(q => 
+        q.text.toLowerCase().trim() === queryText.toLowerCase().trim()
+      )
 
-      return { success: true }
+      if (duplicateQuery) {
+        return fail(400, { error: 'This query already exists' })
+      }
+
+      const query = await dbService.createQuery({
+        business_id: business.id,
+        text: queryText.trim()
+      })
+
+      return { 
+        success: true,
+        query
+      }
 
     } catch (err) {
-      console.error('Error adding query:', err)
+      console.error('[Action] addQuery: Error', { error: err })
       return fail(500, { error: 'Failed to add query' })
+    }
+  },
+
+  // Generate query suggestions action
+  generateQuerySuggestions: async ({ locals, request }) => {
+    if (!locals.user || !locals.supabase) {
+      return fail(401, { error: 'Unauthorized' })
+    }
+
+    try {
+      const dbService = new DatabaseService(locals.supabase, locals.user.id)
+      const business = await dbService.getBusiness()
+      
+      if (!business) {
+        return fail(404, { error: 'Business not found' })
+      }
+
+      const suggestions = await QuerySuggestionService.generateQuerySuggestions(business)
+
+      return { 
+        suggestions: suggestions.map(s => s.text) // Return just the text array
+      }
+
+    } catch (err) {
+      console.error('[Action] generateQuerySuggestions: Error', { error: err })
+      return fail(500, { error: 'Failed to generate query suggestions' })
     }
   }
 }

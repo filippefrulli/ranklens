@@ -4,7 +4,7 @@ import { redirect } from '@sveltejs/kit'
 export const load: PageServerLoad = async ({ locals }) => {
   // If user is already authenticated, redirect to dashboard
   if (locals.user) {
-    throw redirect(303, '/')
+    throw redirect(303, '/dashboard')
   }
 
   // No need to return anything - client will use client-side supabase

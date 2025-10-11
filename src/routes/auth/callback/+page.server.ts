@@ -20,7 +20,7 @@ export const load = async ({ url, locals }: RequestEvent) => {
 
       console.log('[Auth] Callback: Exchange successful')
       // Successful authentication, redirect to dashboard
-      throw redirect(303, '/')
+      throw redirect(303, '/dashboard')
     } catch (err) {
       if (err instanceof Response && err.status === 303) {
         // This is our redirect, re-throw it

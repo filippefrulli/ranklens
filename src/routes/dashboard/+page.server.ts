@@ -1,5 +1,5 @@
 import type { PageServerLoad, Actions } from './$types'
-import { error, fail, redirect } from '@sveltejs/kit'
+import { fail, redirect } from '@sveltejs/kit'
 import { DatabaseService } from '$lib/services/database-service'
 import { AnalysisService } from '$lib/services/analysis-service'
 

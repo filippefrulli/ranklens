@@ -41,9 +41,6 @@ export class AnalysisService {
         return { success: false, error: 'No queries found for this business' }
       }
 
-      // Ensure required providers are active
-      await this.dbService.ensureRequiredProvidersActive()
-
       // Get active providers
       const providers = await this.dbService.getActiveLLMProviders()
       if (providers.length === 0) {

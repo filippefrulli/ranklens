@@ -10,6 +10,7 @@
     AnalysisRun,
   } from "../../types";
   import { enhance } from "$app/forms";
+  import { invalidate } from "$app/navigation";
   import GoogleBusinessSearch from "../business/GoogleBusinessSearch.svelte";
 
   import QueryGrid from "./QueryGrid.svelte";
@@ -57,23 +58,37 @@
   // Track completed analysis IDs to prevent re-syncing them
   let completedAnalysisIds = $state<Set<string>>(new Set());
 
-  // Sync local state with prop changes, but be very careful not to overwrite live progress
+  // Sync local state with prop changes from server invalidation
   $effect(() => {
-    // Don't sync if this analysis ID has already been completed
+    // Don't sync if this analysis ID has already been marked complete locally
     if (runningAnalysisProp?.id && completedAnalysisIds.has(runningAnalysisProp.id)) {
       return;
     }
     
-    // Only sync if:
-    // 1. We have a real analysis from server (not temp)
-    // 2. It's a different analysis ID (new analysis started)
-    // 3. We don't have any current analysis or it's not completed/failed
-    // 4. Don't overwrite live progress with stale server data
-    if (runningAnalysisProp?.id && 
-        runningAnalysisProp.id !== 'temp' && 
-        runningAnalysisProp.id !== runningAnalysis?.id &&
-        (!runningAnalysis || (runningAnalysis.status !== 'completed' && runningAnalysis.status !== 'failed'))) {
-      runningAnalysis = runningAnalysisProp;
+    // Sync when we get updates from server
+    if (runningAnalysisProp?.id && runningAnalysisProp.id !== 'temp') {
+      // Check if analysis is complete
+      if (runningAnalysisProp.status === 'completed' || runningAnalysisProp.status === 'failed' ||
+          (runningAnalysisProp.completed_llm_calls > 0 && 
+           runningAnalysisProp.completed_llm_calls >= runningAnalysisProp.total_llm_calls)) {
+        
+        // Update to completed state
+        runningAnalysis = { ...runningAnalysisProp, status: 'completed' };
+        
+        // Mark as completed
+        completedAnalysisIds.add(runningAnalysisProp.id);
+        
+        // Stop polling
+        stopProgressTracking();
+        
+        // Keep progress bar visible for 3 seconds then hide
+        setTimeout(() => {
+          runningAnalysis = null;
+        }, 3000);
+      } else {
+        // Update with latest progress
+        runningAnalysis = runningAnalysisProp;
+      }
     }
   });
 
@@ -140,7 +155,7 @@
     }
   });
 
-  // Server-side polling approach - hit our API endpoint every 10 seconds
+  // Server-side polling approach - use SvelteKit's invalidate() every 10 seconds
   let pollInterval: any = null;
 
   function startProgressTracking() {
@@ -154,56 +169,15 @@
       pollInterval = null;
     }
 
-    // Poll every 10 seconds using our server API
+    // Poll every 10 seconds using SvelteKit's invalidate()
     pollInterval = setInterval(async () => {
       if (!runningAnalysis?.id || runningAnalysis.id === 'temp') return;
       
       try {
-        // Fetch from our server API with cache busting
-        const response = await fetch(`/api/analysis-status/${runningAnalysis.id}?t=${Date.now()}`, {
-          headers: {
-            'Cache-Control': 'no-cache',
-            'Pragma': 'no-cache'
-          }
-        });
-        
-        if (!response.ok) {
-          console.error('❌ Server API error:', response.status, response.statusText);
-          return;
-        }
-        
-        const data = await response.json();
-        
-        if (data.error) {
-          console.error('❌ API returned error:', data.error);
-          return;
-        }
-        
-        // Update the state
-        runningAnalysis = { ...runningAnalysis, ...data } as any;
-        
-        // Stop polling when complete
-        if (data.status === 'completed' || data.status === 'failed' || 
-            (data.completed_llm_calls > 0 && data.completed_llm_calls >= data.total_llm_calls)) {
-          
-          // Update state to completed BEFORE stopping to prevent restart
-          runningAnalysis = { ...runningAnalysis, ...data, status: 'completed' } as any;
-          
-          // Mark this analysis ID as completed to prevent future re-syncing
-          if (runningAnalysis?.id) {
-            completedAnalysisIds.add(runningAnalysis.id);
-          }
-          
-          stopProgressTracking();
-          
-          // Keep the progress bar visible for 3 seconds then hide it
-          setTimeout(() => {
-            runningAnalysis = null;
-          }, 3000);
-        }
-        
+        // Invalidate the load function to fetch fresh data
+        await invalidate('app:analysis-status');
       } catch (e) {
-        console.error('❌ Server polling exception:', e);
+        console.error('❌ Failed to invalidate analysis status:', e);
       }
     }, 10000);
   }
@@ -556,21 +530,11 @@
                         // Replace temp with real id
                         runningAnalysis = { ...runningAnalysis, id: analysisRunId } as any;
                         
-                        // Fetch the initial state from our server API
-                        try {
-                          const response = await fetch(`/api/analysis-status/${analysisRunId}?t=${Date.now()}`);
-                          if (response.ok) {
-                            const data = await response.json();
-                            if (!data.error) {
-                              runningAnalysis = { ...runningAnalysis, ...data } as any;
-                              
-                              // Explicitly start polling now that we have the real ID and initial data
-                              startProgressTracking();
-                            }
-                          }
-                        } catch (e) {
-                          console.warn('Unable to prefetch analysis_runs row:', e);
-                        }
+                        // Invalidate to fetch fresh data from server
+                        await invalidate('app:analysis-status');
+                        
+                        // Start polling now that we have the real ID
+                        startProgressTracking();
                       }
                     }
                   } catch (e) {

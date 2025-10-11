@@ -4,18 +4,18 @@ import { DatabaseService } from '$lib/services/database-service'
 import { AnalysisService } from '$lib/services/analysis-service'
 import { QuerySuggestionService } from '$lib/services/query-suggestion-service'
 
-export const load: PageServerLoad = async ({ locals, url }) => {
+export const load: PageServerLoad = async ({ locals, url, depends }) => {
   // Ensure user is authenticated
   if (!locals.user || !locals.supabase) {
     throw redirect(302, '/auth')
   }
 
+  // Track dependency for invalidation
+  depends('app:analysis-status')
+
   try {
     // Create database service with authenticated context
     const dbService = new DatabaseService(locals.supabase, locals.user.id)
-    
-    // Ensure required providers are active
-    await dbService.ensureRequiredProvidersActive()
     
     // Load all dashboard data on the server
     const business = await dbService.getBusiness()
@@ -50,7 +50,7 @@ export const load: PageServerLoad = async ({ locals, url }) => {
       user: locals.user
     }
   } catch (err) {
-    console.error('Error loading dashboard data:', err)
+    console.error('[Load] Dashboard: Error loading data', { error: err })
     return fail(500, { error: 'Failed to load dashboard data' })
   }
 }

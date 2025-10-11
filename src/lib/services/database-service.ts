@@ -200,53 +200,6 @@ export class DatabaseService {
     return data || []
   }
 
-  async ensureRequiredProvidersActive(): Promise<void> {
-    // Ensure core providers are active using canonical display names
-    // (Models are managed separately; we only seed provider identities here)
-    const requiredProviders = [
-      { name: 'OpenAI' },
-      { name: 'Google Gemini' }
-    ]
-
-    for (const provider of requiredProviders) {
-      // Check if provider exists
-      const { data: existing, error: fetchError } = await this.supabase
-        .from('llm_providers')
-        .select('*')
-        .eq('name', provider.name)
-        .maybeSingle()
-
-      if (fetchError) {
-        console.error(`Error checking provider ${provider.name}:`, fetchError)
-        continue
-      }
-
-      if (!existing) {
-        // Create the provider
-        const { error: createError } = await this.supabase
-          .from('llm_providers')
-          .insert({
-            name: provider.name,
-            is_active: true
-          })
-
-        if (createError) {
-          console.error(`Error creating provider ${provider.name}:`, createError)
-        }
-      } else if (!existing.is_active) {
-        // Activate the provider
-        const { error: updateError } = await this.supabase
-          .from('llm_providers')
-          .update({ is_active: true })
-          .eq('id', existing.id)
-
-        if (updateError) {
-          console.error(`Error activating provider ${provider.name}:`, updateError)
-        }
-      }
-    }
-  }
-
   // Analysis Run operations
   async createAnalysisRun(businessId: string, totalQueries: number): Promise<AnalysisRun> {
     console.log(`📊 Creating analysis run for business ${businessId} with ${totalQueries} queries`)

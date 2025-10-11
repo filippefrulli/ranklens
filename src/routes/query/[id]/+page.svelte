@@ -3,15 +3,15 @@
   import { goto } from "$app/navigation";
   import { onMount } from "svelte";
   import type { PageData } from "./$types";
-  import RankingResultsByLLMTable from "../../../lib/components/query/RankingResultsByLLMTable.svelte";
-  import CompetitorRankingsTable from "../../../lib/components/query/CompetitorRankingsTable.svelte";
-  import LoadingSpinner from "../../../lib/components/ui/LoadingSpinner.svelte";
   import ErrorMessage from "../../../lib/components/ui/ErrorMessage.svelte";
   import type { Query, RankingAttempt, LLMProvider } from "../../../lib/types";
   import Card from "$lib/components/ui/Card.svelte";
   import Button from "$lib/components/ui/Button.svelte";
   import { loadRun, saveRun } from "$lib/utils/queryRunCache";
-  import LLMLogo from "$lib/components/logos/LLMLogo.svelte";
+  import QueryHeader from "$lib/components/query/QueryHeader.svelte";
+  import AnalysisRunsList from "$lib/components/query/AnalysisRunsList.svelte";
+  import LLMResultsSection from "$lib/components/query/LLMResultsSection.svelte";
+  import CompetitorRankingsSection from "$lib/components/query/CompetitorRankingsSection.svelte";
 
   interface Props {
     data: PageData;
@@ -94,23 +94,16 @@
     competitorRankings = buildCompetitorDisplay(rawCompetitorResults, selectedProvider?.name || null);
     if (selectedRunId && rankingResults.length === 0) await loadRunData(selectedRunId);
   }
+  
   async function selectRun(runId: string) {
     if (runId !== selectedRunId) {
       selectedRunId = runId;
       await loadRunData(runId);
     }
   }
+  
   function goBack() {
     goto("/");
-  }
-  function formatDate(d: string) {
-    return new Date(d).toLocaleString("en-US", {
-      year: "numeric",
-      month: "short",
-      day: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
-    });
   }
 
   // Helper: build display table from raw competitor rows, optionally filtered by provider name
@@ -190,143 +183,36 @@
         class="mt-4 bg-transparent hover:bg-transparent text-[rgb(var(--color-primary))] px-4 py-2 text-sm"
       >← Back to Dashboard</Button>
     {:else if query}
-      <!-- Header -->
-      <div class="flex items-start justify-between flex-col md:flex-row gap-4">
-        <div>
-          <div class="flex items-center gap-3">
-            <Button
-              variant="subtle"
-              size="md"
-              onClick={() => goBack()}
-              class="text-slate-600 hover:text-slate-800 border border-slate-300 bg-white px-4 py-2 text-sm rounded-md"
-            >← Back</Button>
-            <h1 class="text-xl font-semibold text-slate-800">
-              Query: <span class="text-slate-900">{query.text}</span>
-            </h1>
-          </div>
-        </div>
-        <!-- Provider Pills -->
-        <div class="flex flex-wrap items-center gap-2">
-          <Button
-            variant="subtle"
-            size="sm"
-            onClick={() => onProviderChange(null)}
-            class="px-3.5 py-2 rounded-full text-sm font-medium border transition-colors flex items-center gap-2 {selectedProvider === null ? 'bg-[rgb(var(--color-primary))] text-slate-900 !border-[rgb(var(--color-primary))]' : 'border-slate-300 text-slate-600 hover:bg-slate-100'}"
-          >
-            <LLMLogo provider="all" size={20} alt="All providers" />
-            <span>All</span>
-          </Button>
-          {#each llmProviders as provider}
-            <Button
-              variant="subtle"
-              size="sm"
-              onClick={() => onProviderChange(provider)}
-              class="px-3.5 py-2 rounded-full text-sm font-medium border transition-colors flex items-center gap-2 {selectedProvider?.id === provider.id ? 'bg-[rgb(var(--color-primary))] text-slate-900 !border-[rgb(var(--color-primary))]' : 'border-slate-300 text-slate-600 hover:bg-slate-100'}"
-            >
-              <LLMLogo provider={provider.name} size={20} alt={provider.name} />
-              <span>{provider.name}</span>
-            </Button>
-          {/each}
-        </div>
-      </div>
+      <QueryHeader 
+        queryText={query.text}
+        {llmProviders}
+        {selectedProvider}
+        onBack={goBack}
+        {onProviderChange}
+      />
 
       <!-- Runs & LLM results -->
       <div class="grid gap-6 lg:grid-cols-12">
-        <!-- Runs list -->
-        <Card padding="p-6" custom="lg:col-span-5">
-          <div class="flex items-center justify-between mb-4">
-            <h3 class="text-sm font-semibold text-slate-700 tracking-wide">
-              Analysis Runs
-            </h3>
-            <span class="text-[11px] text-slate-500"
-              >{analysisRuns.length} total</span
-            >
-          </div>
-          {#if analysisRuns.length > 0}
-            <div class="space-y-2">
-              {#each analysisRuns as run (run.id)}
-                <Button
-                  type="button"
-                  variant="subtle"
-                  size="sm"
-                  onClick={() => selectRun(run.id)}
-                  class="w-full justify-start text-left p-3 rounded-lg border transition-colors {selectedRunId === run.id ? 'bg-black/5 border-black' : 'bg-white border-slate-200 hover:border-slate-300'}"
-                >
-                  {@const _=null}<span class="w-full flex items-center justify-between"><span class="text-xs font-medium text-slate-700">{formatDate(run.created_at)}</span>{#if selectedRunId === run.id}<span class="inline-flex items-center rounded-full bg-[rgb(var(--color-primary))] text-white px-2 py-0.5 text-[10px] font-medium">Active</span>{/if}</span>
-                </Button>
-              {/each}
-            </div>
-          {:else}
-            <p class="text-sm text-slate-500">
-              No runs yet. Trigger an analysis from the dashboard.
-            </p>
-          {/if}
-        </Card>
+        <AnalysisRunsList 
+          {analysisRuns}
+          {selectedRunId}
+          onSelectRun={selectRun}
+        />
 
-        <!-- LLM Results table / placeholder -->
-        <div class="lg:col-span-7">
-          {#if selectedRunId && filteredRankingResults && filteredRankingResults.length > 0}
-            <Card padding="p-6">
-              <h3 class="text-sm font-semibold text-slate-700 mb-4">
-                LLM Ranking Attempts
-              </h3>
-              <RankingResultsByLLMTable
-                rankingResults={filteredRankingResults}
-              />
-            </Card>
-          {:else if selectedRunId}
-            <Card padding="p-10" custom="flex items-center justify-center">
-              <p class="text-sm text-slate-500">
-                {selectedProvider
-                  ? "No LLM results for selected provider and run"
-                  : "No LLM results for selected run yet"}
-              </p>
-            </Card>
-          {:else}
-            <Card padding="p-10" custom="flex items-center justify-center">
-              <p class="text-sm text-slate-500">
-                Select a run to view provider attempts
-              </p>
-            </Card>
-          {/if}
-        </div>
+        <LLMResultsSection 
+          {selectedRunId}
+          {filteredRankingResults}
+          {selectedProvider}
+        />
       </div>
 
-      <!-- Competitor Rankings -->
-      <div class="-mt-2">
-        {#if loadingData}
-          <Card padding="p-8" custom="text-center">
-            <LoadingSpinner message="Loading run data..." />
-          </Card>
-        {:else if selectedRunId && competitorRankings.length > 0}
-          <Card padding="p-6">
-            <div class="flex items-center justify-between mb-4">
-              <h3 class="text-sm font-semibold text-slate-700">
-                Competitor Rankings
-              </h3>
-              <span class="text-[11px] text-slate-500"
-                >{competitorRankings.length} businesses</span
-              >
-            </div>
-            <CompetitorRankingsTable {competitorRankings} />
-          </Card>
-        {:else if selectedRunId}
-          <Card padding="p-10" custom="text-center">
-            <p class="text-sm text-slate-500">
-              {selectedProvider
-                ? "No competitor rankings for selected provider and run."
-                : "No competitor rankings for this run yet."}
-            </p>
-          </Card>
-        {:else if analysisRuns.length === 0}
-          <Card padding="p-10" custom="text-center">
-            <p class="text-sm text-slate-500">
-              No analysis runs found for this query. Run an analysis to see
-              results.
-            </p>
-          </Card>
-        {/if}
-      </div>
+      <CompetitorRankingsSection 
+        {loadingData}
+        {selectedRunId}
+        {competitorRankings}
+        {selectedProvider}
+        analysisRunsCount={analysisRuns.length}
+      />
     {:else}
       <Card padding="p-12" custom="text-center">
         <p class="text-sm text-slate-500">Loading query…</p>

@@ -60,7 +60,7 @@
   >
     <!-- Decorative gradient orbs -->
     <div
-  class="pointer-events-none absolute -top-32 -left-32 h-96 w-96 rounded-full bg-gradient-to-br from-slate-200/40 to-slate-400/30 blur-3xl"
+      class="pointer-events-none absolute -top-32 -left-32 h-96 w-96 rounded-full bg-gradient-to-br from-slate-200/40 to-slate-400/30 blur-3xl"
     ></div>
     <div
       class="pointer-events-none absolute top-1/3 -right-40 h-[32rem] w-[32rem] rounded-full bg-gradient-to-br from-indigo-200/40 to-purple-200/40 blur-3xl"

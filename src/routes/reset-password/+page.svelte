@@ -1,11 +1,20 @@
 <script lang="ts">
   import { onMount } from "svelte";
   import { goto, replaceState } from "$app/navigation";
+  import { enhance } from "$app/forms";
   import { createBrowserClient } from "@supabase/ssr";
   import {
     PUBLIC_SUPABASE_URL,
     PUBLIC_SUPABASE_ANON_KEY,
   } from "$env/static/public";
+  import type { ActionData, PageData } from "./$types";
+
+  interface Props {
+    data: PageData;
+    form: ActionData;
+  }
+
+  let { data, form }: Props = $props();
 
   let newPassword = $state("");
   let confirmPassword = $state("");
@@ -14,6 +23,17 @@
   let success = $state(false);
   let hasRecoverySession = $state(false);
   let sessionLoading = $state(true);
+
+  // Update state when form action returns
+  $effect(() => {
+    if (form?.error) {
+      error = form.error;
+      success = false;
+    } else if (form?.success) {
+      success = true;
+      error = null;
+    }
+  });
 
 
 
@@ -112,30 +132,6 @@
     };
   });
 
-  function mapSupabaseErrorMessage(e: any): string {
-    const msg = (e?.message || "").toString().toLowerCase();
-    if (msg.includes("same") && msg.includes("password")) {
-      return "Your new password must be different from the current password.";
-    }
-    if (
-      msg.includes("password") &&
-      (msg.includes("short") || msg.includes("at least"))
-    ) {
-      return "Password is too short. Please use at least 10 characters.";
-    }
-    if (
-      msg.includes("expired") ||
-      msg.includes("invalid") ||
-      msg.includes("session")
-    ) {
-      return "This reset link is invalid or expired. Please request a new password reset email.";
-    }
-    if (msg.includes("rate") && msg.includes("limit")) {
-      return "Too many attempts. Please wait a moment and try again.";
-    }
-    return e?.message || "Failed to update password. Please try again.";
-  }
-
   function withTimeout<T>(p: Promise<T>, ms = 15000): Promise<T> {
     return new Promise((resolve, reject) => {
       const t = setTimeout(
@@ -155,45 +151,19 @@
     });
   }
 
-  async function updatePassword() {
+  function validatePassword() {
     error = null;
-    success = false;
-
     const trimmed = newPassword?.trim() ?? "";
     
     if (!trimmed || trimmed.length < 10) {
       error = "Password must be at least 10 characters.";
-      return;
+      return false;
     }
     if (trimmed !== (confirmPassword?.trim() ?? "")) {
       error = "Passwords do not match.";
-      return;
+      return false;
     }
-
-    loading = true;
-    
-    try {
-      const response = await fetch('/api/update-password', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ password: trimmed })
-      });
-
-      const result = await response.json();
-
-      if (!response.ok) {
-        throw new Error(result.error || 'Password update failed');
-      }
-
-      success = true;
-      
-    } catch (e: any) {
-      error = mapSupabaseErrorMessage(e);
-    } finally {
-      loading = false;
-    }
+    return true;
   }
 </script>
 
@@ -224,9 +194,22 @@
 
       {#if !sessionLoading}
       <form
-        onsubmit={(e) => {
-          e.preventDefault();
-          updatePassword();
+        method="POST"
+        action="?/updatePassword"
+        use:enhance={() => {
+          if (!validatePassword()) {
+            return async ({ update }) => {
+              await update({ reset: false });
+            };
+          }
+          
+          loading = true;
+          error = null;
+          
+          return async ({ result, update }) => {
+            loading = false;
+            await update();
+          };
         }}
         class="space-y-4"
       >
@@ -239,6 +222,12 @@
           readonly
           tabindex="-1"
           aria-hidden="true"
+        />
+        <!-- Hidden password field for form action -->
+        <input
+          type="hidden"
+          name="password"
+          value={newPassword?.trim() ?? ""}
         />
         <div>
           <label
@@ -316,7 +305,7 @@
               <span class="font-medium">Password updated successfully!</span>
             </div>
             <a 
-              href="/" 
+              href="/dashboard" 
               class="inline-block w-full bg-emerald-600 text-white py-2.5 px-4 rounded-lg font-medium hover:bg-emerald-700 cursor-pointer transition-colors"
             >
               Continue to Dashboard

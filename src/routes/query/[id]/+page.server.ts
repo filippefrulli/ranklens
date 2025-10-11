@@ -2,7 +2,7 @@ import { error } from '@sveltejs/kit'
 import type { PageServerLoad } from './$types'
 import { DatabaseService } from '../../../lib/services/database-service'
 
-export const load: PageServerLoad = async ({ locals, params }) => {
+export const load: PageServerLoad = async ({ locals, params, url, depends }) => {
   const { supabase, session, user } = locals
 
   if (!session || !user) {
@@ -15,6 +15,9 @@ export const load: PageServerLoad = async ({ locals, params }) => {
     console.log('[Load] Query detail: Missing query ID')
     throw error(404, 'Query not found')
   }
+
+  // Track dependency for run data invalidation
+  depends('app:query-run-data')
 
   try {
     // Create database service with authenticated context
@@ -47,11 +50,63 @@ export const load: PageServerLoad = async ({ locals, params }) => {
     // Get LLM providers
     const llmProviders = await dbService.getActiveLLMProviders()
 
+    // Get selected run from URL (or default to most recent)
+    const selectedRunId = url.searchParams.get('run') || analysisRuns?.[0]?.id || null
+    
+    let rankingResults: any[] = []
+    let competitorResults: any[] = []
+
+    // Load run data if a run is selected
+    if (selectedRunId && queryId) {
+      try {
+        // Fetch ranking attempts
+        const { data: rankings, error: rankingsError } = await supabase
+          .from('ranking_attempts')
+          .select(`
+            *,
+            analysis_runs!inner(id, created_at),
+            llm_providers!inner(id, name)
+          `)
+          .eq('query_id', queryId)
+          .eq('analysis_run_id', selectedRunId)
+          .order('created_at', { ascending: false })
+
+        if (rankingsError) {
+          console.error('[Load] Query detail: Failed to fetch rankings', { error: rankingsError.message })
+        } else {
+          rankingResults = rankings || []
+        }
+
+        // Fetch competitor results
+        const { data: competitorRows, error: competitorError } = await supabase
+          .from('competitor_results')
+          .select('*')
+          .eq('query_id', queryId)
+          .eq('analysis_run_id', selectedRunId)
+          .order('average_rank', { ascending: true })
+
+        if (competitorError) {
+          console.error('[Load] Query detail: Failed to fetch competitors', { error: competitorError.message })
+        } else {
+          competitorResults = competitorRows || []
+        }
+      } catch (err: any) {
+        console.error('[Load] Query detail: Error loading run data', { 
+          queryId, 
+          selectedRunId, 
+          error: err?.message 
+        })
+      }
+    }
+
     return {
       query: queryData,
       business,
       analysisRuns: analysisRuns || [],
-      llmProviders
+      llmProviders,
+      selectedRunId,
+      rankingResults,
+      competitorResults
     }
   } catch (err: any) {
     console.error('[Load] Query detail: Error', { queryId: params.id, error: err?.message || 'Unknown error' })

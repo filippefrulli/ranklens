@@ -1,13 +1,11 @@
 <script lang="ts">
   import { page } from "$app/stores";
   import { goto } from "$app/navigation";
-  import { onMount } from "svelte";
   import type { PageData } from "./$types";
   import ErrorMessage from "../../../lib/components/ui/ErrorMessage.svelte";
   import type { Query, RankingAttempt, LLMProvider } from "../../../lib/types";
   import Card from "$lib/components/ui/Card.svelte";
   import Button from "$lib/components/ui/Button.svelte";
-  import { loadRun, saveRun } from "$lib/utils/queryRunCache";
   import QueryHeader from "$lib/components/query/QueryHeader.svelte";
   import AnalysisRunsList from "$lib/components/query/AnalysisRunsList.svelte";
   import LLMResultsSection from "$lib/components/query/LLMResultsSection.svelte";
@@ -19,16 +17,13 @@
   let { data }: Props = $props();
 
   const user = $derived(data.user);
-  const supabase = $derived(data.supabase);
   let query = $state<Query | null>(data.query);
   let analysisRuns = $state<{ id: string; created_at: string }[]>(
     data.analysisRuns
   );
-  let selectedRunId = $state<string | null>(null);
-  let rankingResults = $state<RankingAttempt[]>([]);
-  // Raw rows from competitor_results for the selected run
-  let rawCompetitorResults = $state<any[]>([]);
-  // Derived table data for display
+  let selectedRunId = $state<string | null>(data.selectedRunId);
+  let rankingResults = $state<RankingAttempt[]>(data.rankingResults || []);
+  let rawCompetitorResults = $state<any[]>(data.competitorResults || []);
   let competitorRankings = $state<any[]>([]);
   let llmProviders = $state<LLMProvider[]>(data.llmProviders);
   let selectedProvider = $state<LLMProvider | null>(null);
@@ -36,74 +31,43 @@
   let error = $state<string | null>(null);
   let queryId = $derived($page.params.id || "");
 
+  // Sync state when data changes from server
+  $effect(() => {
+    query = data.query;
+    analysisRuns = data.analysisRuns;
+    selectedRunId = data.selectedRunId;
+    rankingResults = data.rankingResults || [];
+    rawCompetitorResults = data.competitorResults || [];
+    llmProviders = data.llmProviders;
+  });
+
+  // Rebuild display when raw data or provider filter changes
+  $effect(() => {
+    competitorRankings = buildCompetitorDisplay(rawCompetitorResults, selectedProvider?.name || null);
+  });
+
   let filteredRankingResults = $derived.by(() => {
     if (!selectedProvider) return rankingResults;
     const providerId = selectedProvider?.id;
     return rankingResults.filter((r) => r.llm_provider_id === providerId);
   });
 
-
-  onMount(() => {
-    if (analysisRuns.length > 0) {
-      selectedRunId = analysisRuns[0].id;
-      loadRunData(analysisRuns[0].id);
-    }
-  });
-
-  async function loadRunData(runId: string) {
-    if (!queryId || !runId) return;
-    try {
-      loadingData = true;
-      // Try cache first
-      const cached = loadRun(queryId, runId);
-      if (cached && (cached as any).v === 2 && (cached as any).rawCompetitorResults) {
-        // Cache hit with current version
-        rankingResults = cached.rankingResults;
-        rawCompetitorResults = (cached as any).rawCompetitorResults;
-      } else {
-        // Fetch from server API endpoint
-        const response = await fetch(
-          `/api/query/${encodeURIComponent(queryId)}/run-data?runId=${encodeURIComponent(runId)}&_=${Date.now()}`,
-          { credentials: 'include' }
-        );
-        
-        if (!response.ok) {
-          throw new Error('Failed to load run data');
-        }
-        
-        const data = await response.json();
-        rankingResults = data.rankingResults;
-        rawCompetitorResults = data.competitorResults;
-        
-        // Save to cache
-        saveRun(queryId, runId, rankingResults, rawCompetitorResults);
-      }
-
-      // Build display data based on selection from RAW rows
-      competitorRankings = buildCompetitorDisplay(rawCompetitorResults, selectedProvider?.name || null);
-    } catch (e: any) {
-      error = 'Failed to load run data';
-    } finally {
-      loadingData = false;
-    }
-  }
-
-  async function onProviderChange(provider: LLMProvider | null) {
+  function onProviderChange(provider: LLMProvider | null) {
     selectedProvider = provider;
-    // Recompute display table from cached raw rows
-    competitorRankings = buildCompetitorDisplay(rawCompetitorResults, selectedProvider?.name || null);
-    if (selectedRunId && rankingResults.length === 0) await loadRunData(selectedRunId);
+    // The $effect will automatically rebuild competitorRankings
   }
   
   async function selectRun(runId: string) {
     if (runId !== selectedRunId) {
-      selectedRunId = runId;
-      await loadRunData(runId);
+      // Update URL with selected run - this triggers load function re-run
+      const url = new URL(window.location.href);
+      url.searchParams.set('run', runId);
+      await goto(url.pathname + url.search, { keepFocus: true });
     }
   }
   
   function goBack() {
-    goto("/");
+    goto("/dashboard");
   }
 
   // Helper: build display table from raw competitor rows, optionally filtered by provider name

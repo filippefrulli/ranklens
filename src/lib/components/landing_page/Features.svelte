@@ -1,8 +1,16 @@
 <script lang="ts">
   import { PROVIDER_DISPLAY_NAMES, LLMProviderId } from "$lib/constants/llm";
   import FeatureCard from './FeatureCard.svelte';
+  import type { IconName } from '$lib/components/icons/Icon.svelte';
 
-  const features = [
+  const features: Array<{
+    iconName: IconName;
+    iconBgClass: string;
+    iconTextClass: string;
+    title: string;
+    description: string;
+    ariaLabel: string;
+  }> = [
     {
       iconName: 'globe-alt',
       iconBgClass: 'bg-black/5',

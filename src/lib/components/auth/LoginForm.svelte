@@ -28,7 +28,7 @@
       const { error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
         options: {
-          redirectTo: `${window.location.origin}/`
+          redirectTo: `${window.location.origin}/auth/callback`
         }
       })
       
@@ -66,7 +66,7 @@
           password,
           options: {
             // Redirect where the user lands after clicking the confirmation link
-            emailRedirectTo: `${window.location.origin}/`
+            emailRedirectTo: `${window.location.origin}/auth/callback`
           }
         })
       }
@@ -78,8 +78,8 @@
         error = null
         success = 'Check your email for a confirmation link to activate your account.'
       } else {
-        // Successful sign in, redirect to home (SSR will handle user state)
-        goto('/')
+        // Successful sign in, redirect to dashboard
+        goto('/dashboard')
       }
     } catch (err: any) {
       error = err?.message || 'An unexpected error occurred'

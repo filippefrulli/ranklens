@@ -2,11 +2,6 @@
   import { onMount } from "svelte";
   import { goto, replaceState } from "$app/navigation";
   import { enhance } from "$app/forms";
-  import { createBrowserClient } from "@supabase/ssr";
-  import {
-    PUBLIC_SUPABASE_URL,
-    PUBLIC_SUPABASE_ANON_KEY,
-  } from "$env/static/public";
   import type { ActionData, PageData } from "./$types";
 
   interface Props {
@@ -15,6 +10,9 @@
   }
 
   let { data, form }: Props = $props();
+
+  // Use supabase client from layout
+  const supabase = data.supabase;
 
   let newPassword = $state("");
   let confirmPassword = $state("");
@@ -34,13 +32,6 @@
       error = null;
     }
   });
-
-
-
-  const supabase = createBrowserClient(
-    PUBLIC_SUPABASE_URL,
-    PUBLIC_SUPABASE_ANON_KEY
-  );
 
   // Live validation helpers
   const newTrim = $derived(newPassword?.trim?.() ?? "");

@@ -2,11 +2,6 @@
   import type { PageData } from "./$types";
   import LoginForm from "$lib/components/auth/LoginForm.svelte";
   import Card from "$lib/components/ui/Card.svelte";
-  import { createBrowserClient } from "@supabase/ssr";
-  import {
-    PUBLIC_SUPABASE_URL,
-    PUBLIC_SUPABASE_ANON_KEY,
-  } from "$env/static/public";
   import { goto } from "$app/navigation";
   import { onMount } from "svelte";
   import { PROVIDER_DISPLAY_NAMES, LLMProviderId } from "$lib/constants/llm";
@@ -17,11 +12,8 @@
 
   let { data }: Props = $props();
 
-  // Create browser client for client-side operations
-  const supabase = createBrowserClient(
-    PUBLIC_SUPABASE_URL,
-    PUBLIC_SUPABASE_ANON_KEY
-  );
+  // Use supabase client from layout
+  const supabase = data.supabase;
 
   // Redirect if already authenticated
   onMount(async () => {
@@ -29,7 +21,7 @@
       data: { user },
     } = await supabase.auth.getUser();
     if (user) {
-      goto("/");
+      goto("/dashboard");
     }
   });
 </script>

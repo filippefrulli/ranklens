@@ -57,16 +57,49 @@
   
   // Track completed analysis IDs to prevent re-syncing them
   let completedAnalysisIds = $state<Set<string>>(new Set());
+  
+  // Track if we just started an analysis (to prevent premature clearing)
+  let justStartedAnalysis = $state(false);
 
   // Sync local state with prop changes from server invalidation
   $effect(() => {
+    // If server says no running analysis, clear local state
+    if (!runningAnalysisProp) {
+      // Don't clear if we just started an analysis (give it time to appear in DB)
+      if (justStartedAnalysis) {
+        return;
+      }
+      
+      // Only clear if we had a real analysis (not temp)
+      if (runningAnalysis && runningAnalysis.id !== 'temp') {
+        // Stop polling immediately
+        stopProgressTracking();
+        
+        // Mark as completed if it was running
+        if (runningAnalysis.id) {
+          completedAnalysisIds.add(runningAnalysis.id);
+        }
+        
+        // Keep progress bar visible for 3 seconds then hide
+        setTimeout(() => {
+          runningAnalysis = null;
+        }, 3000);
+      }
+      return;
+    }
+    
+    // Clear the flag once we have data from server
+    if (justStartedAnalysis) {
+      justStartedAnalysis = false;
+    }
+    
     // Don't sync if this analysis ID has already been marked complete locally
-    if (runningAnalysisProp?.id && completedAnalysisIds.has(runningAnalysisProp.id)) {
+    if (runningAnalysisProp.id && completedAnalysisIds.has(runningAnalysisProp.id)) {
       return;
     }
     
     // Sync when we get updates from server
-    if (runningAnalysisProp?.id && runningAnalysisProp.id !== 'temp') {
+    if (runningAnalysisProp.id && runningAnalysisProp.id !== 'temp') {
       // Check if analysis is complete
       if (runningAnalysisProp.status === 'completed' || runningAnalysisProp.status === 'failed' ||
           (runningAnalysisProp.completed_llm_calls > 0 && 
@@ -452,7 +485,7 @@
           <!-- Queries Section -->
           <!-- Tracked Queries card moved to its own full-width row -->
           <!-- Analysis Controls: compact button when idle, expanded card when running -->
-          {#if runningAnalysis && (runningAnalysis.status === 'running' || runningAnalysis.status === 'pending')}
+          {#if runningAnalysis && (runningAnalysis.status === 'running' || runningAnalysis.status === 'pending' || runningAnalysis.status === 'completed')}
             <div class="mt-2 flex flex-wrap items-center gap-3">
               <AnalysisProgressBar 
                 estimation={estimation}
@@ -475,6 +508,13 @@
                   // Submit via fetch to avoid full page reload; optimistic UI start
                   if (loading) return;
                   loading = true;
+                  justStartedAnalysis = true; // Set flag to prevent premature clearing
+                  
+                  // Safety timeout: clear flag after 30 seconds even if no response
+                  const safetyTimeout = setTimeout(() => {
+                    justStartedAnalysis = false;
+                  }, 30000);
+                  
                   try {
                     // Immediately show a local placeholder so the UI switches to a 0% bar
                     const providerCount = Math.max(1, llmProviders?.length || 0);
@@ -499,6 +539,8 @@
                       console.error('❌ Failed to start analysis:', res.status, res.statusText);
                       // Revert the optimistic placeholder on failure
                       runningAnalysis = null;
+                      justStartedAnalysis = false;
+                      clearTimeout(safetyTimeout);
                     } else {
                       // Try to parse the returned id
                       let analysisRunId: string | null = null;
@@ -539,6 +581,8 @@
                     }
                   } catch (e) {
                     console.error('Error starting analysis', e);
+                    justStartedAnalysis = false; // Clear flag on error
+                    clearTimeout(safetyTimeout);
                   } finally {
                     loading = false;
                   }

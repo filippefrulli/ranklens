@@ -2,26 +2,29 @@
   import type { PageData, ActionData } from "./$types";
   import type { User } from "@supabase/supabase-js";
   import type {
-    Business,
-    Query,
-    QueryRankingHistory,
-    WeeklyAnalysisCheck,
+    Company,
+    Product,
+    Measurement,
+    MeasurementRankingHistory,
     AnalysisRun,
     LLMProvider,
   } from "$lib/types";
   import Dashboard from "$lib/components/dashboard/Dashboard.svelte";
 
-  interface DashboardData {
+  interface DashboardPageData {
     user: User;
-    business: Business;
-    queries: Query[];
-    queryHistories: Record<string, QueryRankingHistory[]>;
-    weeklyCheck: WeeklyAnalysisCheck;
-    runningAnalysis: AnalysisRun | null;
+    company?: Company;
+    products?: Product[];
+    activeProduct?: Product | null;
+    measurements?: Measurement[];
+    measurementHistories?: Record<string, MeasurementRankingHistory[]>;
+    runningAnalysis?: AnalysisRun | null;
+    llmProviders?: LLMProvider[];
+    needsOnboarding?: boolean;
   }
 
   interface Props {
-    data: PageData & DashboardData;
+    data: PageData & DashboardPageData;
     form: ActionData;
   }
 
@@ -31,12 +34,13 @@
 <Dashboard
   {form}
   user={data.user}
-  business={data.business}
-  queries={data.queries ?? []}
-  queryHistories={data.queryHistories ?? {}}
-  weeklyCheck={data.weeklyCheck}
+  company={data.company ?? null}
+  activeProduct={data.activeProduct ?? null}
+  products={data.products ?? []}
+  measurements={data.measurements ?? []}
+  measurementHistories={data.measurementHistories ?? {}}
   runningAnalysis={data.runningAnalysis ?? null}
-  llmProviders={[]}
-  needsOnboarding={false}
+  llmProviders={data.llmProviders ?? []}
+  needsOnboarding={data.needsOnboarding ?? false}
   error={null}
 />

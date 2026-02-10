@@ -4,182 +4,246 @@ import { DatabaseService } from '$lib/services/database-service'
 import { AnalysisService } from '$lib/services/analysis-service'
 import { QuerySuggestionService } from '$lib/services/query-suggestion-service'
 
-export const load: PageServerLoad = async ({ locals, url, depends }) => {
-  // Ensure user is authenticated
+export const load: PageServerLoad = async ({ locals, depends }) => {
   if (!locals.user || !locals.supabase) {
     throw redirect(302, '/auth')
   }
 
-  // Track dependency for invalidation
   depends('app:analysis-status')
 
   try {
-    // Create database service with authenticated context
     const dbService = new DatabaseService(locals.supabase, locals.user.id)
-    
-    // Load all dashboard data on the server
-    const business = await dbService.getBusiness()
-    if (!business) {
-      throw redirect(302, '/onboarding')
+
+    // Get company (one per user)
+    const company = await dbService.getCompany()
+    if (!company) {
+      // No company yet → onboarding
+      return { needsOnboarding: true, user: locals.user }
     }
 
-    const queries = await dbService.getQueriesForBusiness(business.id)
-    const weeklyCheck = await dbService.checkWeeklyAnalysis(business.id)
-    
-    // Load query histories for each query
-    const queryHistories: Record<string, any[]> = {}
-    for (const query of queries) {
+    // Get products for this company
+    const products = await dbService.getProductsForCompany(company.id)
+
+    // For MVP: use the first active product (or null if none)
+    const activeProduct = products.length > 0 ? products[0] : null
+
+    // Get measurements for the active product
+    const measurements = activeProduct
+      ? await dbService.getMeasurementsForProduct(activeProduct.id)
+      : []
+
+    // Load ranking histories for each measurement
+    const measurementHistories: Record<string, any[]> = {}
+    for (const m of measurements) {
       try {
-        queryHistories[query.id] = await dbService.getQueryRankingHistory(query.id, 10)
-      } catch (error) {
-        console.error(`Failed to load history for query ${query.id}:`, error)
-        queryHistories[query.id] = []
+        measurementHistories[m.id] = await dbService.getMeasurementRankingHistory(m.id, 10)
+      } catch {
+        measurementHistories[m.id] = []
       }
     }
-    
-    // Create analysis service to get status
-    const analysisService = new AnalysisService(locals.supabase, locals.user.id)
-    const runningAnalysis = await analysisService.getAnalysisStatus(business.id)
+
+    // Get running analysis for the active product
+    let runningAnalysis = null
+    if (activeProduct) {
+      const analysisService = new AnalysisService(locals.supabase, locals.user.id)
+      runningAnalysis = await analysisService.getAnalysisStatus(activeProduct.id)
+    }
+
+    // Get LLM providers
+    let llmProviders: any[] = []
+    try {
+      llmProviders = await dbService.getActiveLLMProviders()
+    } catch {}
 
     return {
-      business,
-      queries,
-      queryHistories,
-      weeklyCheck,
+      company,
+      products,
+      activeProduct,
+      measurements,
+      measurementHistories,
       runningAnalysis,
+      llmProviders,
       user: locals.user
     }
-  } catch (err) {
-    console.error('[Load] Dashboard: Error loading data', { error: err })
+  } catch (err: any) {
+    // Don't catch redirect
+    if (err?.status === 302 || err?.location) throw err
+    console.error('[Load] Dashboard: Error', { error: err?.message || err })
     return fail(500, { error: 'Failed to load dashboard data' })
   }
 }
 
 export const actions: Actions = {
-  // Run analysis action
+  // Run analysis for the active product
   runAnalysis: async ({ locals, request }) => {
     if (!locals.user || !locals.supabase) {
-      console.log('[Action] runAnalysis: Unauthorized attempt')
       return fail(401, { error: 'Unauthorized' })
     }
 
     const formData = await request.formData()
-    const businessId = formData.get('businessId') as string
+    const productId = formData.get('productId') as string
 
-    if (!businessId) {
-      console.log('[Action] runAnalysis: Missing business ID')
-      return fail(400, { error: 'Business ID is required' })
+    if (!productId) {
+      return fail(400, { error: 'Product ID is required' })
     }
 
     try {
-      console.log('[Action] runAnalysis: Starting analysis', { businessId })
+      console.log('[Action] runAnalysis: Starting', { productId })
       const dbService = new DatabaseService(locals.supabase, locals.user.id)
-      const business = await dbService.getBusiness()
-      
-      if (!business || business.id !== businessId) {
-        console.log('[Action] runAnalysis: Business not found', { businessId })
-        return fail(404, { error: 'Business not found or access denied' })
+
+      // Validate product ownership
+      const isOwner = await dbService.validateProductOwnership(productId)
+      if (!isOwner) {
+        return fail(404, { error: 'Product not found or access denied' })
       }
 
-      // Check if analysis can be run (weekly check)
-      const weeklyCheck = await dbService.checkWeeklyAnalysis(business.id)
-      if (!weeklyCheck.canRun) {
-        console.log('[Action] runAnalysis: Weekly limit reached', { businessId })
-        return fail(400, { 
-          error: `Analysis was already run this week. Next run available: ${weeklyCheck.nextAllowedDate ? new Date(weeklyCheck.nextAllowedDate).toLocaleDateString() : 'next week'}` 
-        })
-      }
-
-      // Start the analysis
       const analysisService = new AnalysisService(locals.supabase, locals.user.id)
-      const result = await analysisService.runAnalysis(business.id)
+      const result = await analysisService.runAnalysis(productId)
 
       if (!result.success) {
-        console.error('[Action] runAnalysis: Analysis failed', { businessId, error: result.error })
+        console.error('[Action] runAnalysis: Failed', { productId, error: result.error })
         return fail(500, { error: result.error || 'Failed to start analysis' })
       }
 
-      console.log('[Action] runAnalysis: Success', { businessId, analysisRunId: result.analysisRunId })
-      return { 
-        success: true,
-        analysisRunId: result.analysisRunId
-      }
-
+      console.log('[Action] runAnalysis: Success', { productId, analysisRunId: result.analysisRunId })
+      return { success: true, analysisRunId: result.analysisRunId }
     } catch (err: any) {
-      console.error('[Action] runAnalysis: Exception', { businessId, error: err?.message || 'Unknown error' })
+      console.error('[Action] runAnalysis: Exception', { productId, error: err?.message })
       return fail(500, { error: 'Failed to run analysis' })
     }
   },
 
-  // Add query action
-  addQuery: async ({ locals, request }) => {
+  // Add measurement to the active product
+  addMeasurement: async ({ locals, request }) => {
     if (!locals.user || !locals.supabase) {
       return fail(401, { error: 'Unauthorized' })
     }
 
     const formData = await request.formData()
     const queryText = formData.get('query') as string
+    const productId = formData.get('productId') as string
 
     if (!queryText || queryText.trim().length === 0) {
       return fail(400, { error: 'Query text is required' })
     }
+    if (!productId) {
+      return fail(400, { error: 'Product ID is required' })
+    }
 
     try {
       const dbService = new DatabaseService(locals.supabase, locals.user.id)
-      const business = await dbService.getBusiness()
-      
-      if (!business) {
-        return fail(404, { error: 'Business not found' })
+
+      // Validate product ownership
+      const isOwner = await dbService.validateProductOwnership(productId)
+      if (!isOwner) {
+        return fail(404, { error: 'Product not found or access denied' })
       }
 
-      // Check if query already exists for this business
-      const existingQueries = await dbService.getQueriesForBusiness(business.id)
-      const duplicateQuery = existingQueries.find(q => 
-        q.text.toLowerCase().trim() === queryText.toLowerCase().trim()
+      // Check for duplicates
+      const existingMeasurements = await dbService.getMeasurementsForProduct(productId)
+      const duplicate = existingMeasurements.find(m =>
+        m.query.toLowerCase().trim() === queryText.toLowerCase().trim()
       )
-
-      if (duplicateQuery) {
-        return fail(400, { error: 'This query already exists' })
+      if (duplicate) {
+        return fail(400, { error: 'This measurement query already exists' })
       }
 
-      const query = await dbService.createQuery({
-        business_id: business.id,
-        text: queryText.trim()
+      const measurement = await dbService.createMeasurement({
+        product_id: productId,
+        title: queryText.trim().slice(0, 100), // Auto-generate title from query
+        query: queryText.trim()
       })
 
-      return { 
-        success: true,
-        query
-      }
-
-    } catch (err) {
-      console.error('[Action] addQuery: Error', { error: err })
-      return fail(500, { error: 'Failed to add query' })
+      return { success: true, measurement }
+    } catch (err: any) {
+      console.error('[Action] addMeasurement: Error', { error: err?.message })
+      return fail(500, { error: 'Failed to add measurement' })
     }
   },
 
-  // Generate query suggestions action
-  generateQuerySuggestions: async ({ locals, request }) => {
+  // Create a new product for the company
+  createProduct: async ({ locals, request }) => {
+    if (!locals.user || !locals.supabase) {
+      return fail(401, { error: 'Unauthorized' })
+    }
+
+    const formData = await request.formData()
+    const name = formData.get('name') as string
+    const description = (formData.get('description') as string) || undefined
+
+    if (!name || name.trim().length === 0) {
+      return fail(400, { error: 'Product name is required' })
+    }
+
+    try {
+      const dbService = new DatabaseService(locals.supabase, locals.user.id)
+      const company = await dbService.getCompany()
+      if (!company) {
+        return fail(404, { error: 'Company not found' })
+      }
+
+      const product = await dbService.createProduct({
+        company_id: company.id,
+        name: name.trim(),
+        description: description?.trim()
+      })
+
+      return { success: true, product }
+    } catch (err: any) {
+      console.error('[Action] createProduct: Error', { error: err?.message })
+      return fail(500, { error: 'Failed to create product' })
+    }
+  },
+
+  // Create company (onboarding)
+  createCompany: async ({ locals, request }) => {
+    if (!locals.user || !locals.supabase) {
+      return fail(401, { error: 'Unauthorized' })
+    }
+
+    const formData = await request.formData()
+    const name = formData.get('name') as string
+    const googlePlaceId = formData.get('google_place_id') as string | null
+    const googlePrimaryTypeDisplay = formData.get('google_primary_type_display') as string | null
+
+    if (!name || name.trim().length === 0) {
+      return fail(400, { error: 'Company name is required' })
+    }
+
+    try {
+      const dbService = new DatabaseService(locals.supabase, locals.user.id)
+
+      const company = await dbService.createCompany({
+        name: name.trim(),
+        google_place_id: googlePlaceId || undefined,
+        google_primary_type_display: googlePrimaryTypeDisplay || undefined
+      })
+
+      return { success: true, company }
+    } catch (err: any) {
+      console.error('[Action] createCompany: Error', { error: err?.message })
+      return fail(500, { error: 'Failed to create company' })
+    }
+  },
+
+  // Generate query suggestions
+  generateQuerySuggestions: async ({ locals }) => {
     if (!locals.user || !locals.supabase) {
       return fail(401, { error: 'Unauthorized' })
     }
 
     try {
       const dbService = new DatabaseService(locals.supabase, locals.user.id)
-      const business = await dbService.getBusiness()
-      
-      if (!business) {
-        return fail(404, { error: 'Business not found' })
+      const company = await dbService.getCompany()
+      if (!company) {
+        return fail(404, { error: 'Company not found' })
       }
 
-      const suggestions = await QuerySuggestionService.generateQuerySuggestions(business)
+      const suggestions = await QuerySuggestionService.generateQuerySuggestions(company)
 
-      return { 
-        suggestions: suggestions.map(s => s.text) // Return just the text array
-      }
-
-    } catch (err) {
-      console.error('[Action] generateQuerySuggestions: Error', { error: err })
+      return { suggestions: suggestions.map(s => s.text) }
+    } catch (err: any) {
+      console.error('[Action] generateQuerySuggestions: Error', { error: err?.message })
       return fail(500, { error: 'Failed to generate query suggestions' })
     }
   }

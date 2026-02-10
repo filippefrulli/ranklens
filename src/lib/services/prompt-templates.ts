@@ -3,70 +3,67 @@
 
 export interface RankingPromptParams {
   query: string
-  userBusinessName: string
+  userProductName: string
   count: number
 }
 
-export function buildRankingPrompt({ query, userBusinessName, count }: RankingPromptParams): string {
-  return `You are a helpful assistant that provides ranked lists of businesses. You must always provide a complete ranked list without asking clarifying questions.
+export function buildRankingPrompt({ query, userProductName, count }: RankingPromptParams): string {
+  return `You are a helpful assistant that provides ranked lists of products, services, or businesses. You must always provide a complete ranked list without asking clarifying questions.
 
 Query: "${query}"
 
-IMPORTANT: Do not ask clarifying questions. Make reasonable assumptions and provide exactly ${count} businesses that best match this query. If the query mentions a location, include businesses in and around that area using your best judgment.
+IMPORTANT: Do not ask clarifying questions. Make reasonable assumptions and provide exactly ${count} results that best match this query. If the query mentions a location, include results in and around that area using your best judgment.
 
-Format your response as a simple numbered list with just the business names, like:
+Format your response as a simple numbered list with just the names, like:
 
-1. Business Name One
-2. Business Name Two
-3. Business Name Three
+1. Name One
+2. Name Two
+3. Name Three
 ...
 
 Required guidelines:
-- Provide exactly ${count} businesses (no more, no less)
-- Provide business names as they are listed on google maps, and no other way.
+- Provide exactly ${count} results (no more, no less)
+- Provide names as they are commonly known or listed on google maps where applicable.
 - Rank them from best to worst match for the query
-- Do not include explanations, questions, or additional text other than the business name
-- Only provide the numbered list of business names
+- Do not include explanations, questions, or additional text other than the name
+- Only provide the numbered list of names
 - Make reasonable assumptions if the query is ambiguous`}
 
 export interface StandardizationPromptParams {
-  businessNames: string[]
-  userBusinessName: string
+  productNames: string[]
+  userProductName: string
 }
 
-export function buildStandardizationPrompt({ businessNames, userBusinessName }: StandardizationPromptParams): string {
-  return `You are a business name standardization assistant. Your task is to convert business names to their official Google Maps names and eliminate duplicates.
+export function buildStandardizationPrompt({ productNames, userProductName }: StandardizationPromptParams): string {
+  return `You are a name standardization assistant. Your task is to convert product/business names to their official or commonly recognized names and eliminate duplicates.
 
 IMPORTANT INSTRUCTIONS:
-1. For each business name provided, return the exact official Google Maps business name
-2. If a business name matches or is very similar to "${userBusinessName}", return exactly "${userBusinessName}"
-3. ELIMINATE DUPLICATES: If you see variations like "Wild Rover Tours" and "The Wild Rover Tours", or "Dublin Free Walking Tour" and "Dublin Free Walking Tours", only return ONE version - the most official Google Maps name
-4. Prefer names WITHOUT "The" prefix unless that's the official name (e.g., prefer "Wild Rover Tours" over "The Wild Rover Tours")
-5. Use singular forms unless plural is the official name (e.g., prefer "Dublin Free Walking Tour" over "Dublin Free Walking Tours")
+1. For each name provided, return the exact official or most commonly recognized name
+2. If a name matches or is very similar to "${userProductName}", return exactly "${userProductName}"
+3. ELIMINATE DUPLICATES: If you see variations like "Wild Rover Tours" and "The Wild Rover Tours", or "Dublin Free Walking Tour" and "Dublin Free Walking Tours", only return ONE version - the most official name
+4. Prefer names WITHOUT "The" prefix unless that's the official name
+5. Use singular forms unless plural is the official name
 6. Only return the standardized names, one per line, no numbering or extra text
-7. If a business is not a real, Google Maps registered business, remove it from the list
-8. If multiple variations refer to the same business, only include it once
+7. If multiple variations refer to the same entity, only include it once
 
-Business names to standardize:
-${businessNames.map((name, index) => `${index + 1}. ${name}`).join('\n')}
+Names to standardize:
+${productNames.map((name, index) => `${index + 1}. ${name}`).join('\n')}
 
-Return format: Just the unique standardized business names, one per line, with duplicates removed:`}
+Return format: Just the unique standardized names, one per line, with duplicates removed:`}
 
 // ---------------- Additional Prompt Builders (Query Suggestions Flow) ----------------
 
-export interface BusinessResearchPromptParams {
+export interface CompanyResearchPromptParams {
   name: string
-  city?: string | null
   googlePrimaryTypeDisplay?: string | null
 }
 
-// Builds the TWO-paragraph business research prompt previously in query-suggestion-service
-export function buildBusinessResearchPrompt({ name, city, googlePrimaryTypeDisplay }: BusinessResearchPromptParams): string {
-  return `You are an analyst. Write exactly TWO concise paragraphs (no lists, no headings) describing the business "${name}".
+// Builds the TWO-paragraph company research prompt for query suggestion generation
+export function buildCompanyResearchPrompt({ name, googlePrimaryTypeDisplay }: CompanyResearchPromptParams): string {
+  return `You are an analyst. Write exactly TWO concise paragraphs (no lists, no headings) describing the company/brand "${name}".
 
 Context:
 Name: ${name}
-Location: ${city || 'Not specified'}
 Google Type (optional): ${googlePrimaryTypeDisplay || 'Unknown'}
 
 Paragraph 1: Infer positioning, category, likely price tier, audience, and core qualities. Be specific but concise.
@@ -76,19 +73,19 @@ Rules:
 - 2 paragraphs only.
 - No JSON, no bullet points, no labels.
 - <= 90 words each.
-- Avoid repeating the business name more than once besides the opening.
+- Avoid repeating the company name more than once besides the opening.
 `
 }
 
 export interface QuerySuggestionsPromptParams {
-  businessName: string
+  companyName: string
   researchNarrative: string
   mainCity: string
 }
 
 // Builds the JSON-output query suggestions generation prompt
-export function buildQuerySuggestionsPrompt({ businessName, researchNarrative, mainCity }: QuerySuggestionsPromptParams): string {
-  return `You will generate customer search queries an AI assistant might receive when someone is seeking ${businessName} or similar services.
+export function buildQuerySuggestionsPrompt({ companyName, researchNarrative, mainCity }: QuerySuggestionsPromptParams): string {
+  return `You will generate customer search queries an AI assistant might receive when someone is seeking ${companyName} or similar products/services.
 
 Business Research Narrative (context for grounding – do NOT summarize it back):
 """
@@ -103,7 +100,7 @@ Requirements:
 2. EXACTLY 6 queries: 3 SHORT (6-10 words) + 3 DETAILED (12-18 words)
 3. SINGLE intent per query (no plural mixed categories, no combining unrelated asks)
 4. Vary structure, tone, and included inferred attributes (price tier, amenity, audience), avoid repeating the same adjective or location form more than twice
-5. Do not mention the business name directly, always write queries to search for the type of business or its features
+5. Do not mention the company name directly, always write queries to search for the type of product/service or its features
 6. Avoid wrapping queries in quotes; they are plain strings
 7. No numbering, no bullets, no explanation outside JSON
 8. Return valid minified JSON ONLY with a top-level key "suggestions" mapping to an array of 6 strings.

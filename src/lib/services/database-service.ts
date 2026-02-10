@@ -1,19 +1,20 @@
-import { createClient } from '@supabase/supabase-js'
-import { env } from '$env/dynamic/private'
 import type { SupabaseClient } from '@supabase/supabase-js'
-import type { 
-  Business, 
-  Query, 
-  LLMProvider, 
-  AnalysisRun, 
+import type {
+  Company,
+  Product,
+  Measurement,
+  LLMProvider,
+  AnalysisRun,
   RankingAttempt,
   CompetitorResult,
-  WeeklyAnalysisCheck,
-  QueryRankingHistory
+  MeasurementRankingHistory
 } from '../types'
 import { BusinessNameStandardizationService } from './business-name-standardization-service'
 
-// Unified database service with authenticated Supabase client (respects RLS)
+/**
+ * Unified database service with authenticated Supabase client (respects RLS).
+ * All table/column names match schema_v2.
+ */
 export class DatabaseService {
   private supabase: SupabaseClient
   private userId: string
@@ -23,204 +24,231 @@ export class DatabaseService {
     this.userId = userId
   }
 
-  // Business name normalization utility for consolidation
-  private normalizeBusinessName(businessName: string): string {
-    return businessName
+  // ── Utility ──────────────────────────────────────────────────────────────
+
+  private normalizeProductName(name: string): string {
+    return name
       .toLowerCase()
       .trim()
-      // Remove common punctuation
       .replace(/[.,;:'"!?()]/g, '')
-      // Standardize separators
       .replace(/\s*-\s*/g, ' ')
       .replace(/\s*&\s*/g, ' and ')
       .replace(/\s+/g, ' ')
       .trim()
   }
 
-  // Create authenticated instance
-  static createAuthenticatedClient(accessToken: string): SupabaseClient {
-    const supabaseUrl = env.VITE_SUPABASE_URL
-    const supabaseAnonKey = env.VITE_SUPABASE_ANON_KEY
-    
-    if (!supabaseUrl || !supabaseAnonKey) {
-      throw new Error('Supabase configuration missing')
-    }
-    
-    const supabase = createClient(supabaseUrl, supabaseAnonKey, {
-      global: {
-        headers: {
-          Authorization: `Bearer ${accessToken}`
-        }
-      }
-    })
-    
-    return supabase
-  }
+  // ── Company operations ───────────────────────────────────────────────────
 
-  // Business operations (with RLS)
-  async getBusiness(): Promise<Business | null> {
+  async getCompany(): Promise<Company | null> {
     const { data, error } = await this.supabase
-      .from('businesses')
+      .from('companies')
       .select('*')
-      .eq('user_id', this.userId) // RLS will also enforce this
+      .eq('user_id', this.userId)
       .single()
-    
+
     if (error) {
-      console.error('Error fetching business:', error)
+      console.error('[Service] getCompany: Error', error)
       return null
     }
-    
     return data
   }
 
-  // Create a new business for the authenticated user
-  async createBusiness(businessData: {
+  async createCompany(companyData: {
     name: string
-    google_place_id: string
-    city: string
-  }): Promise<Business> {
+    google_place_id?: string
+    google_primary_type?: string
+    google_primary_type_display?: string
+  }): Promise<Company> {
     const { data, error } = await this.supabase
-      .from('businesses')
-      .insert([
-        {
-          user_id: this.userId,
-          name: businessData.name,
-          google_place_id: businessData.google_place_id,
-          city: businessData.city
-        }
-      ])
+      .from('companies')
+      .insert([{ user_id: this.userId, ...companyData }])
       .select()
       .single()
-    
+
     if (error) {
-      console.error('Error creating business:', error)
-      throw new Error(`Failed to create business: ${error.message}`)
+      console.error('[Service] createCompany: Error', error)
+      throw new Error(`Failed to create company: ${error.message}`)
     }
-    
     return data
   }
 
-  // Validate business ownership (RLS will enforce this automatically)
-  async validateBusinessOwnership(businessId: string): Promise<boolean> {
+  async validateCompanyOwnership(companyId: string): Promise<boolean> {
     const { data, error } = await this.supabase
-      .from('businesses')
+      .from('companies')
       .select('user_id')
-      .eq('id', businessId)
+      .eq('id', companyId)
       .single()
-    
-    if (error || !data) {
-      return false
-    }
-    
+
+    if (error || !data) return false
     return data.user_id === this.userId
   }
 
-  // Query operations
-  async getQueriesForBusiness(businessId: string): Promise<Query[]> {
+  // ── Product operations ───────────────────────────────────────────────────
+
+  async getProductsForCompany(companyId: string): Promise<Product[]> {
     const { data, error } = await this.supabase
-      .from('queries')
+      .from('products')
       .select('*')
-      .eq('business_id', businessId)
-      .order('created_at', { ascending: true })
-    
+      .eq('company_id', companyId)
+      .eq('is_active', true)
+      .order('display_order', { ascending: true })
+
     if (error) {
-      console.error('Error fetching queries:', error)
+      console.error('[Service] getProductsForCompany: Error', error)
       return []
     }
-    
     return data || []
   }
 
-  // Get a single query by ID
-  async getQuery(queryId: string): Promise<Query | null> {
+  async getProduct(productId: string): Promise<Product | null> {
     const { data, error } = await this.supabase
-      .from('queries')
+      .from('products')
       .select('*')
-      .eq('id', queryId)
+      .eq('id', productId)
       .single()
-    
+
     if (error) {
-      console.error('Error fetching query:', error)
+      console.error('[Service] getProduct: Error', error)
       return null
     }
-    
     return data
   }
 
-  // Create a new query for a business
-  async createQuery(queryData: {
-    business_id: string
-    text: string
-  }): Promise<Query> {
-    // Get the next order index
-    const { data: existingQueries } = await this.supabase
-      .from('queries')
-      .select('order_index')
-      .eq('business_id', queryData.business_id)
-      .order('order_index', { ascending: false })
+  async createProduct(productData: {
+    company_id: string
+    name: string
+    description?: string
+    image_url?: string
+  }): Promise<Product> {
+    // Get the next display_order
+    const { data: existing } = await this.supabase
+      .from('products')
+      .select('display_order')
+      .eq('company_id', productData.company_id)
+      .order('display_order', { ascending: false })
       .limit(1)
 
-    const nextOrderIndex = existingQueries && existingQueries.length > 0 
-      ? existingQueries[0].order_index + 1 
-      : 0
+    const nextOrder = existing && existing.length > 0 ? existing[0].display_order + 1 : 0
 
     const { data, error } = await this.supabase
-      .from('queries')
-      .insert([
-        {
-          business_id: queryData.business_id,
-          text: queryData.text,
-          order_index: nextOrderIndex
-        }
-      ])
+      .from('products')
+      .insert([{ ...productData, display_order: nextOrder }])
       .select()
       .single()
-    
+
     if (error) {
-      console.error('Error creating query:', error)
-      throw new Error(`Failed to create query: ${error.message}`)
+      console.error('[Service] createProduct: Error', error)
+      throw new Error(`Failed to create product: ${error.message}`)
     }
-    
     return data
   }
 
-    // LLM Provider operations
+  async validateProductOwnership(productId: string): Promise<boolean> {
+    const { data, error } = await this.supabase
+      .from('products')
+      .select('id, companies!inner(user_id)')
+      .eq('id', productId)
+      .single()
+
+    if (error || !data) return false
+    return (data as any).companies?.user_id === this.userId
+  }
+
+  // ── Measurement operations ───────────────────────────────────────────────
+
+  async getMeasurementsForProduct(productId: string): Promise<Measurement[]> {
+    const { data, error } = await this.supabase
+      .from('measurements')
+      .select('*')
+      .eq('product_id', productId)
+      .eq('is_active', true)
+      .order('display_order', { ascending: true })
+
+    if (error) {
+      console.error('[Service] getMeasurementsForProduct: Error', error)
+      return []
+    }
+    return data || []
+  }
+
+  async getMeasurement(measurementId: string): Promise<Measurement | null> {
+    const { data, error } = await this.supabase
+      .from('measurements')
+      .select('*')
+      .eq('id', measurementId)
+      .single()
+
+    if (error) {
+      console.error('[Service] getMeasurement: Error', error)
+      return null
+    }
+    return data
+  }
+
+  async createMeasurement(measurementData: {
+    product_id: string
+    title: string
+    query: string
+  }): Promise<Measurement> {
+    // Get the next display_order
+    const { data: existing } = await this.supabase
+      .from('measurements')
+      .select('display_order')
+      .eq('product_id', measurementData.product_id)
+      .order('display_order', { ascending: false })
+      .limit(1)
+
+    const nextOrder = existing && existing.length > 0 ? existing[0].display_order + 1 : 0
+
+    const { data, error } = await this.supabase
+      .from('measurements')
+      .insert([{ ...measurementData, display_order: nextOrder }])
+      .select()
+      .single()
+
+    if (error) {
+      console.error('[Service] createMeasurement: Error', error)
+      throw new Error(`Failed to create measurement: ${error.message}`)
+    }
+    return data
+  }
+
+  // ── LLM Provider operations ──────────────────────────────────────────────
+
   async getActiveLLMProviders(): Promise<LLMProvider[]> {
     const { data, error } = await this.supabase
       .from('llm_providers')
       .select('*')
       .eq('is_active', true)
       .order('name')
-    
+
     if (error) {
-      console.error('Error fetching LLM providers:', error)
+      console.error('[Service] getActiveLLMProviders: Error', error)
       throw new Error(`Failed to fetch LLM providers: ${error.message}`)
     }
-    
     return data || []
   }
 
-  // Analysis Run operations
-  async createAnalysisRun(businessId: string, totalQueries: number): Promise<AnalysisRun> {
-    console.log(`📊 Creating analysis run for business ${businessId} with ${totalQueries} queries`)
-    
+  // ── Analysis Run operations ──────────────────────────────────────────────
+
+  async createAnalysisRun(productId: string, totalMeasurements: number): Promise<AnalysisRun> {
+    console.log(`[Service] createAnalysisRun: product=${productId}, measurements=${totalMeasurements}`)
+
     const { data, error } = await this.supabase
       .from('analysis_runs')
       .insert([{
-        business_id: businessId,
-        run_date: new Date().toISOString().split('T')[0],
-        total_queries: totalQueries,
+        product_id: productId,
+        total_measurements: totalMeasurements,
         started_at: new Date().toISOString()
       }])
       .select()
       .single()
 
     if (error) {
-      console.error(`❌ Failed to create analysis run for business ${businessId}:`, error.message)
+      console.error('[Service] createAnalysisRun: Error', error)
       throw new Error(`Failed to create analysis run: ${error.message}`)
     }
-    
-    console.log(`✅ Analysis run created: ${data.id}`)
+    console.log(`[Service] createAnalysisRun: Created ${data.id}`)
     return data
   }
 
@@ -235,29 +263,42 @@ export class DatabaseService {
     if (error) {
       throw new Error(`Failed to update analysis run: ${error.message}`)
     }
-    
     return data
   }
 
-  async getRunningAnalysisForBusiness(businessId: string): Promise<AnalysisRun | null> {
+  async getRunningAnalysisForProduct(productId: string): Promise<AnalysisRun | null> {
     const { data, error } = await this.supabase
       .from('analysis_runs')
       .select('*')
-      .eq('business_id', businessId)
+      .eq('product_id', productId)
       .in('status', ['pending', 'running'])
       .order('created_at', { ascending: false })
       .limit(1)
       .maybeSingle()
 
     if (error) {
-      console.error('Error fetching running analysis:', error)
+      console.error('[Service] getRunningAnalysisForProduct: Error', error)
       return null
     }
-    
     return data
   }
 
-  // Ranking Attempts operations
+  async getAnalysisRunsForProduct(productId: string): Promise<Pick<AnalysisRun, 'id' | 'created_at'>[]> {
+    const { data, error } = await this.supabase
+      .from('analysis_runs')
+      .select('id, created_at')
+      .eq('product_id', productId)
+      .order('created_at', { ascending: false })
+
+    if (error) {
+      console.error('[Service] getAnalysisRunsForProduct: Error', error)
+      return []
+    }
+    return data || []
+  }
+
+  // ── Ranking Attempts ─────────────────────────────────────────────────────
+
   async saveRankingAttempts(attempts: Omit<RankingAttempt, 'id' | 'created_at'>[]): Promise<void> {
     const { error } = await this.supabase
       .from('ranking_attempts')
@@ -268,101 +309,57 @@ export class DatabaseService {
     }
   }
 
-  // Weekly analysis check
-  async checkWeeklyAnalysis(businessId: string): Promise<WeeklyAnalysisCheck> {
-    // DEVELOPMENT MODE: Always allow analysis runs
-    // TODO: Re-enable weekly limits for production
-    
-    // Get the start of current week (Monday)
-    const now = new Date()
-    const currentWeekStart = new Date(now)
-    currentWeekStart.setDate(now.getDate() - now.getDay() + 1) // Monday
-    currentWeekStart.setHours(0, 0, 0, 0)
-    
-    const { data: currentWeekRun, error } = await this.supabase
-      .from('analysis_runs')
-      .select('*')
-      .eq('business_id', businessId)
-      .gte('created_at', currentWeekStart.toISOString())
-      .eq('status', 'completed')
-      .order('created_at', { ascending: false })
-      .limit(1)
-      .maybeSingle()
+  // ── Competitor Results ────────────────────────────────────────────────────
 
-    if (error) {
-      console.error('Error checking weekly analysis:', error)
-    }
-
-    // DEVELOPMENT: Always allow runs regardless of weekly limit
-    const canRun = true // Changed from: !currentWeekRun
-    const nextWeekStart = new Date(currentWeekStart)
-    nextWeekStart.setDate(currentWeekStart.getDate() + 7)
-
-    return {
-      canRun,
-      lastRunDate: currentWeekRun?.created_at,
-      nextAllowedDate: canRun ? undefined : nextWeekStart.toISOString(),
-      currentWeekRun: currentWeekRun || undefined
-    }
-  }
-
-  // Competitor Results operations
   async populateCompetitorResultsForAnalysisRun(analysisRunId: string): Promise<number> {
-    
-    // Get all unique queries for this analysis run
-    const { data: queryIds, error: queryError } = await this.supabase
+    // Get all unique measurement IDs for this analysis run
+    const { data: measurementIds, error: mError } = await this.supabase
       .from('ranking_attempts')
-      .select('query_id')
+      .select('measurement_id')
       .eq('analysis_run_id', analysisRunId)
-      .not('query_id', 'is', null)
+      .not('measurement_id', 'is', null)
 
-    if (queryError) {
-      console.error('❌ Error fetching query IDs:', queryError)
-      throw new Error(`Failed to fetch query IDs: ${queryError.message}`)
+    if (mError) {
+      console.error('[Service] populateCompetitorResults: Error fetching measurement IDs', mError)
+      throw new Error(`Failed to fetch measurement IDs: ${mError.message}`)
     }
 
-    if (!queryIds || queryIds.length === 0) {
-      return 0
-    }
+    if (!measurementIds || measurementIds.length === 0) return 0
 
-    // Get unique query IDs
-    const uniqueQueryIds = [...new Set(queryIds.map(q => q.query_id))]
+    const uniqueIds = [...new Set(measurementIds.map(m => m.measurement_id))]
 
     let totalInserted = 0
-    for (const queryId of uniqueQueryIds) {
+    for (const measurementId of uniqueIds) {
       try {
-        const inserted = await this.populateCompetitorResultsForQuery(queryId, analysisRunId)
+        const inserted = await this.populateCompetitorResultsForMeasurement(measurementId, analysisRunId)
         totalInserted += inserted
       } catch (error) {
-        console.error(`❌ Error populating results for query ${queryId}:`, error)
-        // Continue with other queries even if one fails
+        console.error(`[Service] Error populating results for measurement ${measurementId}:`, error)
       }
     }
-
     return totalInserted
   }
 
-  async populateCompetitorResultsForQuery(queryId: string, analysisRunId: string): Promise<number> {
-    // Get the user's business name for this query
-    const { data: queryData, error: queryError } = await this.supabase
-      .from('queries')
+  async populateCompetitorResultsForMeasurement(measurementId: string, analysisRunId: string): Promise<number> {
+    // Get the user's product name via measurement → product → company
+    const { data: measurementData, error: mError } = await this.supabase
+      .from('measurements')
       .select(`
         *,
-        businesses!inner(
+        products!inner(
           name
         )
       `)
-      .eq('id', queryId)
+      .eq('id', measurementId)
       .single()
 
-    if (queryError) {
-      throw new Error(`Failed to fetch query data: ${queryError.message}`)
+    if (mError) {
+      throw new Error(`Failed to fetch measurement data: ${mError.message}`)
     }
 
-    const userBusinessName = queryData.businesses.name.toLowerCase().trim()
+    const userProductName = measurementData.products.name.toLowerCase().trim()
 
-    // Get ALL ranking attempts for this query and run that have parsed_ranking data
-    // This includes both successful and unsuccessful attempts (business not found)
+    // Get ALL ranking attempts for this measurement and run
     const { data: attempts, error: attemptsError } = await this.supabase
       .from('ranking_attempts')
       .select(`
@@ -372,7 +369,7 @@ export class DatabaseService {
           name
         )
       `)
-      .eq('query_id', queryId)
+      .eq('measurement_id', measurementId)
       .eq('analysis_run_id', analysisRunId)
       .not('parsed_ranking', 'is', null)
 
@@ -380,314 +377,233 @@ export class DatabaseService {
       throw new Error(`Failed to fetch ranking attempts: ${attemptsError.message}`)
     }
 
-    if (!attempts || attempts.length === 0) {
-      return 0
-    }
+    if (!attempts || attempts.length === 0) return 0
 
-    // Clear existing results for this query/run
+    // Clear existing results for this measurement/run
     const { error: deleteError } = await this.supabase
       .from('competitor_results')
       .delete()
-      .eq('query_id', queryId)
+      .eq('measurement_id', measurementId)
       .eq('analysis_run_id', analysisRunId)
 
     if (deleteError) {
-      console.warn('⚠️ Error clearing existing results:', deleteError)
+      console.warn('[Service] Error clearing existing results:', deleteError)
     }
 
-    // Process all businesses mentioned in rankings
-    const businessMap = new Map<string, {
-      business_name: string // Store the first/canonical name we encounter
-      original_names: string[] // Track all variations we've seen
+    // Build product map from all attempts
+    const productMap = new Map<string, {
+      product_name: string
+      original_names: string[]
       ranks: number[]
       llm_providers: string[]
       appearances_count: number
-      is_user_business: boolean
-      ranksByProvider: Map<string, number[]> // Track ranks per provider
+      is_target: boolean
+      ranksByProvider: Map<string, number[]>
     }>()
 
-    // Extract businesses from all attempts
     attempts.forEach(attempt => {
       try {
         let parsedRanking: string[]
-        
-        // Handle both cases: string that needs parsing or already an array
         if (typeof attempt.parsed_ranking === 'string') {
           parsedRanking = JSON.parse(attempt.parsed_ranking)
         } else if (Array.isArray(attempt.parsed_ranking)) {
           parsedRanking = attempt.parsed_ranking
         } else {
-          console.warn('❌ Invalid parsed_ranking format for attempt:', attempt.id)
           return
         }
-
-        if (!Array.isArray(parsedRanking)) {
-          console.warn('❌ parsed_ranking is not an array for attempt:', attempt.id)
-          return
-        }
+        if (!Array.isArray(parsedRanking)) return
 
         const providerName = attempt.llm_providers?.name || 'Unknown'
-        
-        // Use the stored target_business_rank instead of recalculating from truncated list
-        const userBusinessRank = attempt.target_business_rank
-        
-        // Calculate truncation limit using the original rank
-        const truncationLimit = this.calculateTruncationLimit(userBusinessRank, parsedRanking.length)
-        
-        // Only process businesses up to the truncation limit
-        const businessesToProcess = parsedRanking.slice(0, truncationLimit)
-        
-        businessesToProcess.forEach((businessName, index) => {
-          const rank = index + 1
-          const businessKey = this.normalizeBusinessName(businessName) // Use normalized name as key
-          const businessNameLower = businessName.toLowerCase().trim()
-          
-          // Determine if this is the user's business - use the stored rank for accuracy
-          const isUserBusiness = userBusinessRank !== null && rank === userBusinessRank
+        const userProductRank = attempt.target_product_rank
+        const truncationLimit = this.calculateTruncationLimit(userProductRank, parsedRanking.length)
+        const productsToProcess = parsedRanking.slice(0, truncationLimit)
 
-          if (!businessMap.has(businessKey)) {
-            businessMap.set(businessKey, {
-              business_name: businessName, // Store the first name we encounter
-              original_names: [businessName],
+        productsToProcess.forEach((productName, index) => {
+          const rank = index + 1
+          const productKey = this.normalizeProductName(productName)
+          const isTarget = userProductRank !== null && rank === userProductRank
+
+          if (!productMap.has(productKey)) {
+            productMap.set(productKey, {
+              product_name: productName,
+              original_names: [productName],
               ranks: [],
               llm_providers: [],
               appearances_count: 0,
-              is_user_business: isUserBusiness,
+              is_target: isTarget,
               ranksByProvider: new Map()
             })
           }
 
-          const business = businessMap.get(businessKey)!
-          business.ranks.push(rank)
-          business.appearances_count++
-          
-          // Track ranks by provider
-          if (!business.ranksByProvider.has(providerName)) {
-            business.ranksByProvider.set(providerName, [])
+          const product = productMap.get(productKey)!
+          product.ranks.push(rank)
+          product.appearances_count++
+
+          if (!product.ranksByProvider.has(providerName)) {
+            product.ranksByProvider.set(providerName, [])
           }
-          business.ranksByProvider.get(providerName)!.push(rank)
-          
-          // Track this variation if we haven't seen it before
-          if (!business.original_names.includes(businessName)) {
-            business.original_names.push(businessName)
+          product.ranksByProvider.get(providerName)!.push(rank)
+
+          if (!product.original_names.includes(productName)) {
+            product.original_names.push(productName)
           }
-          
-          // Add LLM provider if not already included
-          if (!business.llm_providers.includes(providerName)) {
-            business.llm_providers.push(providerName)
+          if (!product.llm_providers.includes(providerName)) {
+            product.llm_providers.push(providerName)
           }
+          if (isTarget) product.is_target = true
         })
       } catch (parseError) {
-        console.warn('Failed to parse ranking for attempt:', attempt.id, parseError)
+        console.warn('[Service] Failed to parse ranking for attempt:', attempt.id, parseError)
       }
     })
 
-    console.log(`📊 Business map contains ${businessMap.size} unique businesses`)
-    
-    // If no businesses found, return early
-    if (businessMap.size === 0) {
-      console.log('⚠️ No businesses found in rankings, skipping competitor results processing')
-      return 0
-    }
+    if (productMap.size === 0) return 0
 
-    // Standardize business names using LLM before processing results
-    console.log('📝 Standardizing business names...')
-    const allBusinessNames = Array.from(businessMap.keys())
-    console.log(`Found ${allBusinessNames.length} unique business names to standardize:`, allBusinessNames.map(key => businessMap.get(key)!.business_name))
-    
+    // Standardize names
+    const allProductNames = Array.from(productMap.keys())
     let standardizations
     try {
       standardizations = await BusinessNameStandardizationService.standardizeBusinessNames(
-        allBusinessNames.map(key => businessMap.get(key)!.business_name)
+        allProductNames.map(key => productMap.get(key)!.product_name)
       )
-      console.log('✅ Standardization completed:', standardizations)
-    } catch (error) {
-      console.error('❌ Standardization failed:', error)
-      // Fallback: use original names
-      standardizations = allBusinessNames.map(key => ({
-        originalName: businessMap.get(key)!.business_name,
-        standardizedName: businessMap.get(key)!.business_name,
+    } catch {
+      standardizations = allProductNames.map(key => ({
+        originalName: productMap.get(key)!.product_name,
+        standardizedName: productMap.get(key)!.product_name,
         confidence: 'low' as const
       }))
     }
-    
-    // Create a mapping from original names to standardized names
-    const nameStandardizationMap = new Map<string, string>()
-    for (const standardization of standardizations) {
-      nameStandardizationMap.set(standardization.originalName, standardization.standardizedName)
+
+    const nameMap = new Map<string, string>()
+    for (const s of standardizations) {
+      nameMap.set(s.originalName, s.standardizedName)
     }
-    
-    // Apply standardization to business map
-    const standardizedBusinessMap = new Map<string, {
-      business_name: string
-      original_names: string[]
-      ranks: number[]
-      llm_providers: string[]
-      appearances_count: number
-      is_user_business: boolean
-      ranksByProvider: Map<string, number[]>
-    }>()
-    
-    for (const [key, business] of businessMap) {
-      const standardizedName = nameStandardizationMap.get(business.business_name) || business.business_name
-      const standardizedKey = this.normalizeBusinessName(standardizedName)
-      
-      if (!standardizedBusinessMap.has(standardizedKey)) {
-        standardizedBusinessMap.set(standardizedKey, {
-          business_name: standardizedName,
-          original_names: [...business.original_names],
-          ranks: [...business.ranks],
-          llm_providers: [...business.llm_providers],
-          appearances_count: business.appearances_count,
-          is_user_business: business.is_user_business,
-          ranksByProvider: new Map(business.ranksByProvider)
+
+    // Merge standardized entries
+    const standardizedMap = new Map<string, typeof productMap extends Map<string, infer V> ? V : never>()
+
+    for (const [, product] of productMap) {
+      const stdName = nameMap.get(product.product_name) || product.product_name
+      const stdKey = this.normalizeProductName(stdName)
+
+      if (!standardizedMap.has(stdKey)) {
+        standardizedMap.set(stdKey, {
+          product_name: stdName,
+          original_names: [...product.original_names],
+          ranks: [...product.ranks],
+          llm_providers: [...product.llm_providers],
+          appearances_count: product.appearances_count,
+          is_target: product.is_target,
+          ranksByProvider: new Map(product.ranksByProvider)
         })
       } else {
-        // Merge with existing standardized business
-        const existing = standardizedBusinessMap.get(standardizedKey)!
-        existing.original_names.push(...business.original_names)
-        existing.ranks.push(...business.ranks)
-        existing.appearances_count += business.appearances_count
-        
-        // Merge LLM providers
-        for (const provider of business.llm_providers) {
-          if (!existing.llm_providers.includes(provider)) {
-            existing.llm_providers.push(provider)
-          }
+        const existing = standardizedMap.get(stdKey)!
+        existing.original_names.push(...product.original_names)
+        existing.ranks.push(...product.ranks)
+        existing.appearances_count += product.appearances_count
+        for (const provider of product.llm_providers) {
+          if (!existing.llm_providers.includes(provider)) existing.llm_providers.push(provider)
         }
-        
-        // Merge ranks by provider
-        for (const [provider, ranks] of business.ranksByProvider) {
+        for (const [provider, ranks] of product.ranksByProvider) {
           if (!existing.ranksByProvider.has(provider)) {
             existing.ranksByProvider.set(provider, [...ranks])
           } else {
             existing.ranksByProvider.get(provider)!.push(...ranks)
           }
         }
-        
-        // If any version was user business, mark as user business
-        if (business.is_user_business) {
-          existing.is_user_business = true
-        }
+        if (product.is_target) existing.is_target = true
       }
     }
-    
-    console.log(`✅ Standardized ${businessMap.size} names into ${standardizedBusinessMap.size} unique businesses`)
 
-    // Convert to competitor results and insert
+    // Build competitor result rows (one per provider per product)
     const competitorResults: any[] = []
-    
-    // Create individual records for each provider that ranked each business
-    Array.from(standardizedBusinessMap.values()).forEach(business => {
-      business.ranksByProvider.forEach((ranks, providerName) => {
-        const averageRank = ranks.reduce((sum, rank) => sum + rank, 0) / ranks.length
+    for (const product of standardizedMap.values()) {
+      product.ranksByProvider.forEach((ranks, providerName) => {
+        const averageRank = ranks.reduce((s, r) => s + r, 0) / ranks.length
         const bestRank = Math.min(...ranks)
         const worstRank = Math.max(...ranks)
-        const providerAttempts = attempts.filter(attempt => attempt.llm_providers?.name === providerName).length
+        const providerAttempts = attempts.filter(a => a.llm_providers?.name === providerName).length
         const appearanceRate = (ranks.length / providerAttempts) * 100
         const weightedScore = averageRank * (3.0 - 2.5 * (appearanceRate / 100))
 
         competitorResults.push({
-          query_id: queryId,
+          measurement_id: measurementId,
           analysis_run_id: analysisRunId,
-          business_name: business.business_name,
+          product_name: product.product_name,
           average_rank: Number(averageRank.toFixed(2)),
           best_rank: bestRank,
           worst_rank: worstRank,
           appearances_count: ranks.length,
           total_attempts: providerAttempts,
+          appearance_rate: Number(appearanceRate.toFixed(2)),
           weighted_score: Number(weightedScore.toFixed(2)),
-          llm_providers: [providerName], // Array with single provider name
+          llm_providers: [providerName],
           raw_ranks: ranks,
-          is_user_business: business.is_user_business
+          is_target: product.is_target
         })
       })
-    })
-
-    console.log(`📊 Created ${competitorResults.length} competitor result records`)
-    
-    if (competitorResults.length === 0) {
-      console.log('⚠️ No competitor results created')
-      return 0
     }
 
-    // Log a sample of the results for debugging
-    console.log('📝 Sample competitor results:', JSON.stringify(competitorResults.slice(0, 1), null, 2))
+    if (competitorResults.length === 0) return 0
 
-    // Insert all competitor results
     const { data: insertedData, error: insertError } = await this.supabase
       .from('competitor_results')
       .insert(competitorResults)
       .select('id')
 
     if (insertError) {
-      console.error('❌ Error inserting competitor results:', insertError)
+      console.error('[Service] Error inserting competitor results:', insertError)
       throw new Error(`Failed to insert competitor results: ${insertError.message}`)
     }
 
     const insertedCount = insertedData?.length || 0
-    console.log(`✅ Competitor results populated: ${insertedCount} competitor entries created for analysis run ${analysisRunId}`)
-    
+    console.log(`[Service] Competitor results populated: ${insertedCount} entries for analysis run ${analysisRunId}`)
     return insertedCount
   }
 
-  // Calculate truncation limit based on user business rank
-  private calculateTruncationLimit(userRank: number | null, totalBusinesses: number): number {
-    if (!userRank) {
-      // If user business not found, return all businesses
-      return totalBusinesses
-    }
-    
-    // Round up to next multiple of 5
+  private calculateTruncationLimit(userRank: number | null | undefined, totalProducts: number): number {
+    if (!userRank) return totalProducts
     const roundedRank = Math.ceil(userRank / 5) * 5
-    
-    // Don't exceed the total number of businesses
-    return Math.min(roundedRank, totalBusinesses)
+    return Math.min(roundedRank, totalProducts)
   }
 
-  // Get competitor results for a query/run
-  async getCompetitorResults(queryId: string, analysisRunId: string): Promise<CompetitorResult[]> {
+  async getCompetitorResults(measurementId: string, analysisRunId: string): Promise<CompetitorResult[]> {
     const { data, error } = await this.supabase
       .from('competitor_results')
       .select('*')
-      .eq('query_id', queryId)
+      .eq('measurement_id', measurementId)
       .eq('analysis_run_id', analysisRunId)
       .order('weighted_score', { ascending: true })
 
     if (error) {
-      console.error('❌ Error fetching competitor results:', error)
+      console.error('[Service] getCompetitorResults: Error', error)
       throw new Error(`Failed to fetch competitor results: ${error.message}`)
     }
-
     return data || []
   }
 
-  // Get ranking history for a query (aggregated by analysis run)
-  async getQueryRankingHistory(queryId: string, limit: number = 10): Promise<QueryRankingHistory[]> {
+  // ── Measurement Ranking History ───────────────────────────────────────────
+
+  async getMeasurementRankingHistory(measurementId: string, limit: number = 10): Promise<MeasurementRankingHistory[]> {
     try {
-      // Get recent analysis runs for this query with ranking data
       const { data, error } = await this.supabase
         .from('ranking_attempts')
-        .select(`
-          analysis_run_id,
-          created_at,
-          parsed_ranking
-        `)
-        .eq('query_id', queryId)
+        .select('analysis_run_id, created_at, parsed_ranking')
+        .eq('measurement_id', measurementId)
         .not('parsed_ranking', 'is', null)
         .order('created_at', { ascending: false })
-        .limit(limit * 10) // Get more attempts to group by run
+        .limit(limit * 10)
 
       if (error) {
-        console.error('❌ Error fetching query ranking history:', error)
-        throw new Error(`Failed to fetch query ranking history: ${error.message}`)
+        console.error('[Service] getMeasurementRankingHistory: Error', error)
+        throw new Error(`Failed to fetch ranking history: ${error.message}`)
       }
 
-      // Group by analysis_run_id and calculate aggregated ranking stats
+      // Group by analysis_run_id
       const runStats = new Map<string, {
-        run_date: string,
-        rankings: number[],
-        total_attempts: number,
+        created_at: string
+        rankings: number[]
+        total_attempts: number
         successful_attempts: number
       }>()
 
@@ -695,7 +611,7 @@ export class DatabaseService {
         const runId = attempt.analysis_run_id
         if (!runStats.has(runId)) {
           runStats.set(runId, {
-            run_date: attempt.created_at,
+            created_at: attempt.created_at,
             rankings: [],
             total_attempts: 0,
             successful_attempts: 0
@@ -705,44 +621,37 @@ export class DatabaseService {
         const stats = runStats.get(runId)!
         stats.total_attempts++
 
-        // Parse ranking and find our business position
         try {
-          const ranking = Array.isArray(attempt.parsed_ranking) 
-            ? attempt.parsed_ranking 
+          const ranking = Array.isArray(attempt.parsed_ranking)
+            ? attempt.parsed_ranking
             : JSON.parse(attempt.parsed_ranking || '[]')
-          
-          // For now, we'll use a placeholder rank calculation
-          // In a real implementation, you'd match the business name in the ranking
+
           if (ranking.length > 0) {
-            // Use middle position as placeholder - in reality you'd search for the business
             const rank = Math.ceil(ranking.length / 2)
             stats.rankings.push(rank)
             stats.successful_attempts++
           }
-        } catch (error) {
-          console.warn('Failed to parse ranking for attempt:', attempt.analysis_run_id, error)
+        } catch {
+          // skip unparseable
         }
       }
 
-      // Convert to QueryRankingHistory format
-      const history: QueryRankingHistory[] = Array.from(runStats.entries())
+      return Array.from(runStats.entries())
         .map(([runId, stats]) => ({
-          run_date: stats.run_date,
           analysis_run_id: runId,
-          average_rank: stats.rankings.length > 0 
-            ? stats.rankings.reduce((a, b) => a + b, 0) / stats.rankings.length 
+          created_at: stats.created_at,
+          average_rank: stats.rankings.length > 0
+            ? stats.rankings.reduce((a, b) => a + b, 0) / stats.rankings.length
             : null,
           best_rank: stats.rankings.length > 0 ? Math.min(...stats.rankings) : null,
           worst_rank: stats.rankings.length > 0 ? Math.max(...stats.rankings) : null,
           total_attempts: stats.total_attempts,
           successful_attempts: stats.successful_attempts
         }))
-        .sort((a, b) => new Date(b.run_date).getTime() - new Date(a.run_date).getTime())
+        .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
         .slice(0, limit)
-
-      return history
     } catch (error) {
-      console.error('❌ Error in getQueryRankingHistory:', error)
+      console.error('[Service] getMeasurementRankingHistory: Error', error)
       return []
     }
   }

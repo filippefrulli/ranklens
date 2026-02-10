@@ -1,8 +1,14 @@
 <script lang="ts">
-  import type { LLMProvider, WeeklyAnalysisCheck } from '../../types'
+  import type { LLMProvider } from '../../types'
   import LLMProviderDropdown from '../ui/LLMProviderDropdown.svelte'
   import Button from '../ui/Button.svelte'
   
+  interface WeeklyAnalysisCheck {
+    canRun: boolean
+    lastRunDate?: string
+    nextAllowedDate?: string
+  }
+
   export let llmProviders: LLMProvider[]
   export let selectedProvider: LLMProvider | null
   export let hasQueries: boolean

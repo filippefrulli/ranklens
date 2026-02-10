@@ -1,8 +1,10 @@
 import { LLMService } from './llm-service'
 import { DatabaseService } from './database-service'
-import type { Business, Query, LLMProvider, AnalysisRun } from '../types'
+import type { Product, Measurement, LLMProvider, AnalysisRun } from '../types'
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 import { PUBLIC_SUPABASE_URL, PUBLIC_SUPABASE_ANON_KEY } from '$env/static/public'
+
+const ATTEMPTS_PER_MEASUREMENT = 10
 
 export class AnalysisService {
   private dbService: DatabaseService
@@ -15,206 +17,174 @@ export class AnalysisService {
     this.dbService = new DatabaseService(supabase, userId)
   }
 
-  // Run complete analysis for a business (with RLS)
-  async runAnalysis(businessId: string): Promise<{ success: boolean; analysisRunId?: string; error?: string }> {
-    console.log(`🚀 Starting analysis for business: ${businessId}`)
-    
+  /**
+   * Run complete analysis for a product (scoped to product, not company).
+   */
+  async runAnalysis(productId: string): Promise<{ success: boolean; analysisRunId?: string; error?: string }> {
+    console.log(`[Action] runAnalysis: Starting for product ${productId}`)
+
     try {
-      // Validate ownership through RLS
-      const isOwner = await this.dbService.validateBusinessOwnership(businessId)
+      // Validate ownership
+      const isOwner = await this.dbService.validateProductOwnership(productId)
       if (!isOwner) {
-        console.error(`❌ Analysis failed: Unauthorized access to business ${businessId}`)
-        return { success: false, error: 'Unauthorized: Business not found or access denied' }
-      }
-      
-      // Get business data (RLS will ensure user can only access their business)
-      const business = await this.dbService.getBusiness()
-      if (!business) {
-        console.error(`❌ Analysis failed: Business not found for ID ${businessId}`)
-        return { success: false, error: 'Business not found' }
+        console.error(`[Action] runAnalysis: Unauthorized for product ${productId}`)
+        return { success: false, error: 'Unauthorized: Product not found or access denied' }
       }
 
-      // Get queries
-      const queries = await this.dbService.getQueriesForBusiness(businessId)
-      if (queries.length === 0) {
-        console.error(`❌ Analysis failed: No queries found for business ${business.name}`)
-        return { success: false, error: 'No queries found for this business' }
+      // Get product data
+      const product = await this.dbService.getProduct(productId)
+      if (!product) {
+        console.error(`[Action] runAnalysis: Product not found ${productId}`)
+        return { success: false, error: 'Product not found' }
+      }
+
+      // Get measurements
+      const measurements = await this.dbService.getMeasurementsForProduct(productId)
+      if (measurements.length === 0) {
+        console.error(`[Action] runAnalysis: No measurements for product "${product.name}"`)
+        return { success: false, error: 'No measurements found for this product' }
       }
 
       // Get active providers
       const providers = await this.dbService.getActiveLLMProviders()
       if (providers.length === 0) {
-        console.error(`❌ Analysis failed: No active LLM providers found`)
+        console.error('[Action] runAnalysis: No active LLM providers')
         return { success: false, error: 'No active LLM providers found' }
       }
 
-  // Create analysis run
-      const analysisRun = await this.dbService.createAnalysisRun(businessId, queries.length)
+      // Create analysis run
+      const analysisRun = await this.dbService.createAnalysisRun(productId, measurements.length)
 
-      console.log(`✅ Analysis setup complete for "${business.name}": ${queries.length} queries × ${providers.length} providers × 5 attempts = ${queries.length * providers.length * 5} total LLM calls`)
-      
-      // Create a cookie-less background Supabase client to avoid cookies.set after response
+      const totalCalls = measurements.length * providers.length * ATTEMPTS_PER_MEASUREMENT
+      console.log(`[Action] runAnalysis: Setup complete for "${product.name}": ${measurements.length} measurements × ${providers.length} providers × ${ATTEMPTS_PER_MEASUREMENT} attempts = ${totalCalls} total LLM calls`)
+
+      // Create a cookie-less background Supabase client
       let backgroundDb = this.dbService
       try {
         const { data: { session } } = await this.supabase.auth.getSession()
         const accessToken = session?.access_token
         const backgroundSupabase = createClient(PUBLIC_SUPABASE_URL, PUBLIC_SUPABASE_ANON_KEY, {
-          auth: {
-            persistSession: false,
-            autoRefreshToken: false,
-            detectSessionInUrl: false
-          },
+          auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
           global: {
             headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : {}
           }
         })
         backgroundDb = new DatabaseService(backgroundSupabase as any, this.userId)
       } catch (e) {
-        console.warn('Failed to initialize background Supabase client; falling back to request-bound client:', e)
+        console.warn('[Action] runAnalysis: Failed to init background client, using request-bound:', e)
       }
 
-      // Start the analysis in the background with the background client
-      this.runAnalysisInBackground(analysisRun, business, queries, providers, backgroundDb)
+      // Fire-and-forget background analysis
+      this.runAnalysisInBackground(analysisRun, product, measurements, providers, backgroundDb)
 
       return { success: true, analysisRunId: analysisRun.id }
-
     } catch (err) {
-      console.error('❌ Error starting analysis:', err)
-      return { 
-        success: false, 
-        error: err instanceof Error ? err.message : 'Failed to start analysis' 
+      console.error('[Action] runAnalysis: Error', err)
+      return {
+        success: false,
+        error: err instanceof Error ? err.message : 'Failed to start analysis'
       }
     }
   }
 
-  // Background analysis execution
+  /**
+   * Background analysis execution — 10 attempts per measurement per provider.
+   */
   private async runAnalysisInBackground(
     analysisRun: AnalysisRun,
-    business: Business,
-    queries: Query[],
+    product: Product,
+    measurements: Measurement[],
     providers: LLMProvider[],
     db: DatabaseService
   ) {
     const startTime = Date.now()
-    console.log(`🔄 Background analysis started for "${business.name}"`)
-    
+    console.log(`[Service] Background analysis started for "${product.name}"`)
+
     try {
       let completedCalls = 0
-      const totalCalls = queries.length * providers.length * 5
+      const totalCalls = measurements.length * providers.length * ATTEMPTS_PER_MEASUREMENT
       let successfulCalls = 0
       let failedCalls = 0
 
-      // Update total calls in analysis run
-      await db.updateAnalysisRun(analysisRun.id, {
-        total_llm_calls: totalCalls
-      })
+      await db.updateAnalysisRun(analysisRun.id, { total_llm_calls: totalCalls })
 
-      for (let queryIndex = 0; queryIndex < queries.length; queryIndex++) {
-        const query = queries[queryIndex]
-
+      for (let mIdx = 0; mIdx < measurements.length; mIdx++) {
+        const measurement = measurements[mIdx]
         const rankingAttempts: any[] = []
 
         for (const provider of providers) {
-
-          for (let attemptNum = 1; attemptNum <= 5; attemptNum++) {
-            try {              
-              const result = await LLMService.makeRequest(provider, query.text, business.name, 25)
+          for (let attemptNum = 1; attemptNum <= ATTEMPTS_PER_MEASUREMENT; attemptNum++) {
+            try {
+              const result = await LLMService.makeRequest(provider, measurement.query, product.name, 25)
               completedCalls++
+              if (result.success) successfulCalls++
+              else failedCalls++
 
-              if (result.success) {
-                successfulCalls++
-              } else {
-                failedCalls++
-              }
-
-              // Save ALL results, whether successful or not
               rankingAttempts.push({
                 analysis_run_id: analysisRun.id,
-                query_id: query.id,
+                measurement_id: measurement.id,
                 llm_provider_id: provider.id,
                 attempt_number: attemptNum,
                 parsed_ranking: result.rankedBusinesses || [],
-                target_business_rank: result.foundBusinessRank,
+                target_product_rank: result.foundBusinessRank,
                 success: result.success,
                 error_message: result.error || null,
               })
 
-              // Update progress in database every 5 calls or at the end
               if (completedCalls % 5 === 0 || completedCalls === totalCalls) {
                 try {
-                  await db.updateAnalysisRun(analysisRun.id, {
-                    completed_llm_calls: completedCalls
-                  })
-                } catch (updateError) {
-                  console.warn(`⚠️ Failed to update progress (${completedCalls}/${totalCalls}):`, updateError instanceof Error ? updateError.message : updateError)
-                  // Continue analysis even if progress update fails
+                  await db.updateAnalysisRun(analysisRun.id, { completed_llm_calls: completedCalls })
+                } catch (e) {
+                  console.warn(`[Service] Failed to update progress (${completedCalls}/${totalCalls}):`, e instanceof Error ? e.message : e)
                 }
               }
 
-              // Small delay between requests
-              if (attemptNum < 5) {
+              if (attemptNum < ATTEMPTS_PER_MEASUREMENT) {
                 await new Promise(resolve => setTimeout(resolve, 1000))
               }
-
             } catch (err) {
-              console.error(`💥 Error in ${provider.name} attempt ${attemptNum}:`, err)
+              console.error(`[Service] Error in ${provider.name} attempt ${attemptNum}:`, err)
               completedCalls++
 
-              // Save failed attempt
               const errorMessage = err instanceof Error ? err.message : String(err)
               rankingAttempts.push({
                 analysis_run_id: analysisRun.id,
-                query_id: query.id,
+                measurement_id: measurement.id,
                 llm_provider_id: provider.id,
                 attempt_number: attemptNum,
                 parsed_ranking: [],
-                target_business_rank: null,
+                target_product_rank: null,
                 success: false,
                 error_message: errorMessage,
               })
 
-              // Update progress even on error
               if (completedCalls % 5 === 0 || completedCalls === totalCalls) {
                 try {
-                  await db.updateAnalysisRun(analysisRun.id, {
-                    completed_llm_calls: completedCalls
-                  })
-                } catch (updateError) {
-                  console.warn(`⚠️ Failed to update progress after error (${completedCalls}/${totalCalls}):`, updateError instanceof Error ? updateError.message : updateError)
-                  // Continue analysis even if progress update fails
-                }
+                  await db.updateAnalysisRun(analysisRun.id, { completed_llm_calls: completedCalls })
+                } catch {}
               }
 
-              // Check for auth errors and skip remaining attempts
-              if (errorMessage.toLowerCase().includes('api key') || 
-                  errorMessage.toLowerCase().includes('unauthorized') || 
+              // Auth errors → skip remaining attempts for this provider
+              if (errorMessage.toLowerCase().includes('api key') ||
+                  errorMessage.toLowerCase().includes('unauthorized') ||
                   errorMessage.toLowerCase().includes('authentication')) {
-                console.warn(`🔑 ${provider.name} auth issues - skipping remaining attempts`)
-                
-                // Skip remaining attempts for this provider and save them as failed
-                for (let skipAttempt = attemptNum + 1; skipAttempt <= 5; skipAttempt++) {
+                console.warn(`[Service] ${provider.name} auth issue — skipping remaining attempts`)
+                for (let skip = attemptNum + 1; skip <= ATTEMPTS_PER_MEASUREMENT; skip++) {
                   completedCalls++
                   rankingAttempts.push({
                     analysis_run_id: analysisRun.id,
-                    query_id: query.id,
+                    measurement_id: measurement.id,
                     llm_provider_id: provider.id,
-                    attempt_number: skipAttempt,
+                    attempt_number: skip,
                     parsed_ranking: [],
-                    target_business_rank: null,
+                    target_product_rank: null,
                     success: false,
                     error_message: `Skipped due to authentication error: ${errorMessage}`,
                   })
                 }
-                
                 try {
-                  await db.updateAnalysisRun(analysisRun.id, {
-                    completed_llm_calls: completedCalls
-                  })
-                } catch (updateError) {
-                  console.warn(`⚠️ Failed to update progress after auth error skip:`, updateError instanceof Error ? updateError.message : updateError)
-                  // Continue analysis even if progress update fails
-                }
-                
+                  await db.updateAnalysisRun(analysisRun.id, { completed_llm_calls: completedCalls })
+                } catch {}
                 break
               }
             }
@@ -224,82 +194,61 @@ export class AnalysisService {
           await new Promise(resolve => setTimeout(resolve, 2000))
         }
 
-        // Save ranking attempts for this query
+        // Save ranking attempts for this measurement
         if (rankingAttempts.length > 0) {
           try {
             await db.saveRankingAttempts(rankingAttempts)
-          } catch (saveError) {
-            console.warn(`⚠️ Failed to save ranking attempts for query "${query.text}":`, saveError instanceof Error ? saveError.message : saveError)
-            // Continue analysis even if saving attempts fails
+          } catch (e) {
+            console.warn(`[Service] Failed to save ranking attempts for measurement "${measurement.title}":`, e instanceof Error ? e.message : e)
           }
-        } else {
-          console.warn(`⚠️ No ranking attempts to save for query: ${query.text}`)
         }
 
-        // Update completed queries
+        // Update completed measurements
         try {
-          await db.updateAnalysisRun(analysisRun.id, {
-            completed_queries: queryIndex + 1
-          })
-        } catch (updateError) {
-          console.warn(`⚠️ Failed to update completed queries count:`, updateError instanceof Error ? updateError.message : updateError)
-          // Continue analysis even if query count update fails
-        }
+          await db.updateAnalysisRun(analysisRun.id, { completed_measurements: mIdx + 1 })
+        } catch {}
       }
 
-      // Mark analysis as completed
+      // Mark completed
       try {
         await db.updateAnalysisRun(analysisRun.id, {
           status: 'completed',
-          completed_queries: queries.length,
+          completed_measurements: measurements.length,
           completed_llm_calls: totalCalls,
           completed_at: new Date().toISOString()
         })
-        console.log('✅ Analysis marked as completed successfully')
-      } catch (completionError) {
-        console.warn(`⚠️ Failed to mark analysis as completed:`, completionError instanceof Error ? completionError.message : completionError)
-        // Analysis data is still collected, just status update failed
+      } catch (e) {
+        console.warn('[Service] Failed to mark analysis as completed:', e instanceof Error ? e.message : e)
       }
 
+      // Populate competitor results
       try {
-        const competitorResultsCount = await db.populateCompetitorResultsForAnalysisRun(analysisRun.id)
-        
+        const count = await db.populateCompetitorResultsForAnalysisRun(analysisRun.id)
         const duration = Math.round((Date.now() - startTime) / 1000)
-        console.log(`🎉 ANALYSIS COMPLETED for "${business.name}" in ${duration}s`)
-        console.log(`📈 Results: ${successfulCalls}/${totalCalls} successful calls, ${failedCalls} failed`)
-        console.log(`🏆 Competitors: ${competitorResultsCount} competitor results generated`)
-        console.log(`📋 Summary: ${queries.length} queries analyzed across ${providers.length} LLM providers`)
-        
-      } catch (competitorError) {
-        console.error('❌ Failed to populate competitor results:', competitorError instanceof Error ? competitorError.message : competitorError)
-        
-        // Still log completion even if competitor results failed
+        console.log(`[Service] ANALYSIS COMPLETED for "${product.name}" in ${duration}s — ${successfulCalls}/${totalCalls} successful, ${count} competitor results`)
+      } catch (e) {
+        console.error('[Service] Failed to populate competitor results:', e instanceof Error ? e.message : e)
         const duration = Math.round((Date.now() - startTime) / 1000)
-        console.log(`🎉 ANALYSIS COMPLETED for "${business.name}" in ${duration}s (competitor results failed)`)
-        console.log(`📈 Results: ${successfulCalls}/${totalCalls} successful calls, ${failedCalls} failed`)
-        console.log(`📋 Summary: ${queries.length} queries analyzed across ${providers.length} LLM providers`)
+        console.log(`[Service] ANALYSIS COMPLETED for "${product.name}" in ${duration}s (competitor results failed)`)
       }
-
     } catch (err) {
       const duration = Math.round((Date.now() - startTime) / 1000)
-      console.error(`💥 ANALYSIS FAILED for "${business.name}" after ${duration}s:`, err instanceof Error ? err.message : err)
-      
-      // Mark analysis as failed
+      console.error(`[Service] ANALYSIS FAILED for "${product.name}" after ${duration}s:`, err instanceof Error ? err.message : err)
+
       try {
         await db.updateAnalysisRun(analysisRun.id, {
           status: 'failed',
           error_message: err instanceof Error ? err.message : 'Unknown error',
           completed_at: new Date().toISOString()
         })
-        console.log(`📝 Analysis failure status saved to database`)
-      } catch (failureUpdateError) {
-        console.error(`❌ Failed to mark analysis as failed:`, failureUpdateError instanceof Error ? failureUpdateError.message : failureUpdateError)
-      }
+      } catch {}
     }
   }
 
-  // Get analysis status
-  async getAnalysisStatus(businessId: string): Promise<AnalysisRun | null> {
-    return await this.dbService.getRunningAnalysisForBusiness(businessId)
+  /**
+   * Get currently running analysis for a product.
+   */
+  async getAnalysisStatus(productId: string): Promise<AnalysisRun | null> {
+    return await this.dbService.getRunningAnalysisForProduct(productId)
   }
 }

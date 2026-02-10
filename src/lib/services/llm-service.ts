@@ -173,7 +173,7 @@ export class LLMService {
 
     try {
   const standardizedText = await this.callGemini(
-    buildStandardizationPrompt({ businessNames, userBusinessName })
+    buildStandardizationPrompt({ productNames: businessNames, userProductName: userBusinessName })
   )
       
       // Extract standardized names
@@ -300,7 +300,7 @@ export class LLMService {
     console.log(`🤖 ${provider.name} request: "${query}" for "${businessName}"`)
     
     try {
-  const prompt = buildRankingPrompt({ query, userBusinessName: businessName, count: requestCount })
+  const prompt = buildRankingPrompt({ query, userProductName: businessName, count: requestCount })
       let content = ''
       
       // Normalize provider name & get canonical model

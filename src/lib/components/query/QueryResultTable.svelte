@@ -27,13 +27,13 @@
 
   function getStatus(result: any): string {
     if (!result.success) return 'error'
-    if (result.target_business_rank !== null) return 'found'
+    if (result.target_product_rank !== null) return 'found'
     return 'not_found'
   }
 
   function getStatusText(result: any): string {
     if (!result.success) return 'Error'
-    if (result.target_business_rank !== null) return 'Found'
+    if (result.target_product_rank !== null) return 'Found'
     return 'Not Found'
   }
 </script>
@@ -86,9 +86,9 @@
                 </span>
               </td>
               <td class="px-6 py-4 whitespace-nowrap">
-                {#if result.target_business_rank !== null}
-                  <span class="inline-flex px-2 py-1 text-xs font-semibold rounded-full {getRankBadgeClass(result.target_business_rank)}">
-                    {formatRank(result.target_business_rank)}
+                {#if result.target_product_rank !== null}
+                  <span class="inline-flex px-2 py-1 text-xs font-semibold rounded-full {getRankBadgeClass(result.target_product_rank)}">
+                    {formatRank(result.target_product_rank)}
                   </span>
                 {:else}
                   <span class="text-gray-400 text-sm">—</span>

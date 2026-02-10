@@ -3,7 +3,7 @@
   import { goto } from "$app/navigation";
   import type { PageData } from "./$types";
   import ErrorMessage from "../../../lib/components/ui/ErrorMessage.svelte";
-  import type { Query, RankingAttempt, LLMProvider } from "../../../lib/types";
+  import type { Measurement, RankingAttempt, LLMProvider } from "../../../lib/types";
   import Card from "$lib/components/ui/Card.svelte";
   import Button from "$lib/components/ui/Button.svelte";
   import QueryHeader from "$lib/components/query/QueryHeader.svelte";
@@ -17,7 +17,7 @@
   let { data }: Props = $props();
 
   const user = $derived(data.user);
-  let query = $state<Query | null>(data.query);
+  let query = $state<Measurement | null>(data.query);
   let analysisRuns = $state<{ id: string; created_at: string }[]>(
     data.analysisRuns
   );
@@ -80,10 +80,10 @@
       : rawRows;
 
     if (!providerName) {
-      // Combined view: group by business and average across providers
+      // Combined view: group by product and average across providers
       const groups = new Map<string, any>();
       rows.forEach((c) => {
-        const key = c.business_name;
+        const key = c.product_name;
         if (!groups.has(key)) {
           groups.set(key, {
             ...c,
@@ -106,7 +106,7 @@
         const providerAverages: number[] = [];
         const providerWeighted: number[] = [];
         rows.forEach((c) => {
-          if (c.business_name === g.business_name) {
+          if (c.product_name === g.product_name) {
             providerAverages.push(c.average_rank);
             providerWeighted.push(c.weighted_score);
           }
@@ -148,7 +148,7 @@
       >← Back to Dashboard</Button>
     {:else if query}
       <QueryHeader 
-        queryText={query.text}
+        queryText={query.title || query.query}
         {llmProviders}
         {selectedProvider}
         onBack={goBack}

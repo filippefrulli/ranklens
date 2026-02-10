@@ -5,6 +5,7 @@
   export let show: boolean;
   export let loading: boolean;
   export let newQuery: string;
+  export let productId: string;
   export let onClose: () => void;
   export let isAIGenerated: boolean = false;
 </script>
@@ -17,16 +18,16 @@
       {#if isAIGenerated}
         <div class="flex items-center mb-4">
           <h3 class="text-lg font-semibold text-gray-900">
-            Review and Edit Query
+            Review and Edit Measurement
           </h3>
         </div>
       {:else}
-        <h3 class="text-lg font-semibold text-gray-900 mb-4">Add Query</h3>
+        <h3 class="text-lg font-semibold text-gray-900 mb-4">Add Measurement</h3>
       {/if}
 
       <form
         method="POST"
-        action="?/addQuery"
+        action="?/addMeasurement"
         use:enhance={({ formData }) => {
           loading = true;
           
@@ -38,13 +39,13 @@
               onClose();
               await update();
             } else if (result.type === 'failure' && result.data) {
-              // Handle validation errors - could show error in modal
               console.error('Form validation error:', result.data);
             }
           };
         }}
         class="space-y-4"
       >
+        <input type="hidden" name="productId" value={productId} />
         <div>
           <textarea
             id="query-text"
@@ -60,7 +61,7 @@
           {#if !isAIGenerated}
             <p class="text-xs text-gray-500 mt-1">
               Enter a search phrase that represents what customers might search
-              for when looking for your business.
+              for when looking for your product.
             </p>
           {/if}
         </div>
@@ -79,7 +80,7 @@
             variant="primary"
             size="md"
             class="px-4 py-2 text-sm"
-          >{loading ? 'Adding...' : 'Add Query'}</Button>
+          >{loading ? 'Adding...' : 'Add Measurement'}</Button>
         </div>
       </form>
     </div>

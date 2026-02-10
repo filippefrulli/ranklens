@@ -1,7 +1,7 @@
 <script lang="ts">
-  import type { Business } from '../../types'
+  import type { Company } from '../../types'
   
-  export let business: Business | null
+  export let business: Company | null
 </script>
 
 {#if business}

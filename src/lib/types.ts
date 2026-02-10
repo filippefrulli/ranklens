@@ -1,89 +1,85 @@
-// Core data models for RankLens
+// Core data models for RankLens (v2 — product-based schema)
 
-export interface Business {
+export interface Company {
   id: string
   user_id: string
   name: string
-  city?: string
-  google_place_id: string
+  google_place_id?: string
   google_primary_type?: string
   google_primary_type_display?: string
-  google_types?: string[]
   created_at: string
   updated_at: string
 }
 
-export interface Query {
+export interface Product {
   id: string
-  business_id: string  // Updated to reference business instead of project
-  text: string
-  order_index: number
+  company_id: string
+  name: string
+  description?: string
+  image_url?: string
+  display_order: number
+  is_active: boolean
   created_at: string
+  updated_at: string
+}
+
+export interface Measurement {
+  id: string
+  product_id: string
+  title: string
+  query: string
+  display_order: number
+  is_active: boolean
+  created_at: string
+  updated_at: string
 }
 
 export interface LLMProvider {
   id: string
   name: string
+  display_name: string
+  model_name?: string
   is_active: boolean
+  created_at: string
 }
 
 export interface AnalysisRun {
   id: string
-  business_id: string
-  run_date: string
-  week_start_date?: string
-  status: 'pending' | 'running' | 'completed' | 'failed'
-  total_queries: number
-  completed_queries: number
+  product_id: string
+  status: 'pending' | 'running' | 'completed' | 'failed' | 'cancelled'
+  total_measurements: number
+  completed_measurements: number
   total_llm_calls: number
   completed_llm_calls: number
-  error_message?: string
   started_at?: string
   completed_at?: string
+  duration_seconds?: number
+  error_message?: string
   created_at: string
-}
-
-// Weekly analysis check result
-export interface WeeklyAnalysisCheck {
-  canRun: boolean
-  lastRunDate?: string
-  nextAllowedDate?: string
-  currentWeekRun?: AnalysisRun
 }
 
 export interface RankingAttempt {
   id: string
   analysis_run_id: string
-  query_id: string
+  measurement_id: string
   llm_provider_id: string
-  attempt_number: number // 1-5 for each query
+  attempt_number: number // 1-10
   raw_response?: string
-  parsed_ranking: string[] // JSON array of business names in order
-  target_business_rank?: number // null if business not found in results
+  parsed_ranking: string[] // ordered list of product names
+  target_product_rank?: number // null if not found
+  total_products_mentioned?: number
   success: boolean
   error_message?: string
-  created_at: string
-}
-
-export interface RankingSource {
-  id: string
-  ranking_attempt_id: string
-  business_name: string
-  rank_position: number
-  source_url?: string
-  source_title?: string
-  source_domain?: string
-  source_type?: string
-  excerpt?: string
-  relevance_score?: number
+  response_time_ms?: number
   created_at: string
 }
 
 export interface CompetitorResult {
   id: string
-  query_id: string
   analysis_run_id: string
-  business_name: string
+  measurement_id: string
+  product_name: string
+  is_target: boolean
   average_rank: number
   best_rank: number
   worst_rank: number
@@ -93,25 +89,24 @@ export interface CompetitorResult {
   weighted_score: number
   llm_providers: string[]
   raw_ranks: number[]
-  is_user_business: boolean
   created_at: string
 }
 
-// Keep the old RankingResult interface for backward compatibility
-export interface RankingResult {
-  id: string
-  query_id: string
-  llm_provider_id: string
-  attempt_number: number
-  ranked_businesses: string[]
-  target_business_rank?: number
-  response_time_ms: number
+// Composite types for UI
+
+export interface MeasurementRankingHistory {
+  analysis_run_id: string
   created_at: string
+  average_rank: number | null
+  best_rank: number | null
+  worst_rank: number | null
+  total_attempts: number
+  successful_attempts: number
 }
 
 export interface RankingAnalytics {
-  query_id: string
-  query_text: string
+  measurement_id: string
+  measurement_title: string
   average_rank?: number
   total_mentions: number
   llm_breakdown: {
@@ -122,28 +117,19 @@ export interface RankingAnalytics {
     worst_rank?: number
   }[]
   competitors_ranked_higher: {
-    business_name: string
+    product_name: string
     average_rank: number
     mention_count: number
   }[]
 }
 
-export interface QueryRankingHistory {
-  run_date: string
-  analysis_run_id: string
-  average_rank: number | null
-  best_rank: number | null
-  worst_rank: number | null
-  total_attempts: number
-  successful_attempts: number
-}
-
 export interface DashboardData {
-  business: Business
-  queries: Query[]
+  company: Company
+  product: Product
+  measurements: Measurement[]
   analytics: RankingAnalytics[]
   overall_stats: {
-    total_queries: number
+    total_measurements: number
     total_llm_calls: number
     overall_average_rank?: number
     total_mentions: number

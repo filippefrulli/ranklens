@@ -1,13 +1,13 @@
 <script lang="ts">
   import { onMount } from 'svelte'
-  import type { Query, RankingAnalytics, QueryRankingHistory } from '../../types'
+  import type { Measurement, RankingAnalytics, MeasurementRankingHistory } from '../../types'
   import QueryCard from './QueryCard.svelte'
   import Button from '../ui/Button.svelte'
   
   interface Props {
-    queries: Query[]
+    queries: Measurement[]
     analytics: RankingAnalytics[]
-    queryHistories?: Map<string, QueryRankingHistory[]> // Pass from server instead
+    queryHistories?: Map<string, MeasurementRankingHistory[]> // Pass from server instead
     onAddQuery: () => void
     onGetAISuggestions?: () => void
   }
@@ -69,7 +69,7 @@
 {:else}
   <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
     {#each queries as query}
-      {@const queryAnalytics = analytics.find((a) => a.query_id === query.id)}
+      {@const queryAnalytics = analytics.find((a) => a.measurement_id === query.id)}
       {@const queryHistory = queryHistories.get(query.id) || []}
       <QueryCard 
         {query} 

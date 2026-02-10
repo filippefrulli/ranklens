@@ -1,12 +1,12 @@
 <script lang="ts">
   import type { User } from "@supabase/supabase-js";
   import type {
-    Business,
+    Company,
+    Product,
     LLMProvider,
-    WeeklyAnalysisCheck,
     QuerySuggestion,
-    Query,
-    QueryRankingHistory,
+    Measurement,
+    MeasurementRankingHistory,
     AnalysisRun,
   } from "../../types";
   import { enhance } from "$app/forms";
@@ -27,10 +27,11 @@
   interface Props {
     form?: any;
     user: User | null;
-    business: Business | null;
-    queries?: Query[];
-    queryHistories?: Record<string, QueryRankingHistory[]>;
-    weeklyCheck?: WeeklyAnalysisCheck | null;
+    company: Company | null;
+    activeProduct: Product | null;
+    products?: Product[];
+    measurements?: Measurement[];
+    measurementHistories?: Record<string, MeasurementRankingHistory[]>;
     runningAnalysis?: AnalysisRun | null;
     llmProviders?: LLMProvider[];
     querySuggestions?: string[];
@@ -41,10 +42,11 @@
   let {
     form,
     user,
-    business,
-    queries = [],
-    queryHistories = {},
-    weeklyCheck = null,
+    company,
+    activeProduct,
+    products = [],
+    measurements = [],
+    measurementHistories = {},
     runningAnalysis: runningAnalysisProp = null,
     llmProviders = [],
     querySuggestions: serverSuggestions = [],
@@ -63,63 +65,28 @@
 
   // Sync local state with prop changes from server invalidation
   $effect(() => {
-    // If server says no running analysis, clear local state
     if (!runningAnalysisProp) {
-      // Don't clear if we just started an analysis (give it time to appear in DB)
-      if (justStartedAnalysis) {
-        return;
-      }
-      
-      // Only clear if we had a real analysis (not temp)
+      if (justStartedAnalysis) return;
       if (runningAnalysis && runningAnalysis.id !== 'temp') {
-        // Stop polling immediately
         stopProgressTracking();
-        
-        // Mark as completed if it was running
-        if (runningAnalysis.id) {
-          completedAnalysisIds.add(runningAnalysis.id);
-        }
-        
-        // Keep progress bar visible for 3 seconds then hide
-        setTimeout(() => {
-          runningAnalysis = null;
-        }, 3000);
+        if (runningAnalysis.id) completedAnalysisIds.add(runningAnalysis.id);
+        setTimeout(() => { runningAnalysis = null; }, 3000);
       }
       return;
     }
     
-    // Clear the flag once we have data from server
-    if (justStartedAnalysis) {
-      justStartedAnalysis = false;
-    }
+    if (justStartedAnalysis) justStartedAnalysis = false;
+    if (runningAnalysisProp.id && completedAnalysisIds.has(runningAnalysisProp.id)) return;
     
-    // Don't sync if this analysis ID has already been marked complete locally
-    if (runningAnalysisProp.id && completedAnalysisIds.has(runningAnalysisProp.id)) {
-      return;
-    }
-    
-    // Sync when we get updates from server
     if (runningAnalysisProp.id && runningAnalysisProp.id !== 'temp') {
-      // Check if analysis is complete
       if (runningAnalysisProp.status === 'completed' || runningAnalysisProp.status === 'failed' ||
           (runningAnalysisProp.completed_llm_calls > 0 && 
            runningAnalysisProp.completed_llm_calls >= runningAnalysisProp.total_llm_calls)) {
-        
-        // Update to completed state
         runningAnalysis = { ...runningAnalysisProp, status: 'completed' };
-        
-        // Mark as completed
         completedAnalysisIds.add(runningAnalysisProp.id);
-        
-        // Stop polling
         stopProgressTracking();
-        
-        // Keep progress bar visible for 3 seconds then hide
-        setTimeout(() => {
-          runningAnalysis = null;
-        }, 3000);
+        setTimeout(() => { runningAnalysis = null; }, 3000);
       } else {
-        // Update with latest progress
         runningAnalysis = runningAnalysisProp;
       }
     }
@@ -133,51 +100,45 @@
   let showCreateBusiness = $state(false);
   let showGoogleSearch = $state(false);
   let showAddQuery = $state(false);
-  let showQuerySuggestions = $state(false);
+  let showAddProduct = $state(false);
   let isAIGeneratedQuery = $state(false);
 
   // Query suggestions state
-  // Note: We cache suggestions per-business in localStorage so they persist across reloads.
   let querySuggestions = $state<QuerySuggestion[]>(
     serverSuggestions.map((text) => ({ text, reasoning: "" }))
   );
   let loadingSuggestions = $state(false);
   let suggestionError = $state<string | null>(null);
 
-  // Helper to set suggestions from server responses and immediately update cache
   function setSuggestionsAndCache(texts: string[]) {
     const items = texts.map((text) => ({ text, reasoning: "" }));
     querySuggestions = items;
-    if (browser && business?.id) {
-      saveSuggestions(business.id, items);
+    if (browser && activeProduct?.id) {
+      saveSuggestions(activeProduct.id, items);
     }
   }
 
-  // Static estimated time logic (60s per query, no live progress / countdown)
-  const SECONDS_PER_QUERY = 60;
+  // Static estimated time logic (60s per measurement, no live progress / countdown)
+  const SECONDS_PER_MEASUREMENT = 60;
   let estimation = $state<{ totalSeconds: number }>({ totalSeconds: 0 });
 
   $effect(() => {
     if (runningAnalysis) {
-      const totalSeconds = (runningAnalysis.total_queries || queries.length) * SECONDS_PER_QUERY;
+      const totalSeconds = (runningAnalysis.total_measurements || measurements.length) * SECONDS_PER_MEASUREMENT;
       estimation = { totalSeconds };
     } else {
       estimation = { totalSeconds: 0 };
     }
   });
 
-  // Auto-hide analysis indicator when either:
-  // 1. A future server refresh sets status to completed (handled by conditional block), or
-  // 2. Local optimistic timer exceeds estimated time + small buffer.
+  // Auto-hide analysis indicator
   let hideTimeout: any;
   $effect(() => {
     if (runningAnalysis) {
-      // Clear any previous timeout
       if (hideTimeout) clearTimeout(hideTimeout);
-      const bufferMs = 15_000; // 15s buffer beyond estimate
+      const bufferMs = 15_000;
       const durationMs = estimation.totalSeconds * 1000 + bufferMs;
       hideTimeout = setTimeout(() => {
-        // If still marked running (optimistic) after estimate + buffer, hide it
         if (runningAnalysis && runningAnalysis.status === 'running') {
           runningAnalysis = null;
         }
@@ -188,201 +149,118 @@
     }
   });
 
-  // Server-side polling approach - use SvelteKit's invalidate() every 10 seconds
+  // Server-side polling
   let pollInterval: any = null;
 
   function startProgressTracking() {
-    if (!browser || !runningAnalysis?.id || runningAnalysis.id === 'temp') {
-      return;
-    }
-    
-    // Clear any existing polling
-    if (pollInterval) {
-      clearInterval(pollInterval);
-      pollInterval = null;
-    }
-
-    // Poll every 10 seconds using SvelteKit's invalidate()
+    if (!browser || !runningAnalysis?.id || runningAnalysis.id === 'temp') return;
+    if (pollInterval) { clearInterval(pollInterval); pollInterval = null; }
     pollInterval = setInterval(async () => {
       if (!runningAnalysis?.id || runningAnalysis.id === 'temp') return;
-      
-      try {
-        // Invalidate the load function to fetch fresh data
-        await invalidate('app:analysis-status');
-      } catch (e) {
-        console.error('❌ Failed to invalidate analysis status:', e);
+      try { await invalidate('app:analysis-status'); } catch (e) {
+        console.error('[Dashboard] Failed to invalidate:', e);
       }
     }, 10000);
   }
 
   function stopProgressTracking() {
-    if (pollInterval) {
-      clearInterval(pollInterval);
-      pollInterval = null;
-    }
+    if (pollInterval) { clearInterval(pollInterval); pollInterval = null; }
   }
 
   $effect(() => {
-    // Start polling when we have a real analysis ID (not temp) and it's not already completed
     if (browser && runningAnalysis && 
         (runningAnalysis.status === 'running' || runningAnalysis.status === 'pending') && 
         runningAnalysis.id && runningAnalysis.id !== 'temp') {
-      
-      // Only start if not already polling
-      if (!pollInterval) {
-        startProgressTracking();
-      }
-      
-      return () => {
-        stopProgressTracking();
-      };
+      if (!pollInterval) startProgressTracking();
+      return () => { stopProgressTracking(); };
     } else {
-      // Only stop if we're not manually polling
-      if (runningAnalysis?.id !== 'temp') {
-        stopProgressTracking();
-      }
+      if (runningAnalysis?.id !== 'temp') stopProgressTracking();
     }
   });
 
-  // Form data
-  let newBusiness = $state({
+  // Form data for new company creation
+  let newCompany = $state({
     name: "",
     google_place_id: "",
     city: "",
     google_primary_type: "",
     google_primary_type_display: "",
-    google_types: [],
+    google_types: [] as string[],
   });
   let newQuery = $state("");
+  let newProductName = $state("");
 
-  // Create dashboard data from server props
-  let dashboardData = $derived.by(() => {
-    if (!business || !queries) return null;
-
-    return {
-      business,
-      queries,
-      analytics: [], // TODO: Load analytics from server
-      queryHistories: Object.entries(queryHistories).map(
-        ([queryId, history]) => ({
-          query_id: queryId,
-          history,
-        })
-      ),
-    };
-  });
-
-  // Create filtered dashboard data based on selected provider
-  let filteredDashboardData = $derived.by(() => {
-    if (!dashboardData || !selectedProvider) return dashboardData;
-
-    // For now, return unfiltered data since analytics are empty
-    // This will be properly implemented when analytics are loaded from server
-    return dashboardData;
-  });
-  // Hydrate suggestions from cache when business changes or on mount
+  // Hydrate suggestions from cache when product changes
   $effect(() => {
-    if (!browser || !business?.id) return;
-    const cached = loadSuggestions(business.id);
+    if (!browser || !activeProduct?.id) return;
+    const cached = loadSuggestions(activeProduct.id);
     if (cached && cached.length > 0) {
       querySuggestions = cached;
     } else {
-      // fall back to any server-provided suggestions
       querySuggestions = (serverSuggestions || []).map((t) => ({ text: t, reasoning: "" }));
     }
   });
 
-  // Persist to cache whenever suggestions change and we have a business id
   $effect(() => {
-    if (!browser || !business?.id) return;
+    if (!browser || !activeProduct?.id) return;
     if (!querySuggestions || querySuggestions.length === 0) return;
-    saveSuggestions(business.id, querySuggestions);
+    saveSuggestions(activeProduct.id, querySuggestions);
   });
 
-  // Initialize selected provider (start with "All Providers" - null)
-  $effect(() => {
-    if (llmProviders.length > 0 && selectedProvider === null) {
-      selectedProvider = null; // This represents "All Providers"
-    }
-  });
-
-  // Format helper for human-friendly datetime
+  // Format helper
   function formatDateTime(d: string | Date): string {
     const dt = d instanceof Date ? d : new Date(d);
     if (isNaN(dt.getTime())) return '—';
     return dt.toLocaleString('en-US', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit'
+      year: 'numeric', month: 'short', day: 'numeric',
+      hour: '2-digit', minute: '2-digit'
     });
   }
 
-  // Derive the most recent analysis run date across available sources
   const lastAnalysisText = $derived.by(() => {
     if (runningAnalysis && runningAnalysis.status === 'running') return 'Running…';
-
     const candidates: number[] = [];
-    if (weeklyCheck?.lastRunDate) candidates.push(new Date(weeklyCheck.lastRunDate).getTime());
-    if (weeklyCheck?.currentWeekRun?.run_date) candidates.push(new Date(weeklyCheck.currentWeekRun.run_date).getTime());
-    if (weeklyCheck?.currentWeekRun?.completed_at) candidates.push(new Date(weeklyCheck.currentWeekRun.completed_at).getTime());
-
-    // Also look through queryHistories to find the max run_date
     try {
-      for (const list of Object.values(queryHistories || {})) {
+      for (const list of Object.values(measurementHistories || {})) {
         for (const item of list) {
-          if (item?.run_date) {
-            const t = new Date(item.run_date).getTime();
+          if (item?.created_at) {
+            const t = new Date(item.created_at).getTime();
             if (!isNaN(t)) candidates.push(t);
           }
         }
       }
     } catch {}
-
     if (candidates.length === 0) return 'Never';
-    const maxTs = Math.max(...candidates);
-    return formatDateTime(new Date(maxTs));
+    return formatDateTime(new Date(Math.max(...candidates)));
   });
 
-  // Event handlers for business selection
+  // Event handlers for company/business selection
   function handleBusinessSelected(selectedBusiness: any) {
-    newBusiness = {
+    newCompany = {
       name: selectedBusiness.name,
       google_place_id: selectedBusiness.google_place_id,
       city: selectedBusiness.city,
       google_primary_type: selectedBusiness.google_primary_type || "",
-      google_primary_type_display:
-        selectedBusiness.google_primary_type_display || "",
+      google_primary_type_display: selectedBusiness.google_primary_type_display || "",
       google_types: selectedBusiness.google_types || [],
     };
     showGoogleSearch = false;
     showCreateBusiness = true;
   }
 
-  // Query suggestions handlers
   function acceptQuerySuggestion(queryText: string) {
     newQuery = queryText;
     isAIGeneratedQuery = true;
     showAddQuery = true;
   }
 
-  // Removed auto-reload logic; page stays in place during analysis.
-
-  // UI helper functions
-  function dismissError() {
-    error = null;
-  }
-
-  function handleProviderSelection(provider: LLMProvider | null) {
-    selectedProvider = provider;
-  }
+  function dismissError() { error = null; }
 </script>
 
-{#if user && business}
+{#if user && company && activeProduct}
   <div class="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100">
     <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
-      <!-- Business Summary / Header Card -->
+      <!-- Company + Product Header Card -->
       <div class="grid gap-6 lg:grid-cols-12">
         <div class="lg:col-span-12 space-y-6">
           <Card
@@ -391,45 +269,30 @@
             custom="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4"
           >
             <div>
-              <h2
-                class="text-xl font-semibold text-gray-900 flex items-center gap-2"
-              >
-                <span
-                  class="inline-flex h-10 w-10 items-center justify-center rounded-lg bg-black/5 text-black font-bold text-lg"
-                  >{business.name?.[0] || "B"}</span
+              <h2 class="text-xl font-semibold text-gray-900 flex items-center gap-2">
+                <span class="inline-flex h-10 w-10 items-center justify-center rounded-lg bg-black/5 text-black font-bold text-lg"
+                  >{activeProduct.name?.[0] || "P"}</span
                 >
-                {business.name}
+                {activeProduct.name}
               </h2>
               <p class="text-sm text-gray-600 mt-1 flex items-center gap-2">
-                <svg
-                  class="w-4 h-4 text-gray-400"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                  ><path
-                    stroke-linecap="round"
-                    stroke-linejoin="round"
-                    stroke-width="2"
-                    d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"
-                  /><path
-                    stroke-linecap="round"
-                    stroke-linejoin="round"
-                    stroke-width="2"
-                    d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"
+                <svg class="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"
+                  ><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                    d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"
                   /></svg
                 >
-                {business.city || "Location N/A"}
+                {company.name}
               </p>
             </div>
             <div class="flex items-center gap-3">
               <Button
                 variant="primary"
                 size="md"
-                ariaLabel="Add query"
+                ariaLabel="Add measurement"
                 on:click={() => {
                   isAIGeneratedQuery = false;
                   showAddQuery = true;
-                }}>+ Add Query</Button
+                }}>+ Add Measurement</Button
               >
             </div>
           </Card>
@@ -437,35 +300,17 @@
           <!-- Metrics Strip -->
           <div class="grid grid-cols-2 md:grid-cols-3 gap-4">
             <Card radius="lg" padding="p-4">
-              <p
-                class="text-xs uppercase tracking-wide text-slate-500 font-medium"
-              >
-                Queries
-              </p>
-              <p class="mt-2 text-2xl font-semibold text-slate-800">
-                {queries.length}
-              </p>
+              <p class="text-xs uppercase tracking-wide text-slate-500 font-medium">Measurements</p>
+              <p class="mt-2 text-2xl font-semibold text-slate-800">{measurements.length}</p>
             </Card>
             <Card radius="lg" padding="p-4">
-              <p
-                class="text-xs uppercase tracking-wide text-slate-500 font-medium"
-              >
-                Last Analysis
-              </p>
-              <p class="mt-2 text-lg font-semibold text-slate-800">
-                {lastAnalysisText}
-              </p>
+              <p class="text-xs uppercase tracking-wide text-slate-500 font-medium">Last Analysis</p>
+              <p class="mt-2 text-lg font-semibold text-slate-800">{lastAnalysisText}</p>
             </Card>
-
             <Card radius="lg" padding="p-4">
-              <p
-                class="text-xs uppercase tracking-wide text-slate-500 font-medium"
-              >
-                Providers
-              </p>
+              <p class="text-xs uppercase tracking-wide text-slate-500 font-medium">Providers</p>
               <div class="mt-2 flex items-center gap-2 h-8">
                 {#if llmProviders && llmProviders.length > 0}
-                  <!-- Show OpenAI and Gemini logos if those providers exist -->
                   {#if llmProviders.some(p => p.name.toLowerCase().includes('openai'))}
                     <LLMLogo provider="OpenAI" size={32} class="h-8 w-8" />
                   {/if}
@@ -482,9 +327,7 @@
             </Card>
           </div>
 
-          <!-- Queries Section -->
-          <!-- Tracked Queries card moved to its own full-width row -->
-          <!-- Analysis Controls: compact button when idle, expanded card when running -->
+          <!-- Analysis Controls -->
           {#if runningAnalysis && (runningAnalysis.status === 'running' || runningAnalysis.status === 'pending' || runningAnalysis.status === 'completed')}
             <div class="mt-2 flex flex-wrap items-center gap-3">
               <AnalysisProgressBar 
@@ -492,341 +335,192 @@
                 completedCalls={runningAnalysis?.completed_llm_calls || 0}
                 totalCalls={runningAnalysis?.total_llm_calls || 0}
               />
-              <div class="flex -space-x-1">
-                {#if llmProviders.length > 4}
-                  <span class="inline-flex h-6 w-6 items-center justify-center rounded-full border border-white bg-slate-100 text-[10px] font-medium text-slate-600 ring-1 ring-slate-300">+{llmProviders.length - 4}</span>
-                {/if}
-              </div>
             </div>
           {:else}
             <div class="mt-2">
               <Button
                 variant="primary"
                 ariaLabel="Run analysis"
-                disabled={queries.length === 0 || !weeklyCheck?.canRun}
+                disabled={measurements.length === 0}
                 on:click={async () => {
-                  // Submit via fetch to avoid full page reload; optimistic UI start
-                  if (loading) return;
+                  if (loading || !activeProduct) return;
                   loading = true;
-                  justStartedAnalysis = true; // Set flag to prevent premature clearing
+                  justStartedAnalysis = true;
                   
-                  // Safety timeout: clear flag after 30 seconds even if no response
-                  const safetyTimeout = setTimeout(() => {
-                    justStartedAnalysis = false;
-                  }, 30000);
+                  const safetyTimeout = setTimeout(() => { justStartedAnalysis = false; }, 30000);
                   
                   try {
-                    // Immediately show a local placeholder so the UI switches to a 0% bar
                     const providerCount = Math.max(1, llmProviders?.length || 0);
-                    const expectedTotalCalls = (queries?.length || 0) * providerCount * 5;
+                    const expectedTotalCalls = (measurements?.length || 0) * providerCount * 10;
                     runningAnalysis = {
                       id: 'temp',
-                      business_id: business.id,
-                      run_date: new Date().toISOString(),
+                      product_id: activeProduct.id,
                       status: 'pending',
-                      total_queries: queries.length,
-                      completed_queries: 0,
+                      total_measurements: measurements.length,
+                      completed_measurements: 0,
                       total_llm_calls: expectedTotalCalls,
                       completed_llm_calls: 0,
                       created_at: new Date().toISOString()
                     } as any;
 
                     const formData = new FormData();
-                    formData.set('businessId', business.id);
+                    formData.set('productId', activeProduct.id);
                     const res = await fetch('?/runAnalysis', { method: 'POST', body: formData });
                     
                     if (!res.ok) {
-                      console.error('❌ Failed to start analysis:', res.status, res.statusText);
-                      // Revert the optimistic placeholder on failure
                       runningAnalysis = null;
                       justStartedAnalysis = false;
                       clearTimeout(safetyTimeout);
                     } else {
-                      // Try to parse the returned id
                       let analysisRunId: string | null = null;
                       try { 
                         const text = await res.text();
                         const response = JSON.parse(text);
-                        
-                        // Handle SvelteKit action response format
                         if (response.type === 'success' && response.data) {
-                          // The data is a stringified array, parse it
                           const dataArray = JSON.parse(response.data);
-                          
-                          // The real analysis run ID is in the third element (UUID format)
                           if (dataArray && dataArray[2] && typeof dataArray[2] === 'string' && dataArray[2].includes('-')) {
                             analysisRunId = dataArray[2];
                           }
-                          
-                          // Fallback to the first object's analysisRunId (but this seems to be just a counter)
                           if (!analysisRunId && dataArray && dataArray[0] && typeof dataArray[0] === 'object') {
                             analysisRunId = dataArray[0].analysisRunId?.toString();
                           }
                         }
-                        
                       } catch (e) {
                         console.error('Failed to parse response:', e);
                       }
                       
                       if (analysisRunId) {
-                        // Replace temp with real id
                         runningAnalysis = { ...runningAnalysis, id: analysisRunId } as any;
-                        
-                        // Invalidate to fetch fresh data from server
                         await invalidate('app:analysis-status');
-                        
-                        // Start polling now that we have the real ID
                         startProgressTracking();
                       }
                     }
                   } catch (e) {
                     console.error('Error starting analysis', e);
-                    justStartedAnalysis = false; // Clear flag on error
+                    justStartedAnalysis = false;
                     clearTimeout(safetyTimeout);
                   } finally {
                     loading = false;
                   }
                 }}
               >
-                <svg
-                  class="w-4 h-4 mr-2"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 22 22"
-                  ><path
-                    stroke-linecap="round"
-                    stroke-linejoin="round"
-                    stroke-width="2"
-                    d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"
-                  /><path
-                    stroke-linecap="round"
-                    stroke-linejoin="round"
-                    stroke-width="2"
-                    d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-                  /></svg
-                >
+                <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 22 22">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                    d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                    d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
                 Run Analysis
               </Button>
             </div>
           {/if}
         </div>
-        <!-- Full Width Tracked Queries Card -->
+
+        <!-- Full Width Tracked Measurements Card -->
         <div class="lg:col-span-12">
           <Card padding="p-0" custom="overflow-hidden">
-            <div
-              class="px-6 py-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-slate-200 bg-slate-50/60"
-            >
+            <div class="px-6 py-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-slate-200 bg-slate-50/60">
               <div>
-                <h3 class="text-sm font-semibold text-slate-700 tracking-wide">
-                  Tracked Queries
-                </h3>
+                <h3 class="text-sm font-semibold text-slate-700 tracking-wide">Tracked Measurements</h3>
               </div>
-
             </div>
             <div class="p-6">
-              {#if filteredDashboardData?.queries && filteredDashboardData.queries.length > 0}
+              {#if measurements.length > 0}
                 <QueryGrid
-                  queries={filteredDashboardData.queries}
+                  queries={measurements}
                   analytics={[]}
-                  queryHistories={new Map(Object.entries(queryHistories))}
-                  onAddQuery={() => {
-                    isAIGeneratedQuery = false;
-                    showAddQuery = true;
-                  }}
-                  onGetAISuggestions={() => (showQuerySuggestions = true)}
+                  queryHistories={new Map(Object.entries(measurementHistories))}
+                  onAddQuery={() => { isAIGeneratedQuery = false; showAddQuery = true; }}
+                  onGetAISuggestions={() => {}}
                 />
               {:else}
                 <div class="text-center py-14">
-                  <div
-                    class="mx-auto h-12 w-12 rounded-full bg-black/5 flex items-center justify-center mb-5"
-                  >
-                    <svg
-                      class="w-6 h-6 text-[rgb(var(--color-primary))]"
-                      fill="none"
-                      stroke="currentColor"
-                      viewBox="0 0 24 24"
-                      ><path
-                        stroke-linecap="round"
-                        stroke-linejoin="round"
-                        stroke-width="2"
-                        d="M21 21l-4.35-4.35M11 19a8 8 0 100-16 8 8 0 000 16z"
-                      /></svg
-                    >
+                  <div class="mx-auto h-12 w-12 rounded-full bg-black/5 flex items-center justify-center mb-5">
+                    <svg class="w-6 h-6 text-[rgb(var(--color-primary))]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-4.35-4.35M11 19a8 8 0 100-16 8 8 0 000 16z" />
+                    </svg>
                   </div>
-                  <h4 class="text-base font-semibold text-slate-800">
-                    No queries yet
-                  </h4>
+                  <h4 class="text-base font-semibold text-slate-800">No measurements yet</h4>
                   <p class="mt-2 text-sm text-slate-500 max-w-sm mx-auto">
-                    Add the search phrases customers might use. Or let AI
-                    suggest relevant queries for you.
+                    Add the search phrases customers might use. Or let AI suggest relevant queries for you.
                   </p>
                   {#if suggestionError}
-                    <div
-                      class="mt-5 mb-4 p-3 bg-red-50 border border-red-200 rounded-md max-w-sm mx-auto"
-                    >
+                    <div class="mt-5 mb-4 p-3 bg-red-50 border border-red-200 rounded-md max-w-sm mx-auto">
                       <p class="text-red-700 text-xs">{suggestionError}</p>
                     </div>
                   {/if}
                   {#if loadingSuggestions}
                     <div class="mt-6 flex flex-col items-center gap-2">
-                      <div
-                        class="flex items-center gap-2 text-slate-600 text-sm"
-                      >
-                        <div
-                          class="animate-spin rounded-full h-5 w-5 border-2 border-[rgb(var(--color-primary))] border-t-transparent"
-                        ></div>
+                      <div class="flex items-center gap-2 text-slate-600 text-sm">
+                        <div class="animate-spin rounded-full h-5 w-5 border-2 border-[rgb(var(--color-primary))] border-t-transparent"></div>
                         Generating AI suggestions…
                       </div>
-                      <p class="text-[11px] text-slate-500">
-                        This may take a few moments
-                      </p>
+                      <p class="text-[11px] text-slate-500">This may take a few moments</p>
                     </div>
                   {:else if querySuggestions.length > 0}
                     <div class="mt-8 max-w-xl mx-auto space-y-3">
                       {#each querySuggestions as suggestion}
                         <div class="flex items-center gap-3 p-4 rounded-lg border border-slate-200 bg-white shadow-sm hover:border-slate-400 transition-colors w-full md:max-w-xl mx-auto">
                           <div class="text-left flex-1 min-w-0">
-                            <p class="text-sm font-medium text-slate-800 break-words">
-                              {suggestion.text}
-                            </p>
+                            <p class="text-sm font-medium text-slate-800 break-words">{suggestion.text}</p>
                             {#if suggestion.reasoning}
-                              <p class="text-xs text-slate-500 mt-1 leading-relaxed break-words">
-                                {suggestion.reasoning}
-                              </p>
+                              <p class="text-xs text-slate-500 mt-1 leading-relaxed break-words">{suggestion.reasoning}</p>
                             {/if}
                           </div>
-                          <button
-                            type="button"
-                            onclick={() => acceptQuerySuggestion(suggestion.text)}
+                          <button type="button" onclick={() => acceptQuerySuggestion(suggestion.text)}
                             class="shrink-0 inline-flex items-center justify-center h-9 w-9 aspect-square rounded-full bg-[rgb(var(--color-primary))] text-white hover:brightness-95 transition-colors cursor-pointer"
-                            aria-label="Add Query"
-                          >
-                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.2" d="M12 4v16m8-8H4" /></svg>
+                            aria-label="Add Measurement">
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.2" d="M12 4v16m8-8H4" /></svg>
                           </button>
                         </div>
                       {/each}
                       <div class="flex flex-wrap gap-3 pt-2">
-                        <form
-                          method="POST"
-                          action="?/generateQuerySuggestions"
+                        <form method="POST" action="?/generateQuerySuggestions"
                           use:enhance={({ formData }) => {
-                            loadingSuggestions = true;
-                            suggestionError = null;
+                            loadingSuggestions = true; suggestionError = null;
                             return async ({ result }) => {
                               loadingSuggestions = false;
-                              if (
-                                result.type === "success" &&
-                                result.data &&
-                                "suggestions" in result.data
-                              ) {
-                                const suggestions = (
-                                  result.data as { suggestions: string[] }
-                                ).suggestions;
-                                querySuggestions = suggestions.map(
-                                  (text: string) => ({ text, reasoning: "" })
-                                );
-                              } else if (
-                                result.type === "failure" &&
-                                result.data &&
-                                "error" in result.data
-                              ) {
-                                suggestionError =
-                                  (result.data as { error: string }).error ||
-                                  "Failed to generate suggestions";
-                              } else {
-                                suggestionError =
-                                  "Failed to generate suggestions";
-                              }
+                              if (result.type === "success" && result.data && "suggestions" in result.data) {
+                                const suggestions = (result.data as { suggestions: string[] }).suggestions;
+                                querySuggestions = suggestions.map((text: string) => ({ text, reasoning: "" }));
+                              } else if (result.type === "failure" && result.data && "error" in result.data) {
+                                suggestionError = (result.data as { error: string }).error || "Failed to generate suggestions";
+                              } else { suggestionError = "Failed to generate suggestions"; }
                             };
-                          }}
-                        >
-                          <button
-                            type="submit"
-                            class="text-xs px-3 py-2 rounded-md border border-slate-300 text-slate-600 hover:bg-gray-100 cursor-pointer inline-flex items-center gap-1"
-                          >
-                            <svg
-                              class="w-3 h-3"
-                              fill="none"
-                              stroke="currentColor"
-                              viewBox="0 0 24 24"
-                              ><path
-                                stroke-linecap="round"
-                                stroke-linejoin="round"
-                                stroke-width="2"
-                                d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
-                              /></svg
-                            >
+                          }}>
+                          <button type="submit" class="text-xs px-3 py-2 rounded-md border border-slate-300 text-slate-600 hover:bg-gray-100 cursor-pointer inline-flex items-center gap-1">
+                            <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
                             Generate More
                           </button>
                         </form>
-                        <button
-                          type="button"
-                          class="text-xs px-3 py-2 rounded-md bg-[rgb(var(--color-primary))] text-white hover:brightness-95 cursor-pointer inline-flex items-center gap-1"
-                          onclick={() => {
-                            isAIGeneratedQuery = false;
-                            showAddQuery = true;
-                          }}
-                        >
+                        <button type="button" class="text-xs px-3 py-2 rounded-md bg-[rgb(var(--color-primary))] text-white hover:brightness-95 cursor-pointer inline-flex items-center gap-1"
+                          onclick={() => { isAIGeneratedQuery = false; showAddQuery = true; }}>
                           <span>+</span> Add Custom
                         </button>
                       </div>
                     </div>
                   {:else}
-                    <div
-                      class="mt-8 flex flex-col sm:flex-row items-center justify-center gap-3"
-                    >
-                      <form
-                        method="POST"
-                        action="?/generateQuerySuggestions"
+                    <div class="mt-8 flex flex-col sm:flex-row items-center justify-center gap-3">
+                      <form method="POST" action="?/generateQuerySuggestions"
                         use:enhance={({ formData }) => {
-                          loadingSuggestions = true;
-                          suggestionError = null;
+                          loadingSuggestions = true; suggestionError = null;
                           return async ({ result }) => {
                             loadingSuggestions = false;
-                            if (
-                              result.type === "success" &&
-                              result.data &&
-                              "suggestions" in result.data
-                            ) {
-                              const suggestions = (
-                                result.data as { suggestions: string[] }
-                              ).suggestions;
-                              querySuggestions = suggestions.map(
-                                (text: string) => ({ text, reasoning: "" })
-                              );
-                            } else if (
-                              result.type === "failure" &&
-                              result.data &&
-                              "error" in result.data
-                            ) {
-                              suggestionError =
-                                (result.data as { error: string }).error ||
-                                "Failed to generate suggestions";
-                            } else {
-                              suggestionError =
-                                "Failed to generate suggestions";
-                            }
+                            if (result.type === "success" && result.data && "suggestions" in result.data) {
+                              const suggestions = (result.data as { suggestions: string[] }).suggestions;
+                              querySuggestions = suggestions.map((text: string) => ({ text, reasoning: "" }));
+                            } else if (result.type === "failure" && result.data && "error" in result.data) {
+                              suggestionError = (result.data as { error: string }).error || "Failed to generate suggestions";
+                            } else { suggestionError = "Failed to generate suggestions"; }
                           };
-                        }}
-                      >
-                        <button
-                          type="submit"
-                          class="bg-black text-white px-5 py-2.5 rounded-md text-sm font-medium hover:bg-gray-800 cursor-pointer inline-flex items-center gap-2"
-                        >
+                        }}>
+                        <button type="submit" class="bg-black text-white px-5 py-2.5 rounded-md text-sm font-medium hover:bg-gray-800 cursor-pointer inline-flex items-center gap-2">
                           <span>✨</span>
-                          {loadingSuggestions
-                            ? "Generating…"
-                            : "Get AI Suggestions"}
+                          {loadingSuggestions ? "Generating…" : "Get AI Suggestions"}
                         </button>
                       </form>
-                      <button
-                        type="button"
-                        class="bg-[rgb(var(--color-primary))] text-white px-5 py-2.5 rounded-md text-sm font-medium hover:brightness-95 cursor-pointer inline-flex items-center gap-2"
-                        onclick={() => {
-                          isAIGeneratedQuery = false;
-                          showAddQuery = true;
-                        }}
-                      >
+                      <button type="button" class="bg-[rgb(var(--color-primary))] text-white px-5 py-2.5 rounded-md text-sm font-medium hover:brightness-95 cursor-pointer inline-flex items-center gap-2"
+                        onclick={() => { isAIGeneratedQuery = false; showAddQuery = true; }}>
                         <span>+</span> Add Manually
                       </button>
                     </div>
@@ -836,66 +530,39 @@
             </div>
           </Card>
         </div>
-        <!-- Full Width AI Suggestions Card Moved Below Tracked Queries -->
-        {#if filteredDashboardData?.queries?.length}
+
+        <!-- AI Suggestions Card (shown when measurements exist) -->
+        {#if measurements.length > 0}
           <div class="lg:col-span-12">
             <Card padding="p-6">
               <div class="text-center mb-5">
-                <h3 class="text-sm font-semibold text-slate-700 tracking-wide">
-                  AI Suggestions
-                </h3>
+                <h3 class="text-sm font-semibold text-slate-700 tracking-wide">AI Suggestions</h3>
                 <p class="text-xs text-slate-500 mt-1">
                   {#if querySuggestions.length > 0}
-                    Click a suggestion to add it to your tracked queries
+                    Click a suggestion to add it to your tracked measurements
                   {:else if loadingSuggestions}
                     Generating suggestions…
                   {:else}
-                    Let AI propose new relevant search phrases based on what you
-                    already track
+                    Let AI propose new relevant search phrases based on what you already track
                   {/if}
                 </p>
               </div>
               <div class="flex justify-center mb-4">
-                <form
-                  method="POST"
-                  action="?/generateQuerySuggestions"
+                <form method="POST" action="?/generateQuerySuggestions"
                   use:enhance={() => {
-                    loadingSuggestions = true;
-                    suggestionError = null;
+                    loadingSuggestions = true; suggestionError = null;
                     return async ({ result }) => {
                       loadingSuggestions = false;
-                      if (
-                        result.type === "success" &&
-                        result.data &&
-                        "suggestions" in result.data
-                      ) {
-                        const suggestions = (
-                          result.data as { suggestions: string[] }
-                        ).suggestions;
-                        querySuggestions = suggestions.map((text: string) => ({
-                          text,
-                          reasoning: "",
-                        }));
-                      } else if (
-                        result.type === "failure" &&
-                        result.data &&
-                        "error" in result.data
-                      ) {
-                        suggestionError =
-                          (result.data as { error: string }).error ||
-                          "Failed to generate suggestions";
-                      } else {
-                        suggestionError = "Failed to generate suggestions";
-                      }
+                      if (result.type === "success" && result.data && "suggestions" in result.data) {
+                        const suggestions = (result.data as { suggestions: string[] }).suggestions;
+                        querySuggestions = suggestions.map((text: string) => ({ text, reasoning: "" }));
+                      } else if (result.type === "failure" && result.data && "error" in result.data) {
+                        suggestionError = (result.data as { error: string }).error || "Failed to generate suggestions";
+                      } else { suggestionError = "Failed to generate suggestions"; }
                     };
-                  }}
-                >
-                  <button
-                    type="submit"
-                    class="px-5 py-2.5 rounded-md text-sm font-medium bg-[rgb(var(--color-secondary))] text-white hover:brightness-90 transition-colors cursor-pointer inline-flex items-center gap-2 disabled:opacity-70 disabled:cursor-not-allowed"
-                    disabled={loadingSuggestions}
-                    aria-busy={loadingSuggestions}
-                  >
+                  }}>
+                  <button type="submit" class="px-5 py-2.5 rounded-md text-sm font-medium bg-[rgb(var(--color-secondary))] text-white hover:brightness-90 transition-colors cursor-pointer inline-flex items-center gap-2 disabled:opacity-70 disabled:cursor-not-allowed"
+                    disabled={loadingSuggestions} aria-busy={loadingSuggestions}>
                     <span>✨</span>
                     {#if loadingSuggestions}
                       {querySuggestions.length > 0 ? "Refreshing…" : "Generating…"}
@@ -906,32 +573,23 @@
                 </form>
               </div>
               {#if suggestionError}
-                <div
-                  class="mb-3 p-3 bg-red-50 border border-red-200 rounded-md"
-                >
+                <div class="mb-3 p-3 bg-red-50 border border-red-200 rounded-md">
                   <p class="text-xs text-red-700">{suggestionError}</p>
                 </div>
               {/if}
               {#if loadingSuggestions && querySuggestions.length === 0}
-                <div
-                  class="flex items-center gap-2 text-slate-600 text-sm py-4"
-                >
-                  <div
-                    class="animate-spin rounded-full h-5 w-5 border-2 border-[rgb(var(--color-primary))] border-t-transparent"
-                  ></div>
+                <div class="flex items-center gap-2 text-slate-600 text-sm py-4">
+                  <div class="animate-spin rounded-full h-5 w-5 border-2 border-[rgb(var(--color-primary))] border-t-transparent"></div>
                   Generating suggestions…
                 </div>
               {:else}
                 <div class="space-y-2">
                   {#each querySuggestions as suggestion}
-                    <button
-                      type="button"
-                      class="w-full md:max-w-xl text-left p-3 rounded-md border border-slate-200 hover:border-slate-400 bg-white hover:bg-black/5 transition-colors cursor-pointer group flex items-center gap-3 mx-auto"
-                      onclick={() => acceptQuerySuggestion(suggestion.text)}
-                    >
+                    <button type="button" class="w-full md:max-w-xl text-left p-3 rounded-md border border-slate-200 hover:border-slate-400 bg-white hover:bg-black/5 transition-colors cursor-pointer group flex items-center gap-3 mx-auto"
+                      onclick={() => acceptQuerySuggestion(suggestion.text)}>
                       <span class="flex-1 text-sm text-slate-700 group-hover:text-slate-900 break-words">{suggestion.text}</span>
-                      <span class="shrink-0 inline-flex h-9 w-9 aspect-square items-center justify-center rounded-full bg-[rgb(var(--color-primary))] text-white group-hover:bg-[rgb(var(--color-primary))]">
-                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.2" d="M12 4v16m8-8H4" /></svg>
+                      <span class="shrink-0 inline-flex h-9 w-9 aspect-square items-center justify-center rounded-full bg-[rgb(var(--color-primary))] text-white">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.2" d="M12 4v16m8-8H4" /></svg>
                       </span>
                     </button>
                   {/each}
@@ -945,79 +603,41 @@
 
     <!-- Error Toast -->
     {#if error}
-      <div
-        class="fixed bottom-4 right-4 bg-red-500 text-white p-4 rounded-lg shadow-lg max-w-md"
-      >
+      <div class="fixed bottom-4 right-4 bg-red-500 text-white p-4 rounded-lg shadow-lg max-w-md">
         <div class="flex justify-between items-start">
           <p class="text-sm">{error}</p>
-          <button
-            type="button"
-            class="ml-2 text-white hover:text-gray-200"
-            onclick={dismissError}
-          >
-            ×
-          </button>
+          <button type="button" class="ml-2 text-white hover:text-gray-200" onclick={dismissError}>×</button>
         </div>
       </div>
     {/if}
 
     <!-- Modals -->
-    {#if showAddQuery}
+    {#if showAddQuery && activeProduct}
       <AddQueryModal
         show={showAddQuery}
         {loading}
         {newQuery}
+        productId={activeProduct.id}
         isAIGenerated={isAIGeneratedQuery}
-        onClose={() => {
-          showAddQuery = false;
-          isAIGeneratedQuery = false;
-          newQuery = "";
-        }}
+        onClose={() => { showAddQuery = false; isAIGeneratedQuery = false; newQuery = ""; }}
       />
-    {/if}
-
-    {#if showQuerySuggestions}
-      <!-- QuerySuggestionsModal is deprecated - using inline suggestions now -->
     {/if}
   </div>
-{:else if user && needsOnboarding}
+{:else if user && (needsOnboarding || !company)}
   <div class="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100">
     <main class="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
-      <BusinessRegistration
-        onSearchForBusiness={() => (showGoogleSearch = true)}
-      />
+      <BusinessRegistration onSearchForBusiness={() => (showGoogleSearch = true)} />
     </main>
 
-    <!-- Modals for onboarding -->
     {#if showGoogleSearch}
-      <div
-        class="fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center p-4 z-50"
-      >
-        <div
-          class="bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-[80vh] overflow-y-auto"
-        >
+      <div class="fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center p-4 z-50">
+        <div class="bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-[80vh] overflow-y-auto">
           <div class="p-6">
             <div class="flex items-center justify-between mb-4">
-              <h3 class="text-lg font-semibold text-gray-900">
-                Find Your Business
-              </h3>
-              <button
-                onclick={() => (showGoogleSearch = false)}
-                class="text-gray-400 hover:text-gray-600 transition-colors cursor-pointer"
-                aria-label="Close modal"
-              >
-                <svg
-                  class="w-6 h-6"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    stroke-linecap="round"
-                    stroke-linejoin="round"
-                    stroke-width="2"
-                    d="M6 18L18 6M6 6l12 12"
-                  ></path>
+              <h3 class="text-lg font-semibold text-gray-900">Find Your Company</h3>
+              <button onclick={() => (showGoogleSearch = false)} class="text-gray-400 hover:text-gray-600 transition-colors cursor-pointer" aria-label="Close modal">
+                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
                 </svg>
               </button>
             </div>
@@ -1031,18 +651,46 @@
       <CreateBusinessModal
         show={showCreateBusiness}
         {loading}
-        business={newBusiness}
-        onBackToSearch={() => {
-          showCreateBusiness = false;
-          showGoogleSearch = true;
-        }}
+        business={newCompany}
+        onBackToSearch={() => { showCreateBusiness = false; showGoogleSearch = true; }}
       />
     {/if}
   </div>
+{:else if user && company && !activeProduct}
+  <!-- Company exists but no product yet — prompt to create one -->
+  <div class="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100">
+    <main class="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
+      <Card variant="glass" radius="2xl" padding="p-8">
+        <div class="text-center">
+          <h2 class="text-2xl font-semibold text-slate-900 mb-3">Add Your First Product</h2>
+          <p class="text-sm text-slate-600 mb-8">Create a product to start tracking how it ranks across AI assistants.</p>
+          
+          <form method="POST" action="?/createProduct"
+            use:enhance={() => {
+              loading = true;
+              return async ({ result, update }) => {
+                loading = false;
+                if (result.type === 'success') { newProductName = ''; await update(); }
+              };
+            }}>
+            <div class="max-w-md mx-auto space-y-4">
+              <input type="text" name="name" bind:value={newProductName} required
+                class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[rgb(var(--color-primary))]/50"
+                placeholder="e.g. iPhone, Website Builder, Coffee Blend" />
+              <textarea name="description" rows="2"
+                class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[rgb(var(--color-primary))]/50"
+                placeholder="Optional: Brief description to help AI understand your product"></textarea>
+              <Button type="submit" variant="primary" size="lg" disabled={loading || !newProductName.trim()}>
+                {loading ? 'Creating…' : 'Create Product'}
+              </Button>
+            </div>
+          </form>
+        </div>
+      </Card>
+    </main>
+  </div>
 {:else}
-  <div
-    class="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 flex items-center justify-center"
-  >
+  <div class="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 flex items-center justify-center">
     <div class="text-center">
       <h1 class="text-2xl font-bold text-gray-900 mb-4">Loading...</h1>
       <p class="text-gray-600">Please wait while we load your dashboard.</p>

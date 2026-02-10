@@ -1,10 +1,10 @@
 <script lang="ts">
-  import type { Query, RankingAnalytics, QueryRankingHistory } from '../../types'
+  import type { Measurement, RankingAnalytics, MeasurementRankingHistory } from '../../types'
   import RankingChart from './RankingChart.svelte'
   
-  export let query: Query
+  export let query: Measurement
   export let analytics: RankingAnalytics | undefined
-  export let history: QueryRankingHistory[] = []
+  export let history: MeasurementRankingHistory[] = []
   export let loadingHistories: boolean = false
 
   // Get the most recent ranking data for display
@@ -46,7 +46,7 @@
   <!-- Header with Query Text and View Details Button -->
   <div class="flex justify-between items-start mb-4">
     <h3 class="text-lg font-bold text-gray-900 line-clamp-2 flex-1 pr-4">
-      {query.text}
+      {query.title || query.query}
     </h3>
     
     <!-- View Details Button in Top Right -->
@@ -83,7 +83,7 @@
         <div class="text-sm text-gray-500">Average Rank</div>
         {#if latestRanking}
           <div class="text-xs text-gray-400 mt-1">
-            {formatDate(latestRanking.run_date)}
+            {formatDate(latestRanking.created_at)}
           </div>
         {/if}
       </div>

@@ -13,7 +13,7 @@
 {#if show}
   <div class="fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center p-4 z-50">
     <div class="bg-white rounded-lg shadow-xl max-w-md w-full p-6">
-      <form method="POST" action="?/createBusiness">
+      <form method="POST" action="?/createCompany">
         <div class="text-center">
           <div class="mb-4">
             <div class="w-12 h-12 mx-auto bg-black/5 rounded-full flex items-center justify-center">

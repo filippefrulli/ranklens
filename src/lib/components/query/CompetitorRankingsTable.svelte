@@ -27,7 +27,7 @@
     if (!Array.isArray(list) || list.length === 0) return [];
     const FOLLOWING = 5;
     const FALLBACK_SIZE = 20;
-    const userIdx = list.findIndex((c) => c?.is_user_business);
+    const userIdx = list.findIndex((c) => c?.is_target);
     if (userIdx === -1) {
       return list.slice(0, FALLBACK_SIZE);
     }
@@ -93,7 +93,7 @@
         No Analysis Data Available
       </h3>
       <p class="text-gray-600">
-        Run an analysis to see your business ranking and competitor landscape.
+        Run an analysis to see your product ranking and competitor landscape.
       </p>
     </div>
   {:else}
@@ -104,7 +104,7 @@
             <th
               class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
             >
-              Competitor Business
+              Competitor Product
             </th>
             <th
               class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
@@ -134,15 +134,15 @@
         <tbody class="bg-white divide-y divide-gray-200">
           {#each displayedCompetitors as competitor}
             <tr
-              class="hover:bg-gray-50 {competitor.is_user_business
+              class="hover:bg-gray-50 {competitor.is_target
                 ? 'bg-[rgb(var(--color-primary))]/5 border-l-4 border-[rgb(var(--color-primary))] ring-2 ring-[rgb(var(--color-primary))]/30'
                 : ''}"
-              aria-current={competitor.is_user_business ? "true" : "false"}
+              aria-current={competitor.is_target ? "true" : "false"}
             >
               <td class="px-6 py-4 whitespace-nowrap">
                 <div class="flex items-center">
                   <div
-                    class="flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center {competitor.is_user_business
+                    class="flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center {competitor.is_target
                       ? 'bg-[rgb(var(--color-primary))] text-white'
                       : 'bg-gray-100 text-gray-700'}"
                     title="Rank position in full sorted list"
@@ -154,11 +154,11 @@
                   </div>
                   <div class="ml-4">
                     <div
-                      class="text-sm {competitor.is_user_business
+                      class="text-sm {competitor.is_target
                         ? 'text-blue-900 font-semibold'
                         : 'text-gray-900 font-medium'}"
                     >
-                      {competitor.business_name}
+                      {competitor.product_name}
                     </div>
                   </div>
                 </div>
@@ -226,7 +226,7 @@
           <strong>Weighted Analysis:</strong><br/> Results are ranked by weighted score
           that considers both average rank and appearance consistency.
         </p>
-        <p class="text-sm text-gray-600">A business
+        <p class="text-sm text-gray-600">A product
           appearing in 100% of attempts at rank #15 scores better than one appearing
           once at rank #14.</p>
       </div>

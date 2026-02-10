@@ -35,8 +35,8 @@
       if (result.success) {
         llmData.successfulAttempts++
         
-        if (result.target_business_rank !== null) {
-          llmData.foundRankings.push(result.target_business_rank)
+        if (result.target_product_rank !== null) {
+          llmData.foundRankings.push(result.target_product_rank)
         }
       }
     })
@@ -57,7 +57,7 @@
       }
       if (a.averageRank !== null) return -1
       if (b.averageRank !== null) return 1
-      // Fallback: more found occurrences (business located) is better
+      // Fallback: more found occurrences (product located) is better
       return b.foundRankings.length - a.foundRankings.length
     })
   }
@@ -110,7 +110,7 @@
                 <div class="text-sm font-medium text-gray-900">
                   {llm.foundRankings.length}/{llm.totalAttempts}
                 </div>
-                <div class="text-xs text-gray-500">business found</div>
+                <div class="text-xs text-gray-500">product found</div>
               </td>
               <td class="px-6 py-4 whitespace-nowrap">
                 {#if llm.averageRank !== null}

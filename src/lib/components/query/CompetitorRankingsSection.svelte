@@ -33,7 +33,7 @@
           Competitor Rankings
         </h3>
         <span class="text-[11px] text-slate-500"
-          >{competitorRankings.length} businesses</span
+          >{competitorRankings.length} products</span
         >
       </div>
       <CompetitorRankingsTable {competitorRankings} />

@@ -1,8 +1,8 @@
 <script lang="ts">
-  import type { QueryRankingHistory, RankingAnalytics } from '../../types'
+  import type { MeasurementRankingHistory, RankingAnalytics } from '../../types'
   
   interface Props {
-    history?: QueryRankingHistory[]
+    history?: MeasurementRankingHistory[]
     llmBreakdown?: RankingAnalytics['llm_breakdown']
     loading?: boolean
   }
@@ -14,15 +14,15 @@
     if (history.length > 0) {
       // Sort by date ascending (oldest to newest) for left-to-right chronological display
       const sortedHistory = [...history].sort((a, b) => {
-        const dateA = new Date(a.run_date).getTime()
-        const dateB = new Date(b.run_date).getTime()
+        const dateA = new Date(a.created_at).getTime()
+        const dateB = new Date(b.created_at).getTime()
         return dateA - dateB
       })
       
       return sortedHistory.slice(-8).map(run => ({
         value: run.average_rank || 0,
-        label: formatDate(run.run_date),
-        tooltip: `Rank ${run.average_rank?.toFixed(1) || 'N/A'} on ${formatDate(run.run_date)}`
+        label: formatDate(run.created_at),
+        tooltip: `Rank ${run.average_rank?.toFixed(1) || 'N/A'} on ${formatDate(run.created_at)}`
       }))
     } else if (llmBreakdown && llmBreakdown.length > 0) {
       return llmBreakdown.slice(0, 8).map(breakdown => ({

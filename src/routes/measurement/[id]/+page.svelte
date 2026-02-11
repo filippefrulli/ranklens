@@ -34,6 +34,7 @@
 
   // LLM filter
   let selectedProvider = $state<LLMProvider | null>(null);
+  let llmDropdownOpen = $state(false);
 
   // Sync from server
   $effect(() => {
@@ -91,6 +92,40 @@
   let filteredRankingResults = $derived.by(() => {
     if (!selectedProvider) return rankingResults;
     return rankingResults.filter((r) => r.llm_provider_id === selectedProvider?.id);
+  });
+
+  // Aggregated per-LLM breakdown
+  let llmBreakdown = $derived.by(() => {
+    if (filteredRankingResults.length === 0) return [];
+    const groups = new Map<string, {
+      provider_name: string,
+      total_attempts: number,
+      successful: number,
+      failed: number,
+      ranks: number[],
+      found_count: number
+    }>();
+    for (const r of filteredRankingResults) {
+      const name = r.llm_providers?.display_name || r.llm_providers?.name || 'Unknown';
+      const id = r.llm_provider_id || name;
+      if (!groups.has(id)) {
+        groups.set(id, { provider_name: name, total_attempts: 0, successful: 0, failed: 0, ranks: [], found_count: 0 });
+      }
+      const g = groups.get(id)!;
+      g.total_attempts++;
+      if (r.success) g.successful++;
+      else g.failed++;
+      if (r.target_product_rank != null) {
+        g.ranks.push(r.target_product_rank);
+        g.found_count++;
+      }
+    }
+    return Array.from(groups.values()).map(g => ({
+      ...g,
+      avg_rank: g.ranks.length > 0 ? g.ranks.reduce((a, b) => a + b, 0) / g.ranks.length : null,
+      best_rank: g.ranks.length > 0 ? Math.min(...g.ranks) : null,
+      worst_rank: g.ranks.length > 0 ? Math.max(...g.ranks) : null,
+    }));
   });
 
   let competitorRankings = $derived.by(() => {
@@ -355,26 +390,7 @@
         <p class="text-sm text-slate-500 ml-8">{measurement.query}</p>
       </div>
 
-      <div class="flex items-center gap-3 flex-shrink-0">
-        <!-- LLM Provider Pills -->
-        <div class="flex flex-wrap items-center gap-1.5">
-          <button
-            type="button"
-            onclick={() => onProviderChange(null)}
-            class="px-3 py-1.5 rounded-full text-xs font-medium border transition-colors cursor-pointer flex items-center gap-1.5 {selectedProvider === null ? 'bg-[rgb(var(--color-primary))] text-white border-[rgb(var(--color-primary))]' : 'border-slate-300 text-slate-600 hover:bg-slate-100'}"
-          >All</button>
-          {#each llmProviders as provider}
-            <button
-              type="button"
-              onclick={() => onProviderChange(provider)}
-              class="px-3 py-1.5 rounded-full text-xs font-medium border transition-colors cursor-pointer flex items-center gap-1.5 {selectedProvider?.id === provider.id ? 'bg-[rgb(var(--color-primary))] text-white border-[rgb(var(--color-primary))]' : 'border-slate-300 text-slate-600 hover:bg-slate-100'}"
-            >
-              <LLMLogo provider={provider.name.includes('openai') ? 'OpenAI' : provider.name.includes('gemini') || provider.name.includes('google') ? 'Gemini' : provider.display_name} size={16} />
-              {provider.display_name}
-            </button>
-          {/each}
-        </div>
-
+      <div class="flex flex-col items-end gap-2 flex-shrink-0">
         <!-- Run Analysis Button -->
         {#if runningAnalysis && (runningAnalysis.status === 'running' || runningAnalysis.status === 'pending' || runningAnalysis.status === 'completed')}
           <!-- Button hidden while analysis is running -->
@@ -415,6 +431,53 @@
             </Button>
           </form>
         {/if}
+
+        <!-- LLM Provider Dropdown -->
+        <div class="relative">
+          <button
+            type="button"
+            onclick={() => llmDropdownOpen = !llmDropdownOpen}
+            class="flex items-center gap-2 px-4 py-2 text-sm font-medium border border-slate-300 rounded-lg bg-white hover:bg-slate-50 transition-colors cursor-pointer text-slate-600"
+          >
+            {#if selectedProvider}
+              <LLMLogo provider={selectedProvider.name.includes('openai') ? 'OpenAI' : selectedProvider.name.includes('gemini') || selectedProvider.name.includes('google') ? 'Gemini' : selectedProvider.display_name} size={16} />
+              {selectedProvider.display_name}
+            {:else}
+              All LLMs
+            {/if}
+            <svg class="w-4 h-4 text-slate-400 transition-transform {llmDropdownOpen ? 'rotate-180' : ''}" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" /></svg>
+          </button>
+
+          {#if llmDropdownOpen}
+            <!-- Backdrop to close dropdown -->
+            <button
+              type="button"
+              class="fixed inset-0 z-10 cursor-default"
+              onclick={() => llmDropdownOpen = false}
+              aria-label="Close dropdown"
+            ></button>
+
+            <div class="absolute right-0 mt-1 z-20 bg-white border border-slate-200 rounded-lg shadow-lg py-1 min-w-[160px]">
+              <button
+                type="button"
+                onclick={() => { onProviderChange(null); llmDropdownOpen = false; }}
+                class="w-full text-left px-3 py-2 text-xs font-medium transition-colors cursor-pointer flex items-center gap-2 {selectedProvider === null ? 'bg-slate-100 text-slate-900' : 'text-slate-600 hover:bg-slate-50'}"
+              >
+                All LLMs
+              </button>
+              {#each llmProviders as provider}
+                <button
+                  type="button"
+                  onclick={() => { onProviderChange(provider); llmDropdownOpen = false; }}
+                  class="w-full text-left px-3 py-2 text-xs font-medium transition-colors cursor-pointer flex items-center gap-2 {selectedProvider?.id === provider.id ? 'bg-slate-100 text-slate-900' : 'text-slate-600 hover:bg-slate-50'}"
+                >
+                  <LLMLogo provider={provider.name.includes('openai') ? 'OpenAI' : provider.name.includes('gemini') || provider.name.includes('google') ? 'Gemini' : provider.display_name} size={14} />
+                  {provider.display_name}
+                </button>
+              {/each}
+            </div>
+          {/if}
+        </div>
       </div>
     </div>
 
@@ -494,36 +557,40 @@
         {/if}
 
         <!-- LLM Breakdown for selected run -->
-        {#if filteredRankingResults.length > 0}
+        {#if llmBreakdown.length > 0}
           <Card padding="p-6">
-            <h3 class="text-sm font-semibold text-slate-700 mb-4">LLM Attempts ({filteredRankingResults.length})</h3>
+            <h3 class="text-sm font-semibold text-slate-700 mb-4">LLM Breakdown</h3>
             <div class="overflow-x-auto">
               <table class="min-w-full divide-y divide-gray-200 text-sm">
                 <thead class="bg-slate-50">
                   <tr>
                     <th class="px-4 py-2.5 text-left text-xs font-medium text-slate-500 uppercase">Provider</th>
-                    <th class="px-4 py-2.5 text-left text-xs font-medium text-slate-500 uppercase">Attempt</th>
-                    <th class="px-4 py-2.5 text-left text-xs font-medium text-slate-500 uppercase">Rank</th>
-                    <th class="px-4 py-2.5 text-left text-xs font-medium text-slate-500 uppercase">Status</th>
+                    <th class="px-4 py-2.5 text-left text-xs font-medium text-slate-500 uppercase">Avg Rank</th>
+                    <th class="px-4 py-2.5 text-left text-xs font-medium text-slate-500 uppercase">Best</th>
+                    <th class="px-4 py-2.5 text-left text-xs font-medium text-slate-500 uppercase">Worst</th>
+                    <th class="px-4 py-2.5 text-left text-xs font-medium text-slate-500 uppercase">Found</th>
+                    <th class="px-4 py-2.5 text-left text-xs font-medium text-slate-500 uppercase">Success Rate</th>
                   </tr>
                 </thead>
                 <tbody class="divide-y divide-gray-100">
-                  {#each filteredRankingResults as result}
+                  {#each llmBreakdown as llm}
                     <tr class="hover:bg-slate-50">
-                      <td class="px-4 py-2.5 text-slate-700">{result.llm_providers?.display_name || result.llm_providers?.name || 'Unknown'}</td>
-                      <td class="px-4 py-2.5 text-slate-600">#{result.attempt_number}</td>
+                      <td class="px-4 py-2.5 text-slate-700 font-medium">{llm.provider_name}</td>
                       <td class="px-4 py-2.5">
-                        {#if result.target_product_rank != null}
-                          <span class="inline-flex px-2 py-0.5 text-xs font-semibold rounded-full {result.target_product_rank <= 3 ? 'bg-green-100 text-green-800' : result.target_product_rank <= 10 ? 'bg-yellow-100 text-yellow-800' : 'bg-red-100 text-red-800'}">
-                            #{result.target_product_rank}
+                        {#if llm.avg_rank != null}
+                          <span class="inline-flex px-2 py-0.5 text-xs font-semibold rounded-full {llm.avg_rank <= 3 ? 'bg-green-100 text-green-800' : llm.avg_rank <= 10 ? 'bg-yellow-100 text-yellow-800' : 'bg-red-100 text-red-800'}">
+                            #{llm.avg_rank.toFixed(1)}
                           </span>
                         {:else}
-                          <span class="text-slate-400">Not found</span>
+                          <span class="text-slate-400">—</span>
                         {/if}
                       </td>
+                      <td class="px-4 py-2.5 text-slate-600">{llm.best_rank != null ? `#${llm.best_rank}` : '—'}</td>
+                      <td class="px-4 py-2.5 text-slate-600">{llm.worst_rank != null ? `#${llm.worst_rank}` : '—'}</td>
+                      <td class="px-4 py-2.5 text-slate-600">{llm.found_count}/{llm.total_attempts}</td>
                       <td class="px-4 py-2.5">
-                        <span class="inline-flex px-2 py-0.5 text-xs font-medium rounded-full {result.success ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'}">
-                          {result.success ? 'Success' : 'Error'}
+                        <span class="inline-flex px-2 py-0.5 text-xs font-medium rounded-full {llm.successful === llm.total_attempts ? 'bg-green-50 text-green-700' : llm.failed > llm.successful ? 'bg-red-50 text-red-700' : 'bg-yellow-50 text-yellow-700'}">
+                          {llm.successful}/{llm.total_attempts}
                         </span>
                       </td>
                     </tr>

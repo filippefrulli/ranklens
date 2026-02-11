@@ -2,6 +2,7 @@
   import type { PageData, ActionData } from "./$types";
   import type { Product, Company, Measurement } from "$lib/types";
   import { enhance } from "$app/forms";
+  import { invalidateAll } from "$app/navigation";
   import Card from "$lib/components/ui/Card.svelte";
   import Button from "$lib/components/ui/Button.svelte";
 
@@ -101,7 +102,7 @@
                 <div class="absolute right-0 top-8 w-36 bg-white rounded-lg shadow-lg border border-slate-200 py-1 z-20">
                   <form method="POST" action="?/deleteMeasurement"
                     use:enhance={() => {
-                      return async ({ update }) => { await update(); };
+                      return async () => { await invalidateAll(); };
                     }}
                   >
                     <input type="hidden" name="measurementId" value={measurement.id} />
@@ -169,13 +170,13 @@
         <form method="POST" action="?/addMeasurement"
           use:enhance={() => {
             loading = true;
-            return async ({ result, update }) => {
+            return async ({ result }) => {
               loading = false;
               if (result.type === 'success') {
                 showAddMeasurement = false;
                 newTitle = '';
                 newQuery = '';
-                await update();
+                await invalidateAll();
               }
             };
           }}

@@ -2,6 +2,7 @@
   import type { PageData, ActionData } from "./$types";
   import type { Company, Product } from "$lib/types";
   import { enhance } from "$app/forms";
+  import { invalidateAll } from "$app/navigation";
   import BusinessRegistration from "$lib/components/dashboard/BusinessRegistration.svelte";
   import GoogleBusinessSearch from "$lib/components/business/GoogleBusinessSearch.svelte";
   import CreateBusinessModal from "$lib/components/dashboard/CreateBusinessModal.svelte";
@@ -161,13 +162,13 @@
           <form method="POST" action="?/createProduct"
             use:enhance={() => {
               loading = true;
-              return async ({ result, update }) => {
+              return async ({ result }) => {
                 loading = false;
                 if (result.type === 'success') {
                   showAddProduct = false;
                   newProductName = '';
                   newProductDescription = '';
-                  await update();
+                  await invalidateAll();
                 }
               };
             }}

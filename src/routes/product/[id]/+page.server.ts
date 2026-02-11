@@ -15,18 +15,13 @@ export const load: PageServerLoad = async ({ locals, params }) => {
   try {
     const dbService = new DatabaseService(locals.supabase, locals.user.id)
 
-    // Validate ownership
-    const isOwner = await dbService.validateProductOwnership(productId)
-    if (!isOwner) {
-      throw error(403, 'Access denied')
-    }
-
-    const product = await dbService.getProduct(productId)
-    if (!product) {
+    // RLS ensures only the owner can read their products — no separate ownership check needed
+    const productWithCompany = await dbService.getProductWithCompany(productId)
+    if (!productWithCompany) {
       throw error(404, 'Product not found')
     }
 
-    const company = await dbService.getCompany()
+    const { company, ...product } = productWithCompany
     const measurements = await dbService.getMeasurementsForProduct(productId)
 
     // Get per-measurement stats (last run + average rank)

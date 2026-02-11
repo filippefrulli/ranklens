@@ -114,6 +114,20 @@ export class DatabaseService {
     return data
   }
 
+  async getProductWithCompany(productId: string): Promise<(Product & { company: Company }) | null> {
+    const { data, error } = await this.supabase
+      .from('products')
+      .select('*, company:companies!inner(id, name, user_id, created_at, updated_at)')
+      .eq('id', productId)
+      .single()
+
+    if (error) {
+      console.error('[Service] getProductWithCompany: Error', error)
+      return null
+    }
+    return data as any
+  }
+
   async createProduct(productData: {
     company_id: string
     name: string
@@ -322,31 +336,25 @@ export class DatabaseService {
   }
 
   async getAnalysisRunsForMeasurement(measurementId: string): Promise<Pick<AnalysisRun, 'id' | 'created_at'>[]> {
-    // Get distinct analysis_run_ids that have ranking_attempts for this measurement
-    const { data: attempts, error: attError } = await this.supabase
-      .from('ranking_attempts')
-      .select('analysis_run_id')
-      .eq('measurement_id', measurementId)
-
-    if (attError) {
-      console.error('[Service] getAnalysisRunsForMeasurement: Error fetching attempts', attError)
-      return []
-    }
-
-    const runIds = [...new Set((attempts || []).map(a => a.analysis_run_id))]
-    if (runIds.length === 0) return []
-
+    // Single query: get runs that have ranking_attempts for this measurement
     const { data, error } = await this.supabase
       .from('analysis_runs')
-      .select('id, created_at')
-      .in('id', runIds)
+      .select('id, created_at, ranking_attempts!inner(measurement_id)')
+      .eq('ranking_attempts.measurement_id', measurementId)
       .order('created_at', { ascending: false })
 
     if (error) {
-      console.error('[Service] getAnalysisRunsForMeasurement: Error fetching runs', error)
+      console.error('[Service] getAnalysisRunsForMeasurement: Error', error)
       return []
     }
-    return data || []
+
+    // Deduplicate (the join may return duplicates) and strip the join data
+    const seen = new Set<string>()
+    return (data || []).filter(run => {
+      if (seen.has(run.id)) return false
+      seen.add(run.id)
+      return true
+    }).map(({ id, created_at }) => ({ id, created_at }))
   }
 
   /**
@@ -699,17 +707,25 @@ export class DatabaseService {
 
   async getMeasurementRankingHistory(measurementId: string, limit: number = 10): Promise<MeasurementRankingHistory[]> {
     try {
+      // Step 1: Get only the N most recent run IDs for this measurement
+      const runs = await this.getAnalysisRunsForMeasurement(measurementId)
+      const recentRunIds = runs.slice(0, limit).map(r => r.id)
+      if (recentRunIds.length === 0) return []
+
+      // Step 2: Fetch attempts only for those runs (much fewer rows)
       const { data, error } = await this.supabase
         .from('ranking_attempts')
         .select('analysis_run_id, created_at, target_product_rank, success, llm_provider_id, llm_providers!inner(id, name, display_name)')
         .eq('measurement_id', measurementId)
-        .order('created_at', { ascending: false })
-        .limit(limit * 50)
+        .in('analysis_run_id', recentRunIds)
 
       if (error) {
         console.error('[Service] getMeasurementRankingHistory: Error', error)
         throw new Error(`Failed to fetch ranking history: ${error.message}`)
       }
+
+      // Build a created_at lookup from the runs we already have
+      const runCreatedAt = new Map(runs.map(r => [r.id, r.created_at]))
 
       // Group by analysis_run_id
       const runStats = new Map<string, {
@@ -724,7 +740,7 @@ export class DatabaseService {
         const runId = attempt.analysis_run_id
         if (!runStats.has(runId)) {
           runStats.set(runId, {
-            created_at: attempt.created_at,
+            created_at: runCreatedAt.get(runId) || attempt.created_at,
             rankings: [],
             total_attempts: 0,
             successful_attempts: 0,
@@ -739,7 +755,6 @@ export class DatabaseService {
           stats.rankings.push(attempt.target_product_rank)
           stats.successful_attempts++
 
-          // Track per-provider
           const providerId = attempt.llm_provider_id
           const providerInfo = attempt.llm_providers as any
           const providerName = providerInfo?.display_name || providerInfo?.name || 'Unknown'
@@ -770,7 +785,6 @@ export class DatabaseService {
           }))
         }))
         .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
-        .slice(0, limit)
     } catch (error) {
       console.error('[Service] getMeasurementRankingHistory: Error', error)
       return []

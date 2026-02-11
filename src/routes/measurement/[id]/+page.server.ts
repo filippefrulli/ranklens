@@ -25,13 +25,9 @@ export const load: PageServerLoad = async ({ locals, params, url, depends }) => 
       throw error(404, 'Measurement not found')
     }
 
+    // RLS ensures only the owner can read their products — no separate ownership check needed
     const product = await dbService.getProduct(measurement.product_id)
     if (!product) {
-      throw error(403, 'Access denied')
-    }
-
-    const isOwner = await dbService.validateProductOwnership(product.id)
-    if (!isOwner) {
       throw error(403, 'Access denied')
     }
 

@@ -17,7 +17,7 @@ export class QuerySuggestionService {
     try {
       const researchNarrative = await this.researchCompanyWithRetry(company)
       const prompt = this.buildPrompt(company, researchNarrative)
-      const content = await this.queryLLMWithRetry(LLMProviderId.OPENAI, DEFAULT_MODELS.OPENAI, prompt, 'low')
+      const content = await this.queryLLMWithRetry(LLMProviderId.OPENAI, DEFAULT_MODELS[LLMProviderId.OPENAI], prompt, 'low')
 
       if (!content) {
         throw new Error('No content received from LLM')
@@ -74,7 +74,7 @@ export class QuerySuggestionService {
       googlePrimaryTypeDisplay: company.google_primary_type_display
     })
 
-    const researchContent = await this.queryLLMWithRetry(LLMProviderId.OPENAI, DEFAULT_MODELS.OPENAI, researchPrompt, 'medium')
+    const researchContent = await this.queryLLMWithRetry(LLMProviderId.OPENAI, DEFAULT_MODELS[LLMProviderId.OPENAI], researchPrompt, 'medium')
 
     if (!researchContent) {
       throw new Error('No research content received')

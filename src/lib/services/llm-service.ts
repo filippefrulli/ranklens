@@ -2,7 +2,7 @@ import type { LLMProvider } from '../types'
 import { env } from '$env/dynamic/private'
 import { GoogleGenAI } from '@google/genai'
 import { buildRankingPrompt, buildStandardizationPrompt } from './prompt-templates'
-import { normalizeProvider, LLMProviderId, getDefaultModel } from '$lib/constants/llm'
+import { resolveProviderId, LLMProviderId, DEFAULT_MODELS } from '$lib/constants/llm'
 
 export interface LLMResponse {
   rankedBusinesses: string[]
@@ -80,18 +80,18 @@ export class LLMService {
 
   // Public method for general LLM queries
   public static async queryLLM(providerName: string, model: string, prompt: string, reasoning: string): Promise<string> {
-    const { id, model: resolvedModel, displayName } = normalizeProvider(providerName, model)
+    const id = resolveProviderId(providerName)
     try {
       switch (id) {
         case LLMProviderId.OPENAI:
-          return await this.callOpenAI(prompt, resolvedModel, reasoning)
+          return await this.callOpenAI(prompt, model, reasoning)
         case LLMProviderId.GEMINI:
-          return await this.callGemini(prompt, resolvedModel)
+          return await this.callGemini(prompt, model)
         default:
-          throw new Error(`Unsupported LLM provider: ${displayName}`)
+          throw new Error(`Unsupported LLM provider: ${providerName}`)
       }
     } catch (error) {
-      console.error(`Error querying ${displayName}:`, error)
+      console.error(`Error querying ${providerName}:`, error)
       throw error
     }
   }
@@ -268,8 +268,13 @@ export class LLMService {
     const ai = new GoogleGenAI({ apiKey })
     const resp = await withTimeout(
       ai.models.generateContent({
-        model: model || getDefaultModel(LLMProviderId.GEMINI),
+        model: model || DEFAULT_MODELS[LLMProviderId.GEMINI],
         contents: prompt,
+        config: {
+          thinkingConfig: {
+            thinkingLevel: "low"
+          }
+        }
       })
     )
     return resp.text || ''
@@ -303,15 +308,16 @@ export class LLMService {
   const prompt = buildRankingPrompt({ query, userProductName: businessName, count: requestCount })
       let content = ''
       
-      // Normalize provider name & get canonical model
-      const { id, model: canonicalModel, displayName } = normalizeProvider(provider.name)
+      // Resolve which API to call, use model_name from DB provider
+      const id = resolveProviderId(provider.name)
+      const model = provider.model_name || DEFAULT_MODELS[id]
 
       switch (id) {
         case LLMProviderId.OPENAI:
-          content = await this.callOpenAI(prompt, canonicalModel, 'low')
+          content = await this.callOpenAI(prompt, model, 'low')
           break
         case LLMProviderId.GEMINI:
-          content = await this.callGemini(prompt, canonicalModel)
+          content = await this.callGemini(prompt, model)
           break
         default:
           throw new Error(`Unsupported provider: ${provider.name}`)

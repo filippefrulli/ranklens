@@ -331,7 +331,8 @@ CREATE POLICY "llm_providers_public_read" ON public.llm_providers FOR SELECT
 
 INSERT INTO public.llm_providers (name, display_name, model_name, is_active) VALUES
   ('openai-gpt5-nano', 'GPT-5.2', 'gpt-5-nano', true),
-  ('google-gemini-3', 'Gemini 3', 'gemini-3', true)
+  ('gemini-3-flash-preview', 'Gemini 3 Flash', 'gemini-3-flash-preview', true),
+  ('gemini-3-pro-preview', 'Gemini 3 Pro', 'gemini-3-pro-preview', true)
 ON CONFLICT (name) DO NOTHING;
 
 -- ============================================================================

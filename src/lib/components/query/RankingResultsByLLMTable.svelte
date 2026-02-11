@@ -3,11 +3,15 @@
   
   export let rankingResults: any[]
 
-  import { getProviderDisplayName } from '$lib/constants/llm'
+  import { resolveProviderId, PROVIDER_DISPLAY_NAMES } from '$lib/constants/llm'
 
   function formatLLMName(llmName: string): string {
     if (!llmName) return 'Unknown Provider'
-    return getProviderDisplayName(llmName)
+    try {
+      return PROVIDER_DISPLAY_NAMES[resolveProviderId(llmName)]
+    } catch {
+      return llmName
+    }
   }
 
   // Aggregate results by LLM provider

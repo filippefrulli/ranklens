@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { normalizeProvider, LLMProviderId } from '$lib/constants/llm';
+  import { resolveProviderId, LLMProviderId } from '$lib/constants/llm';
 
   interface Props {
     provider: string; // can be raw name, alias, or canonical id
@@ -26,12 +26,9 @@
 
   $effect(() => {
     try {
-      const norm = normalizeProvider(provider);
-      id = norm.id;
-      displayName = norm.displayName;
+      id = resolveProviderId(provider);
     } catch {
       id = null;
-      displayName = provider;
     }
   });
 

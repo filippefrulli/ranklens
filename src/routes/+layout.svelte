@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onNavigate, invalidateAll } from "$app/navigation";
+  import { invalidateAll } from "$app/navigation";
   import { onMount } from "svelte";
   import "../app.css";
   import Footer from "$lib/components/layout/Footer.svelte";
@@ -16,17 +16,6 @@
   }>();
 
   let { session, supabase } = $derived(data);
-
-  onNavigate((navigation) => {
-    if (!document.startViewTransition) return;
-
-    return new Promise((resolve) => {
-      document.startViewTransition(async () => {
-        resolve();
-        await navigation.complete;
-      });
-    });
-  });
 
   onMount(() => {
     // 1) Immediately reconcile any existing session (e.g., after OAuth redirect)

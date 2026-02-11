@@ -22,7 +22,7 @@
   let isOpen = $state(false)
   let dropdownRef: HTMLDivElement
 
-  import { normalizeProvider, LLMProviderId } from '$lib/constants/llm'
+  import { resolveProviderId, LLMProviderId } from '$lib/constants/llm'
   import LLMLogo from '$lib/components/logos/LLMLogo.svelte'
 
   // Provider icons mapping using canonical provider id

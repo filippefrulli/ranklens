@@ -28,6 +28,7 @@
   let runningAnalysis = $state<AnalysisRun | null>(data.runningAnalysis ?? null);
   let justStartedAnalysis = $state(false);
   let loading = $state(false);
+  let loadingRunData = $state(false);
 
   // Tabs
   let activeTab = $state<'results' | 'history'>('results');
@@ -41,6 +42,7 @@
     selectedRunId = data.selectedRunId;
     rankingResults = data.rankingResults ?? [];
     rawCompetitorResults = data.competitorResults ?? [];
+    loadingRunData = false;
     rankingHistory = data.rankingHistory ?? [];
     const prop = data.runningAnalysis ?? null;
     if (!prop) {
@@ -156,9 +158,11 @@
 
   async function selectRun(runId: string) {
     if (runId !== selectedRunId) {
+      selectedRunId = runId;
+      loadingRunData = true;
       const url = new URL(window.location.href);
       url.searchParams.set('run', runId);
-      await goto(url.pathname + url.search, { keepFocus: true });
+      goto(url.pathname + url.search, { keepFocus: true, noScroll: true });
     }
   }
 
@@ -546,7 +550,14 @@
         </div>
 
         <!-- Competitor Rankings -->
-        {#if competitorRankings.length > 0}
+        {#if loadingRunData}
+          <Card padding="p-12" custom="text-center">
+            <div class="flex flex-col items-center gap-3">
+              <div class="h-8 w-8 rounded-full border-[3px] border-slate-200 border-t-[rgb(var(--color-primary))] animate-spin"></div>
+              <p class="text-sm text-slate-500">Loading results…</p>
+            </div>
+          </Card>
+        {:else if competitorRankings.length > 0}
           <CompetitorRankingsTable {competitorRankings} />
         {:else if selectedRunId}
           <Card padding="p-10" custom="text-center">
@@ -557,7 +568,7 @@
         {/if}
 
         <!-- LLM Breakdown for selected run -->
-        {#if llmBreakdown.length > 0}
+        {#if !loadingRunData && llmBreakdown.length > 0}
           <Card padding="p-6">
             <h3 class="text-sm font-semibold text-slate-700 mb-4">LLM Breakdown</h3>
             <div class="overflow-x-auto">

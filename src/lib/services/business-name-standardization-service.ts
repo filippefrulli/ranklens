@@ -52,7 +52,7 @@ export class BusinessNameStandardizationService {
       // Use the existing LLM service to standardize names
       const response = await LLMService.queryLLM(
         LLMProviderId.OPENAI,
-        DEFAULT_MODELS.OPENAI,
+        DEFAULT_MODELS[LLMProviderId.OPENAI],
         prompt,
         'low'
       )

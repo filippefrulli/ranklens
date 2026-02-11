@@ -122,7 +122,7 @@ export const actions: Actions = {
       }
 
       const analysisService = new AnalysisService(locals.supabase, locals.user.id)
-      const result = await analysisService.runAnalysis(measurement.product_id)
+      const result = await analysisService.runAnalysis(measurement.product_id, measurementId)
 
       if (!result.success) {
         return fail(500, { error: result.error || 'Failed to start analysis' })

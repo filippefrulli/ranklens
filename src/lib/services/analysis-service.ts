@@ -2,7 +2,8 @@ import { LLMService } from './llm-service'
 import { DatabaseService } from './database-service'
 import type { Product, Measurement, LLMProvider, AnalysisRun } from '../types'
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
-import { PUBLIC_SUPABASE_URL, PUBLIC_SUPABASE_ANON_KEY } from '$env/static/public'
+import { PUBLIC_SUPABASE_URL } from '$env/static/public'
+import { env } from '$env/dynamic/private'
 
 const ATTEMPTS_PER_MEASUREMENT = 10
 
@@ -18,10 +19,10 @@ export class AnalysisService {
   }
 
   /**
-   * Run complete analysis for a product (scoped to product, not company).
+   * Run analysis for a single measurement.
    */
-  async runAnalysis(productId: string): Promise<{ success: boolean; analysisRunId?: string; error?: string }> {
-    console.log(`[Action] runAnalysis: Starting for product ${productId}`)
+  async runAnalysis(productId: string, measurementId: string): Promise<{ success: boolean; analysisRunId?: string; error?: string }> {
+    console.log(`[Action] runAnalysis: Starting for measurement ${measurementId} (product ${productId})`)
 
     try {
       // Validate ownership
@@ -38,12 +39,13 @@ export class AnalysisService {
         return { success: false, error: 'Product not found' }
       }
 
-      // Get measurements
-      const measurements = await this.dbService.getMeasurementsForProduct(productId)
-      if (measurements.length === 0) {
-        console.error(`[Action] runAnalysis: No measurements for product "${product.name}"`)
-        return { success: false, error: 'No measurements found for this product' }
+      // Get the specific measurement
+      const measurement = await this.dbService.getMeasurement(measurementId)
+      if (!measurement) {
+        console.error(`[Action] runAnalysis: Measurement not found ${measurementId}`)
+        return { success: false, error: 'Measurement not found' }
       }
+      const measurements = [measurement]
 
       // Get active providers
       const providers = await this.dbService.getActiveLLMProviders()
@@ -53,21 +55,18 @@ export class AnalysisService {
       }
 
       // Create analysis run
-      const analysisRun = await this.dbService.createAnalysisRun(productId, measurements.length)
+      const analysisRun = await this.dbService.createAnalysisRun(productId, 1)
 
-      const totalCalls = measurements.length * providers.length * ATTEMPTS_PER_MEASUREMENT
-      console.log(`[Action] runAnalysis: Setup complete for "${product.name}": ${measurements.length} measurements × ${providers.length} providers × ${ATTEMPTS_PER_MEASUREMENT} attempts = ${totalCalls} total LLM calls`)
+      const totalCalls = providers.length * ATTEMPTS_PER_MEASUREMENT
+      console.log(`[Action] runAnalysis: Setup complete for "${product.name}" / "${measurement.title}": ${providers.length} providers × ${ATTEMPTS_PER_MEASUREMENT} attempts = ${totalCalls} total LLM calls`)
 
-      // Create a cookie-less background Supabase client
+      // Create a background Supabase client using the secret key (bypasses RLS, never expires)
       let backgroundDb = this.dbService
       try {
-        const { data: { session } } = await this.supabase.auth.getSession()
-        const accessToken = session?.access_token
-        const backgroundSupabase = createClient(PUBLIC_SUPABASE_URL, PUBLIC_SUPABASE_ANON_KEY, {
+        const secretKey = env.SUPABASE_PRIVATE_KEY
+        if (!secretKey) throw new Error('SUPABASE_PRIVATE_KEY not configured')
+        const backgroundSupabase = createClient(PUBLIC_SUPABASE_URL, secretKey, {
           auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
-          global: {
-            headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : {}
-          }
         })
         backgroundDb = new DatabaseService(backgroundSupabase as any, this.userId)
       } catch (e) {

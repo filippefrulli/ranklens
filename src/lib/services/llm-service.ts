@@ -162,7 +162,7 @@ export class LLMService {
   }
 
   // Post-process business names with Gemini to standardize to Google Maps names
-  private static async standardizeBusinessNames(businessNames: string[], userBusinessName: string): Promise<string[]> {
+  public static async standardizeBusinessNames(businessNames: string[], userBusinessName: string): Promise<string[]> {
     if (businessNames.length === 0) return businessNames
 
     // Skip standardization if we have too many names to avoid overwhelming the API
@@ -295,6 +295,75 @@ export class LLMService {
   }
 
   // Main method for making LLM requests (server-only)
+  // Returns raw (un-standardized) business names — no standardization call.
+  public static async makeRequestRaw(
+    provider: LLMProvider,
+    query: string,
+    businessName: string,
+    requestCount: number = 25
+  ): Promise<LLMResponse> {
+    const startTime = Date.now()
+    console.log(`🤖 ${provider.name} request: "${query}" for "${businessName}"`)
+    
+    try {
+      const prompt = buildRankingPrompt({ query, userProductName: businessName, count: requestCount })
+      let content = ''
+      
+      // Resolve which API to call, use model_name from DB provider
+      const id = resolveProviderId(provider.name)
+      const model = provider.model_name || DEFAULT_MODELS[id]
+
+      switch (id) {
+        case LLMProviderId.OPENAI:
+          content = await this.callOpenAI(prompt, model, 'low')
+          break
+        case LLMProviderId.GEMINI:
+          content = await this.callGemini(prompt, model)
+          break
+        default:
+          throw new Error(`Unsupported provider: ${provider.name}`)
+      }
+      
+      const rawBusinessNames = this.deduplicateRankedList(this.extractBusinessNames(content))
+      
+      // Find user business using fuzzy match on raw names
+      const foundResult = this.findBusinessInList(businessName, rawBusinessNames)
+      
+      // Calculate truncation limit based on user business rank
+      const truncationLimit = this.calculateTruncationLimit(foundResult.rank, rawBusinessNames.length)
+      
+      // Truncate the results to only include businesses up to the limit
+      const rankedBusinesses = rawBusinessNames.slice(0, truncationLimit)
+
+      const responseTime = Date.now() - startTime
+      console.log(`✅ ${provider.name} → ${rankedBusinesses.length} businesses (rank: ${foundResult.rank || 'n/a'}) in ${responseTime}ms`)
+      
+      return {
+        rankedBusinesses,
+        foundBusinessRank: foundResult.rank,
+        foundBusinessName: foundResult.foundName,
+        responseTimeMs: responseTime,
+        success: true,
+        totalRequested: requestCount
+      }
+      
+    } catch (err) {
+      const responseTime = Date.now() - startTime
+      console.error(`❌ ${provider.name} failed: ${err instanceof Error ? err.message : err} (${responseTime}ms)`)
+      
+      return {
+        rankedBusinesses: [],
+        foundBusinessRank: null,
+        foundBusinessName: null,
+        responseTimeMs: Date.now() - startTime,
+        success: false,
+        error: err instanceof Error ? err.message : String(err),
+        totalRequested: requestCount
+      }
+    }
+  }
+
+  // Legacy method that includes per-request standardization
   public static async makeRequest(
     provider: LLMProvider,
     query: string,

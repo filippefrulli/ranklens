@@ -87,7 +87,8 @@ export class AnalysisService {
   }
 
   /**
-   * Background analysis execution — 10 attempts per measurement per provider.
+   * Background analysis execution — 10 attempts per provider, all providers in parallel.
+   * Standardization runs once at the end on all unique business names.
    */
   private async runAnalysisInBackground(
     analysisRun: AnalysisRun,
@@ -111,10 +112,11 @@ export class AnalysisService {
         const measurement = measurements[mIdx]
         const rankingAttempts: any[] = []
 
-        for (const provider of providers) {
+        // Run all providers in parallel, each running its attempts sequentially
+        const providerTasks = providers.map(provider => (async () => {
           for (let attemptNum = 1; attemptNum <= ATTEMPTS_PER_MEASUREMENT; attemptNum++) {
             try {
-              const result = await LLMService.makeRequest(provider, measurement.query, product.name, 25)
+              const result = await LLMService.makeRequestRaw(provider, measurement.query, product.name, 25)
               completedCalls++
               if (result.success) successfulCalls++
               else failedCalls++
@@ -130,6 +132,7 @@ export class AnalysisService {
                 error_message: result.error || null,
               })
 
+              // Update progress periodically
               if (completedCalls % 5 === 0 || completedCalls === totalCalls) {
                 try {
                   await db.updateAnalysisRun(analysisRun.id, { completed_llm_calls: completedCalls })
@@ -137,13 +140,10 @@ export class AnalysisService {
                   console.warn(`[Service] Failed to update progress (${completedCalls}/${totalCalls}):`, e instanceof Error ? e.message : e)
                 }
               }
-
-              if (attemptNum < ATTEMPTS_PER_MEASUREMENT) {
-                await new Promise(resolve => setTimeout(resolve, 1000))
-              }
             } catch (err) {
               console.error(`[Service] Error in ${provider.name} attempt ${attemptNum}:`, err)
               completedCalls++
+              failedCalls++
 
               const errorMessage = err instanceof Error ? err.message : String(err)
               rankingAttempts.push({
@@ -157,12 +157,6 @@ export class AnalysisService {
                 error_message: errorMessage,
               })
 
-              if (completedCalls % 5 === 0 || completedCalls === totalCalls) {
-                try {
-                  await db.updateAnalysisRun(analysisRun.id, { completed_llm_calls: completedCalls })
-                } catch {}
-              }
-
               // Auth errors → skip remaining attempts for this provider
               if (errorMessage.toLowerCase().includes('api key') ||
                   errorMessage.toLowerCase().includes('unauthorized') ||
@@ -170,6 +164,7 @@ export class AnalysisService {
                 console.warn(`[Service] ${provider.name} auth issue — skipping remaining attempts`)
                 for (let skip = attemptNum + 1; skip <= ATTEMPTS_PER_MEASUREMENT; skip++) {
                   completedCalls++
+                  failedCalls++
                   rankingAttempts.push({
                     analysis_run_id: analysisRun.id,
                     measurement_id: measurement.id,
@@ -181,16 +176,46 @@ export class AnalysisService {
                     error_message: `Skipped due to authentication error: ${errorMessage}`,
                   })
                 }
-                try {
-                  await db.updateAnalysisRun(analysisRun.id, { completed_llm_calls: completedCalls })
-                } catch {}
                 break
               }
             }
           }
+        })())
 
-          // Delay between providers
-          await new Promise(resolve => setTimeout(resolve, 2000))
+        // Wait for all providers to finish
+        await Promise.all(providerTasks)
+
+        // Post-process: standardize all business names from successful attempts in one batch
+        const allRawNames = new Set<string>()
+        for (const attempt of rankingAttempts) {
+          if (attempt.success && attempt.parsed_ranking) {
+            for (const name of attempt.parsed_ranking) {
+              allRawNames.add(name)
+            }
+          }
+        }
+
+        if (allRawNames.size > 0) {
+          try {
+            const uniqueNames = Array.from(allRawNames)
+            const standardized = await LLMService.standardizeBusinessNames(uniqueNames, product.name)
+            // Build mapping from raw → standardized
+            const nameMap = new Map<string, string>()
+            for (let i = 0; i < uniqueNames.length && i < standardized.length; i++) {
+              nameMap.set(uniqueNames[i], standardized[i])
+            }
+            // Apply standardization to all attempts
+            for (const attempt of rankingAttempts) {
+              if (attempt.success && attempt.parsed_ranking) {
+                attempt.parsed_ranking = attempt.parsed_ranking.map(
+                  (name: string) => nameMap.get(name) || name
+                )
+              }
+            }
+            console.log(`[Service] Standardized ${uniqueNames.length} unique names across ${rankingAttempts.length} attempts`)
+          } catch (e) {
+            console.warn('[Service] Post-processing standardization failed, keeping raw names:', e instanceof Error ? e.message : e)
+          }
         }
 
         // Save ranking attempts for this measurement

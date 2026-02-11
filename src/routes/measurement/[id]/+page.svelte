@@ -492,7 +492,7 @@
         <div>
           <p class="text-sm font-semibold text-slate-800">Analysis in progress</p>
           <p class="text-sm text-slate-500 mt-0.5">Querying {currentProviderName}</p>
-          <p class="text-[11px] text-slate-400 mt-0.5">This may take up to a minute</p>
+          <p class="text-[11px] text-slate-400 mt-0.5">This may take a few minutes</p>
         </div>
       </div>
     {:else if runningAnalysis && runningAnalysis.status === 'completed'}

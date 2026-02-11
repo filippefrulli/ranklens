@@ -102,6 +102,11 @@ export interface MeasurementRankingHistory {
   worst_rank: number | null
   total_attempts: number
   successful_attempts: number
+  provider_breakdown: {
+    provider_id: string
+    provider_name: string
+    average_rank: number | null
+  }[]
 }
 
 export interface RankingAnalytics {

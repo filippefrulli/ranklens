@@ -193,26 +193,15 @@
                 </span>
               </td>
               <td class="px-6 py-4 whitespace-nowrap">
-                <div class="flex items-center">
-                  <div class="flex-1 bg-gray-200 rounded-full h-2 mr-2">
-                    <div
-                      class="bg-[rgb(var(--color-primary))] h-2 rounded-full"
-                      style="width: {getAppearancePercentage(
-                        competitor.appearances_count,
-                        competitor.total_attempts
-                      )}%"
-                    ></div>
-                  </div>
-                  <span class="text-sm text-gray-600">
-                    {getAppearancePercentage(
-                      competitor.appearances_count,
-                      competitor.total_attempts
-                    )}%
-                  </span>
-                  <span class="text-xs text-gray-500 ml-1">
-                    ({competitor.appearances_count}/{competitor.total_attempts})
-                  </span>
-                </div>
+                <span class="text-sm text-gray-600">
+                  {getAppearancePercentage(
+                    competitor.appearances_count,
+                    competitor.total_attempts
+                  )}%
+                </span>
+                <span class="text-xs text-gray-500 ml-1">
+                  ({competitor.appearances_count}/{competitor.total_attempts})
+                </span>
               </td>
             </tr>
           {/each}
@@ -221,14 +210,19 @@
     </div>
 
     {#if competitorRankings.length > 0}
-      <div class="bg-gray-50 px-6 py-3">
-        <p class="text-sm text-gray-600">
-          <strong>Weighted Analysis:</strong><br/> Results are ranked by weighted score
-          that considers both average rank and appearance consistency.
+      <div class="bg-gray-50 px-6 py-4 space-y-2">
+        <p class="text-sm font-medium text-gray-700">How is the Weighted Score calculated?</p>
+        <p class="text-xs text-gray-500 font-mono bg-white px-3 py-1.5 rounded border border-gray-200 inline-block">
+          Weighted Score = Average Rank + 25 × (1 − Frequency)²
         </p>
-        <p class="text-sm text-gray-600">A product
-          appearing in 100% of attempts at rank #15 scores better than one appearing
-          once at rank #14.</p>
+        <p class="text-xs text-gray-500">
+          Products are ranked by weighted score (lower is better). The formula rewards products that appear <strong>consistently</strong> across queries.
+          A product that rarely appears gets a heavy penalty, even if its rank was high in that one instance.
+        </p>
+        <div class="text-xs text-gray-400 flex gap-6">
+          <span>e.g. Rank #6, 100% frequency → <strong class="text-gray-600">6.0</strong></span>
+          <span>e.g. Rank #1, 5% frequency → <strong class="text-gray-600">23.6</strong></span>
+        </div>
       </div>
     {/if}
   {/if}

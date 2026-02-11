@@ -213,6 +213,30 @@ export class DatabaseService {
     return data
   }
 
+  async deleteMeasurement(measurementId: string): Promise<void> {
+    const { error } = await this.supabase
+      .from('measurements')
+      .delete()
+      .eq('id', measurementId)
+
+    if (error) {
+      console.error('[Service] deleteMeasurement: Error', error)
+      throw new Error(`Failed to delete measurement: ${error.message}`)
+    }
+  }
+
+  async deleteProduct(productId: string): Promise<void> {
+    const { error } = await this.supabase
+      .from('products')
+      .delete()
+      .eq('id', productId)
+
+    if (error) {
+      console.error('[Service] deleteProduct: Error', error)
+      throw new Error(`Failed to delete product: ${error.message}`)
+    }
+  }
+
   // ── LLM Provider operations ──────────────────────────────────────────────
 
   async getActiveLLMProviders(): Promise<LLMProvider[]> {
@@ -295,6 +319,92 @@ export class DatabaseService {
       return []
     }
     return data || []
+  }
+
+  async getAnalysisRunsForMeasurement(measurementId: string): Promise<Pick<AnalysisRun, 'id' | 'created_at'>[]> {
+    // Get distinct analysis_run_ids that have ranking_attempts for this measurement
+    const { data: attempts, error: attError } = await this.supabase
+      .from('ranking_attempts')
+      .select('analysis_run_id')
+      .eq('measurement_id', measurementId)
+
+    if (attError) {
+      console.error('[Service] getAnalysisRunsForMeasurement: Error fetching attempts', attError)
+      return []
+    }
+
+    const runIds = [...new Set((attempts || []).map(a => a.analysis_run_id))]
+    if (runIds.length === 0) return []
+
+    const { data, error } = await this.supabase
+      .from('analysis_runs')
+      .select('id, created_at')
+      .in('id', runIds)
+      .order('created_at', { ascending: false })
+
+    if (error) {
+      console.error('[Service] getAnalysisRunsForMeasurement: Error fetching runs', error)
+      return []
+    }
+    return data || []
+  }
+
+  /**
+   * Get summary stats (last run date + average rank) for each measurement of a product.
+   * Returns a map of measurementId → { lastRunAt, averageRank }.
+   */
+  async getMeasurementSummaries(productId: string): Promise<Map<string, { lastRunAt: string | null, averageRank: number | null }>> {
+    const result = new Map<string, { lastRunAt: string | null, averageRank: number | null }>()
+
+    try {
+      // Get the most recent completed analysis run for this product
+      const { data: runs, error: runError } = await this.supabase
+        .from('analysis_runs')
+        .select('id, created_at')
+        .eq('product_id', productId)
+        .eq('status', 'completed')
+        .order('created_at', { ascending: false })
+        .limit(1)
+
+      if (runError || !runs || runs.length === 0) return result
+
+      const latestRun = runs[0]
+
+      // Get all ranking attempts for this run, grouped by measurement
+      const { data: attempts, error: attError } = await this.supabase
+        .from('ranking_attempts')
+        .select('measurement_id, target_product_rank, success, created_at')
+        .eq('analysis_run_id', latestRun.id)
+
+      if (attError || !attempts) return result
+
+      // Group by measurement_id
+      const byMeasurement = new Map<string, { ranks: number[], maxCreatedAt: string }>()
+      for (const att of attempts) {
+        if (!byMeasurement.has(att.measurement_id)) {
+          byMeasurement.set(att.measurement_id, { ranks: [], maxCreatedAt: att.created_at })
+        }
+        const entry = byMeasurement.get(att.measurement_id)!
+        if (att.created_at > entry.maxCreatedAt) entry.maxCreatedAt = att.created_at
+        if (att.success && att.target_product_rank != null) {
+          entry.ranks.push(att.target_product_rank)
+        }
+      }
+
+      for (const [measurementId, data] of byMeasurement) {
+        const avgRank = data.ranks.length > 0
+          ? data.ranks.reduce((a, b) => a + b, 0) / data.ranks.length
+          : null
+        result.set(measurementId, {
+          lastRunAt: latestRun.created_at,
+          averageRank: avgRank != null ? Number(avgRank.toFixed(1)) : null
+        })
+      }
+    } catch (err: any) {
+      console.error('[Service] getMeasurementSummaries: Error', { error: err?.message })
+    }
+
+    return result
   }
 
   // ── Ranking Attempts ─────────────────────────────────────────────────────
@@ -523,8 +633,11 @@ export class DatabaseService {
         const bestRank = Math.min(...ranks)
         const worstRank = Math.max(...ranks)
         const providerAttempts = attempts.filter(a => a.llm_providers?.name === providerName).length
-        const appearanceRate = (ranks.length / providerAttempts) * 100
-        const weightedScore = averageRank * (3.0 - 2.5 * (appearanceRate / 100))
+        const appearanceRate = ranks.length / providerAttempts
+        // Weighted score: average rank + heavy penalty for low appearance rate
+        // A product appearing 1/10 times at rank #1 gets 1 + 25*(0.9)^2 = 21.25
+        // A product appearing 10/10 times at rank #6 gets 6 + 25*(0)^2 = 6.0
+        const weightedScore = averageRank + 25 * Math.pow(1 - appearanceRate, 2)
 
         competitorResults.push({
           measurement_id: measurementId,
@@ -588,11 +701,10 @@ export class DatabaseService {
     try {
       const { data, error } = await this.supabase
         .from('ranking_attempts')
-        .select('analysis_run_id, created_at, parsed_ranking')
+        .select('analysis_run_id, created_at, target_product_rank, success, llm_provider_id, llm_providers!inner(id, name, display_name)')
         .eq('measurement_id', measurementId)
-        .not('parsed_ranking', 'is', null)
         .order('created_at', { ascending: false })
-        .limit(limit * 10)
+        .limit(limit * 50)
 
       if (error) {
         console.error('[Service] getMeasurementRankingHistory: Error', error)
@@ -605,6 +717,7 @@ export class DatabaseService {
         rankings: number[]
         total_attempts: number
         successful_attempts: number
+        providerRankings: Map<string, { name: string, ranks: number[] }>
       }>()
 
       for (const attempt of (data || [])) {
@@ -614,25 +727,26 @@ export class DatabaseService {
             created_at: attempt.created_at,
             rankings: [],
             total_attempts: 0,
-            successful_attempts: 0
+            successful_attempts: 0,
+            providerRankings: new Map()
           })
         }
 
         const stats = runStats.get(runId)!
         stats.total_attempts++
 
-        try {
-          const ranking = Array.isArray(attempt.parsed_ranking)
-            ? attempt.parsed_ranking
-            : JSON.parse(attempt.parsed_ranking || '[]')
+        if (attempt.success && attempt.target_product_rank != null) {
+          stats.rankings.push(attempt.target_product_rank)
+          stats.successful_attempts++
 
-          if (ranking.length > 0) {
-            const rank = Math.ceil(ranking.length / 2)
-            stats.rankings.push(rank)
-            stats.successful_attempts++
+          // Track per-provider
+          const providerId = attempt.llm_provider_id
+          const providerInfo = attempt.llm_providers as any
+          const providerName = providerInfo?.display_name || providerInfo?.name || 'Unknown'
+          if (!stats.providerRankings.has(providerId)) {
+            stats.providerRankings.set(providerId, { name: providerName, ranks: [] })
           }
-        } catch {
-          // skip unparseable
+          stats.providerRankings.get(providerId)!.ranks.push(attempt.target_product_rank)
         }
       }
 
@@ -646,7 +760,14 @@ export class DatabaseService {
           best_rank: stats.rankings.length > 0 ? Math.min(...stats.rankings) : null,
           worst_rank: stats.rankings.length > 0 ? Math.max(...stats.rankings) : null,
           total_attempts: stats.total_attempts,
-          successful_attempts: stats.successful_attempts
+          successful_attempts: stats.successful_attempts,
+          provider_breakdown: Array.from(stats.providerRankings.entries()).map(([pid, pdata]) => ({
+            provider_id: pid,
+            provider_name: pdata.name,
+            average_rank: pdata.ranks.length > 0
+              ? pdata.ranks.reduce((a, b) => a + b, 0) / pdata.ranks.length
+              : null
+          }))
         }))
         .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
         .slice(0, limit)

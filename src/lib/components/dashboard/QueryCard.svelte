@@ -51,7 +51,7 @@
     
     <!-- View Details Button in Top Right -->
     <a
-      href="/query/{query.id}"
+      href="/measurement/{query.id}"
       aria-label="View details for query"
 	class="bg-white border border-gray-300 hover:bg-gray-50 text-slate-700 hover:text-slate-900 text-sm font-medium py-2 px-3 rounded-md transition-colors cursor-pointer inline-flex items-center flex-shrink-0"
     >

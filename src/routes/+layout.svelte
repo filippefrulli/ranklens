@@ -35,15 +35,9 @@
         const sessionChanged = newSession?.expires_at !== session?.expires_at;
 
         if (event === "SIGNED_IN" || event === "TOKEN_REFRESHED" || event === "USER_UPDATED" || sessionChanged) {
-          const {
-            data: { user },
-          } = await supabase.auth.getUser();
-
-          // Invalidate everything to refresh layout/page loads that depend on auth
+          // Invalidate everything to refresh layout/page loads that depend on auth.
+          // User is validated server-side by authGuard — no need for getUser() here.
           await invalidateAll();
-
-          // Optionally, you could route based on location here if desired
-          // e.g., keep user on the same page and let data update render the dashboard
         }
 
         if (event === "SIGNED_OUT") {

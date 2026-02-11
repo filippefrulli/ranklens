@@ -1,9 +1,10 @@
 import type { LayoutServerLoad } from './$types'
 
-export const load: LayoutServerLoad = async ({ locals: { safeGetSession }, cookies }) => {
-  const { session } = await safeGetSession()
+export const load: LayoutServerLoad = async ({ locals, cookies }) => {
+  // session & user are already validated by authGuard in hooks.server.ts
   return {
-    session,
+    session: locals.session,
+    user: locals.user,
     cookies: cookies.getAll(),
   }
 }

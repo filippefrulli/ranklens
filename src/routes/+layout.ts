@@ -26,13 +26,7 @@ export const load: LayoutLoad = async ({ data, depends, fetch }) => {
         },
       })
 
-  /**
-   * Use getUser() which is the recommended secure way to get user data.
-   * Get the session from server-side data to avoid client-side getSession() warning.
-   */
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
-
-  return { session: data.session, supabase, user }
+  // User is already validated server-side by authGuard in hooks.server.ts.
+  // No need for another getUser() round-trip.
+  return { session: data.session, supabase, user: data.user }
 }

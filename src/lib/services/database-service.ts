@@ -361,52 +361,37 @@ export class DatabaseService {
   /**
    * Get summary stats (last run date + average rank) for each measurement of a product.
    * Returns a map of measurementId → { lastRunAt, averageRank }.
+   *
+   * Uses competitor_results (pre-aggregated) so each measurement independently
+   * shows data from its own most recent completed run.
    */
   async getMeasurementSummaries(productId: string): Promise<Map<string, { lastRunAt: string | null, averageRank: number | null }>> {
     const result = new Map<string, { lastRunAt: string | null, averageRank: number | null }>()
 
     try {
-      // Get the most recent completed analysis run for this product
-      const { data: runs, error: runError } = await this.supabase
-        .from('analysis_runs')
-        .select('id, created_at')
-        .eq('product_id', productId)
-        .eq('status', 'completed')
+      // Fetch the target-product row from competitor_results for every completed run
+      // of this product, ordered newest first. One row per measurement per run.
+      const { data, error } = await this.supabase
+        .from('competitor_results')
+        .select(`
+          measurement_id,
+          average_rank,
+          analysis_runs!inner(created_at, product_id, status)
+        `)
+        .eq('is_target', true)
+        .eq('analysis_runs.product_id', productId)
+        .eq('analysis_runs.status', 'completed')
         .order('created_at', { ascending: false })
-        .limit(1)
 
-      if (runError || !runs || runs.length === 0) return result
+      if (error || !data) return result
 
-      const latestRun = runs[0]
-
-      // Get all ranking attempts for this run, grouped by measurement
-      const { data: attempts, error: attError } = await this.supabase
-        .from('ranking_attempts')
-        .select('measurement_id, target_product_rank, success, created_at')
-        .eq('analysis_run_id', latestRun.id)
-
-      if (attError || !attempts) return result
-
-      // Group by measurement_id
-      const byMeasurement = new Map<string, { ranks: number[], maxCreatedAt: string }>()
-      for (const att of attempts) {
-        if (!byMeasurement.has(att.measurement_id)) {
-          byMeasurement.set(att.measurement_id, { ranks: [], maxCreatedAt: att.created_at })
-        }
-        const entry = byMeasurement.get(att.measurement_id)!
-        if (att.created_at > entry.maxCreatedAt) entry.maxCreatedAt = att.created_at
-        if (att.success && att.target_product_rank != null) {
-          entry.ranks.push(att.target_product_rank)
-        }
-      }
-
-      for (const [measurementId, data] of byMeasurement) {
-        const avgRank = data.ranks.length > 0
-          ? data.ranks.reduce((a, b) => a + b, 0) / data.ranks.length
-          : null
-        result.set(measurementId, {
-          lastRunAt: latestRun.created_at,
-          averageRank: avgRank != null ? Number(avgRank.toFixed(1)) : null
+      // Walk rows newest-first; first occurrence of each measurement_id is the most recent run
+      for (const row of data) {
+        if (result.has(row.measurement_id)) continue
+        const runData = row.analysis_runs as any
+        result.set(row.measurement_id, {
+          lastRunAt: runData?.created_at ?? null,
+          averageRank: row.average_rank != null ? Number(Number(row.average_rank).toFixed(1)) : null
         })
       }
     } catch (err: any) {

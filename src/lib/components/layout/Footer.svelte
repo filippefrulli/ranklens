@@ -1,5 +1,5 @@
 <script lang="ts">
-  const version = '1.0.6';
+  const version = '0.3.0';
 </script>
 
 <footer class="relative mt-0 border-t border-slate-200/70 bg-white/70 backdrop-blur-sm">

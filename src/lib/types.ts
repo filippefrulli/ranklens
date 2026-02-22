@@ -46,6 +46,7 @@ export interface LLMProvider {
 export interface AnalysisRun {
   id: string
   product_id: string
+  measurement_id?: string
   status: 'pending' | 'running' | 'completed' | 'failed' | 'cancelled'
   total_measurements: number
   completed_measurements: number

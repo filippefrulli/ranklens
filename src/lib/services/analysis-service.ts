@@ -55,7 +55,7 @@ export class AnalysisService {
       }
 
       // Create analysis run
-      const analysisRun = await this.dbService.createAnalysisRun(productId, 1)
+      const analysisRun = await this.dbService.createAnalysisRun(productId, measurementId, 1)
 
       const totalCalls = providers.length * ATTEMPTS_PER_MEASUREMENT
       console.log(`[Action] runAnalysis: Setup complete for "${product.name}" / "${measurement.title}": ${providers.length} providers × ${ATTEMPTS_PER_MEASUREMENT} attempts = ${totalCalls} total LLM calls`)
@@ -343,9 +343,9 @@ export class AnalysisService {
   }
 
   /**
-   * Get currently running analysis for a product.
+   * Get currently running analysis for a specific measurement.
    */
-  async getAnalysisStatus(productId: string): Promise<AnalysisRun | null> {
-    return await this.dbService.getRunningAnalysisForProduct(productId)
+  async getAnalysisStatus(measurementId: string): Promise<AnalysisRun | null> {
+    return await this.dbService.getRunningAnalysisForMeasurement(measurementId)
   }
 }

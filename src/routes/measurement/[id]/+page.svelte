@@ -71,6 +71,7 @@
     rawCompetitorResults = data.competitorResults ?? [];
     loadingRunData = false;
     rankingHistory = data.rankingHistory ?? [];
+
     const prop = data.runningAnalysis ?? null;
     if (!prop) {
       if (!justStartedAnalysis && runningAnalysis && runningAnalysis.id !== 'temp') {

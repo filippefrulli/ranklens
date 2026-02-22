@@ -270,13 +270,14 @@ export class DatabaseService {
 
   // ── Analysis Run operations ──────────────────────────────────────────────
 
-  async createAnalysisRun(productId: string, totalMeasurements: number): Promise<AnalysisRun> {
-    console.log(`[Service] createAnalysisRun: product=${productId}, measurements=${totalMeasurements}`)
+  async createAnalysisRun(productId: string, measurementId: string, totalMeasurements: number): Promise<AnalysisRun> {
+    console.log(`[Service] createAnalysisRun: product=${productId}, measurement=${measurementId}`)
 
     const { data, error } = await this.supabase
       .from('analysis_runs')
       .insert([{
         product_id: productId,
+        measurement_id: measurementId,
         total_measurements: totalMeasurements,
         started_at: new Date().toISOString()
       }])
@@ -305,18 +306,18 @@ export class DatabaseService {
     return data
   }
 
-  async getRunningAnalysisForProduct(productId: string): Promise<AnalysisRun | null> {
+  async getRunningAnalysisForMeasurement(measurementId: string): Promise<AnalysisRun | null> {
     const { data, error } = await this.supabase
       .from('analysis_runs')
       .select('*')
-      .eq('product_id', productId)
+      .eq('measurement_id', measurementId)
       .in('status', ['pending', 'running'])
       .order('created_at', { ascending: false })
       .limit(1)
       .maybeSingle()
 
     if (error) {
-      console.error('[Service] getRunningAnalysisForProduct: Error', error)
+      console.error('[Service] getRunningAnalysisForMeasurement: Error', error)
       return null
     }
     return data

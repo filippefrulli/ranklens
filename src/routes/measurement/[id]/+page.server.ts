@@ -78,9 +78,9 @@ export const load: PageServerLoad = async ({ locals, params, url, depends }) => 
     // Get ranking history for the History tab
     const rankingHistory = await dbService.getMeasurementRankingHistory(measurementId, 20)
 
-    // Check for running analysis
+    // Check for running analysis scoped to this specific measurement
     const analysisService = new AnalysisService(supabase, user.id)
-    const runningAnalysis = await analysisService.getAnalysisStatus(product.id)
+    const runningAnalysis = await analysisService.getAnalysisStatus(measurementId)
 
     return {
       measurement,

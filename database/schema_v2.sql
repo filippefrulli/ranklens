@@ -87,10 +87,11 @@ CREATE TABLE public.llm_providers (
 -- 2. ANALYSIS
 -- ============================================================================
 
--- One row per "Run Analysis" click, scoped to a single product
+-- One row per "Run Analysis" click, scoped to a single measurement
 CREATE TABLE public.analysis_runs (
   id                    uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   product_id            uuid NOT NULL REFERENCES public.products(id) ON DELETE CASCADE,
+  measurement_id        uuid REFERENCES public.measurements(id) ON DELETE CASCADE,
 
   status                varchar(50) NOT NULL DEFAULT 'pending'
     CHECK (status IN ('pending', 'running', 'completed', 'failed', 'cancelled')),
@@ -214,9 +215,10 @@ CREATE INDEX idx_measurements_active     ON public.measurements(product_id) WHER
 CREATE INDEX idx_llm_providers_active ON public.llm_providers(is_active) WHERE is_active = true;
 
 -- analysis_runs
-CREATE INDEX idx_analysis_runs_product    ON public.analysis_runs(product_id);
-CREATE INDEX idx_analysis_runs_status     ON public.analysis_runs(product_id, status);
-CREATE INDEX idx_analysis_runs_created    ON public.analysis_runs(product_id, created_at DESC);
+CREATE INDEX idx_analysis_runs_product     ON public.analysis_runs(product_id);
+CREATE INDEX idx_analysis_runs_status      ON public.analysis_runs(product_id, status);
+CREATE INDEX idx_analysis_runs_created     ON public.analysis_runs(product_id, created_at DESC);
+CREATE INDEX idx_analysis_runs_measurement ON public.analysis_runs(measurement_id, status);
 
 -- ranking_attempts
 CREATE INDEX idx_ranking_attempts_run       ON public.ranking_attempts(analysis_run_id);

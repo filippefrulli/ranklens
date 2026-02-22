@@ -106,7 +106,11 @@ export class AnalysisService {
       let successfulCalls = 0
       let failedCalls = 0
 
-      await db.updateAnalysisRun(analysisRun.id, { total_llm_calls: totalCalls })
+      await db.updateAnalysisRun(analysisRun.id, {
+        status: 'running',
+        started_at: new Date().toISOString(),
+        total_llm_calls: totalCalls
+      })
 
       for (let mIdx = 0; mIdx < measurements.length; mIdx++) {
         const measurement = measurements[mIdx]
@@ -246,14 +250,24 @@ export class AnalysisService {
       }
 
       // Populate competitor results
+      let competitorCount = 0
       try {
-        const count = await db.populateCompetitorResultsForAnalysisRun(analysisRun.id)
+        competitorCount = await db.populateCompetitorResultsForAnalysisRun(analysisRun.id)
         const duration = Math.round((Date.now() - startTime) / 1000)
-        console.log(`[Service] ANALYSIS COMPLETED for "${product.name}" in ${duration}s — ${successfulCalls}/${totalCalls} successful, ${count} competitor results`)
+        console.log(`[Service] ANALYSIS COMPLETED for "${product.name}" in ${duration}s — ${successfulCalls}/${totalCalls} successful, ${competitorCount} competitor results`)
       } catch (e) {
         console.error('[Service] Failed to populate competitor results:', e instanceof Error ? e.message : e)
         const duration = Math.round((Date.now() - startTime) / 1000)
         console.log(`[Service] ANALYSIS COMPLETED for "${product.name}" in ${duration}s (competitor results failed)`)
+      }
+
+      // Collect sources for target + competitors ranked above target (fire-and-forget)
+      if (competitorCount > 0 && measurements.length > 0) {
+        for (const measurement of measurements) {
+          this.collectSourcesForRun(analysisRun.id, measurement, product.name, db).catch((e) => {
+            console.warn(`[Service] Source collection failed for measurement "${measurement.title}":`, e instanceof Error ? e.message : e)
+          })
+        }
       }
     } catch (err) {
       const duration = Math.round((Date.now() - startTime) / 1000)
@@ -266,6 +280,65 @@ export class AnalysisService {
           completed_at: new Date().toISOString()
         })
       } catch {}
+    }
+  }
+
+  /**
+   * Collect online sources for the target product and competitors ranked above it.
+   * Uses Gemini with Google Search grounding. Non-blocking — errors are swallowed.
+   */
+  private async collectSourcesForRun(
+    analysisRunId: string,
+    measurement: Measurement,
+    targetProductName: string,
+    db: DatabaseService
+  ): Promise<void> {
+    console.log(`[Service] collectSourcesForRun: starting for measurement "${measurement.title}"`)
+
+    const results = await db.getCompetitorResultsForRun(analysisRunId, measurement.id)
+
+    if (results.length === 0) {
+      console.warn('[Service] collectSourcesForRun: no competitor results found')
+      return
+    }
+
+    const targetRow = results.find((r) => r.is_target)
+    const targetRank: number = targetRow?.average_rank ?? Infinity
+
+    // Competitors ranked strictly above the target (lower average_rank = better)
+    const competitorsAbove = results
+      .filter((r) => !r.is_target && r.average_rank != null && r.average_rank < targetRank)
+      .sort((a, b) => (a.average_rank ?? 0) - (b.average_rank ?? 0))
+      .slice(0, 5)
+
+    const productsToFetch: Array<{ name: string; isTarget: boolean }> = [
+      ...(targetRow ? [{ name: targetProductName, isTarget: true }] : []),
+      ...competitorsAbove.map((r) => ({ name: r.product_name, isTarget: false }))
+    ]
+
+    const allCitations: Array<Omit<import('../types').SourceCitation, 'id' | 'created_at'>> = []
+
+    // Fetch sequentially to avoid rate-limiting Gemini grounding
+    for (const p of productsToFetch) {
+      const sources = await LLMService.fetchSourcesForProduct(p.name, measurement.query)
+      for (const src of sources) {
+        allCitations.push({
+          analysis_run_id: analysisRunId,
+          measurement_id: measurement.id,
+          product_name: p.name,
+          is_target: p.isTarget,
+          url: src.url,
+          title: src.title,
+          snippet: src.snippet || undefined
+        })
+      }
+    }
+
+    if (allCitations.length > 0) {
+      await db.saveSourceCitations(allCitations)
+      console.log(`[Service] collectSourcesForRun: saved ${allCitations.length} citations for "${measurement.title}"`)
+    } else {
+      console.log(`[Service] collectSourcesForRun: no citations found for "${measurement.title}"`)
     }
   }
 

@@ -141,6 +141,18 @@ export interface DashboardData {
   }
 }
 
+export interface SourceCitation {
+  id: string
+  analysis_run_id: string
+  measurement_id: string
+  product_name: string
+  is_target: boolean
+  url?: string
+  title?: string
+  snippet?: string
+  created_at: string
+}
+
 export interface QuerySuggestion {
   text: string
   reasoning?: string

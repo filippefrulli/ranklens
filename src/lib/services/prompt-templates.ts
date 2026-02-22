@@ -51,6 +51,19 @@ ${productNames.map((name, index) => `${index + 1}. ${name}`).join('\n')}
 
 Return format: Just the unique standardized names, one per line, with duplicates removed:`}
 
+// ---------------- Source Discovery Prompt ----------------
+
+export interface SourceDiscoveryPromptParams {
+  productName: string
+  query: string
+}
+
+export function buildSourceDiscoveryPrompt({ productName, query }: SourceDiscoveryPromptParams): string {
+  return `Search for online sources that mention or recommend "${productName}" in the context of: "${query}".
+
+Find websites, review sites, directories, news articles, or social media pages that specifically discuss this product or service. Summarise what you find in a short paragraph, mentioning the most relevant sources.`
+}
+
 // ---------------- Additional Prompt Builders (Query Suggestions Flow) ----------------
 
 export interface CompanyResearchPromptParams {

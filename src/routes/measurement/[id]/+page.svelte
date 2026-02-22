@@ -8,7 +8,9 @@
   import Card from "$lib/components/ui/Card.svelte";
   import Button from "$lib/components/ui/Button.svelte";
   import CompetitorRankingsTable from "$lib/components/query/CompetitorRankingsTable.svelte";
+  import SourceCitationsPanel from "$lib/components/query/SourceCitationsPanel.svelte";
   import LLMLogo from "$lib/components/logos/LLMLogo.svelte";
+  import type { SourceCitation } from "$lib/types";
 
   interface Props {
     data: PageData;
@@ -30,8 +32,33 @@
   let loading = $state(false);
   let loadingRunData = $state(false);
 
+  // Post-completion phases: source collection runs async after the run is marked complete
+  let isCollectingSources = $state(false);
+  let analysisJustFinished = $state(false);
+  let sourcesCountAtRunStart = $state(0);
+
+  function finishAnalysis() {
+    isCollectingSources = false;
+    analysisJustFinished = true;
+    setTimeout(() => { analysisJustFinished = false; }, 3000);
+  }
+
   // Tabs
-  let activeTab = $state<'results' | 'history'>('results');
+  let activeTab = $state<'results' | 'history' | 'sources'>('results');
+  let sourceCitations = $state<SourceCitation[]>(data.sourceCitations ?? []);
+
+  $effect(() => {
+    const newCitations = data.sourceCitations ?? [];
+    sourceCitations = newCitations;
+    // If new sources appeared while we were collecting, we're done early
+    if (isCollectingSources && newCitations.length > sourcesCountAtRunStart) {
+      if (postCompletionInterval) {
+        clearInterval(postCompletionInterval);
+        postCompletionInterval = null;
+      }
+      finishAnalysis();
+    }
+  });
 
   // LLM filter
   let selectedProvider = $state<LLMProvider | null>(null);
@@ -48,20 +75,19 @@
     if (!prop) {
       if (!justStartedAnalysis && runningAnalysis && runningAnalysis.id !== 'temp') {
         stopPolling();
-        // Reload data so the new results appear without a manual refresh
         if (browser) {
           invalidate('app:measurement-data');
+          startPostCompletionPolling();
         }
-        setTimeout(() => { runningAnalysis = null; }, 3000);
+        runningAnalysis = null; // isCollectingSources card takes over immediately
       }
     } else if (prop.status === 'completed' || prop.status === 'failed') {
-      runningAnalysis = { ...prop, status: 'completed' };
       stopPolling();
-      // Reload data so the new results appear without a manual refresh
       if (browser) {
         invalidate('app:measurement-data');
+        startPostCompletionPolling();
       }
-      setTimeout(() => { runningAnalysis = null; }, 3000);
+      runningAnalysis = null; // isCollectingSources card takes over immediately
     } else {
       runningAnalysis = prop;
       if (justStartedAnalysis) justStartedAnalysis = false;
@@ -70,6 +96,8 @@
 
   // Polling for analysis status
   let pollInterval: ReturnType<typeof setInterval> | null = null;
+  // Post-completion polls to catch async source collection (fires after run is marked complete)
+  let postCompletionInterval: ReturnType<typeof setInterval> | null = null;
 
   function startPolling() {
     if (!browser || pollInterval) return;
@@ -80,6 +108,24 @@
 
   function stopPolling() {
     if (pollInterval) { clearInterval(pollInterval); pollInterval = null; }
+  }
+
+  // After the analysis run completes, source collection still runs asynchronously for ~30-60s.
+  // Continue refreshing for a window after completion so sources appear without a manual reload.
+  function startPostCompletionPolling() {
+    if (!browser || postCompletionInterval) return;
+    sourcesCountAtRunStart = sourceCitations.length;
+    isCollectingSources = true;
+    let remaining = 6; // 6 × 10s = 60s window
+    postCompletionInterval = setInterval(async () => {
+      try { await invalidate('app:measurement-data'); } catch {}
+      remaining--;
+      if (remaining <= 0) {
+        clearInterval(postCompletionInterval!);
+        postCompletionInterval = null;
+        finishAnalysis();
+      }
+    }, 10000);
   }
 
   $effect(() => {
@@ -134,23 +180,10 @@
     return buildCompetitorDisplay(rawCompetitorResults, selectedProvider?.name || null);
   });
 
-  // Determine current provider based on completed LLM calls
-  // Analysis iterates: for each measurement → for each provider → 10 attempts
-  const ATTEMPTS_PER_PROVIDER = 10;
-
-  let currentProviderName = $derived.by(() => {
-    if (llmProviders.length === 0) return 'LLMs';
-    if (!runningAnalysis) return llmProviders[0]?.display_name ?? 'LLMs';
-
-    const completed = runningAnalysis.completed_llm_calls || 0;
-    const callsPerMeasurement = llmProviders.length * ATTEMPTS_PER_PROVIDER;
-    // Which provider within the current measurement's cycle
-    const positionInMeasurement = completed % callsPerMeasurement;
-    const providerIndex = Math.floor(positionInMeasurement / ATTEMPTS_PER_PROVIDER);
-    const safeIndex = Math.min(providerIndex, llmProviders.length - 1);
-
-    return llmProviders[safeIndex]?.display_name ?? 'LLMs';
-  });
+  // All providers run in parallel — derive a display label listing all active providers
+  let providerNamesLabel = $derived(
+    llmProviders.length > 0 ? llmProviders.map(p => p.display_name).join(', ') : 'AI models'
+  );
 
   function onProviderChange(provider: LLMProvider | null) {
     selectedProvider = provider;
@@ -396,8 +429,8 @@
 
       <div class="flex flex-col items-end gap-2 flex-shrink-0">
         <!-- Run Analysis Button -->
-        {#if runningAnalysis && (runningAnalysis.status === 'running' || runningAnalysis.status === 'pending' || runningAnalysis.status === 'completed')}
-          <!-- Button hidden while analysis is running -->
+        {#if runningAnalysis || isCollectingSources || analysisJustFinished}
+          <!-- Button hidden while analysis is in any phase -->
         {:else}
           <form method="POST" action="?/runAnalysis"
             use:enhance={() => {
@@ -485,17 +518,54 @@
       </div>
     </div>
 
-    <!-- Analysis Running Display -->
+    <!-- Analysis status card — phases: querying → collecting sources → done -->
     {#if runningAnalysis && (runningAnalysis.status === 'running' || runningAnalysis.status === 'pending')}
-      <div class="flex items-center gap-4 rounded-xl border border-slate-200 bg-white px-6 py-5 shadow-sm">
-        <div class="h-8 w-8 rounded-full border-[3px] border-slate-200 border-t-[rgb(var(--color-primary))] animate-spin flex-shrink-0"></div>
-        <div>
-          <p class="text-sm font-semibold text-slate-800">Analysis in progress</p>
-          <p class="text-sm text-slate-500 mt-0.5">Querying {currentProviderName}</p>
-          <p class="text-[11px] text-slate-400 mt-0.5">This may take a few minutes</p>
+      {@const isPending = runningAnalysis.status === 'pending'}
+      {@const completed = runningAnalysis.completed_llm_calls ?? 0}
+      {@const total = runningAnalysis.total_llm_calls ?? 0}
+      {@const pct = total > 0 ? Math.round((completed / total) * 100) : 0}
+      <div class="rounded-xl border border-slate-200 bg-white px-6 py-5 shadow-sm space-y-3">
+        <div class="flex items-center gap-4">
+          <div class="h-8 w-8 rounded-full border-[3px] border-slate-200 border-t-[rgb(var(--color-primary))] animate-spin flex-shrink-0"></div>
+          <div class="flex-1 min-w-0">
+            <p class="text-sm font-semibold text-slate-800">
+              {isPending ? 'Preparing analysis…' : `Querying ${providerNamesLabel}`}
+            </p>
+            {#if !isPending && total > 0}
+              <p class="text-xs text-slate-400 mt-0.5">{completed} of {total} calls complete</p>
+            {:else if isPending}
+              <p class="text-xs text-slate-400 mt-0.5">Starting up…</p>
+            {/if}
+          </div>
+          {#if !isPending && total > 0}
+            <span class="text-xs font-semibold text-slate-500 flex-shrink-0">{pct}%</span>
+          {/if}
+        </div>
+        {#if !isPending && total > 0}
+          <div class="w-full bg-slate-100 rounded-full h-1">
+            <div
+              class="bg-[rgb(var(--color-primary))] h-1 rounded-full transition-all duration-700"
+              style="width: {pct}%"
+            ></div>
+          </div>
+        {/if}
+      </div>
+
+    {:else if isCollectingSources}
+      <div class="rounded-xl border border-slate-200 bg-white px-6 py-5 shadow-sm space-y-3">
+        <div class="flex items-center gap-4">
+          <div class="h-8 w-8 rounded-full border-[3px] border-slate-200 border-t-[rgb(var(--color-primary))] animate-spin flex-shrink-0"></div>
+          <div>
+            <p class="text-sm font-semibold text-slate-800">Collecting sources</p>
+            <p class="text-xs text-slate-400 mt-0.5">Searching for online citations for your product and top competitors</p>
+          </div>
+        </div>
+        <div class="w-full bg-slate-100 rounded-full h-1 overflow-hidden">
+          <div class="bg-[rgb(var(--color-primary))] h-1 rounded-full w-full animate-pulse"></div>
         </div>
       </div>
-    {:else if runningAnalysis && runningAnalysis.status === 'completed'}
+
+    {:else if analysisJustFinished}
       <div class="flex items-center gap-4 rounded-xl border border-emerald-200 bg-emerald-50 px-6 py-5 shadow-sm">
         <div class="h-8 w-8 rounded-full bg-emerald-100 flex items-center justify-center flex-shrink-0">
           <svg class="w-5 h-5 text-emerald-600" fill="currentColor" viewBox="0 0 20 20">
@@ -504,7 +574,7 @@
         </div>
         <div>
           <p class="text-base font-semibold text-emerald-800">Analysis complete!</p>
-          <p class="text-sm text-emerald-600 mt-0.5">Results are ready below</p>
+          <p class="text-sm text-emerald-600 mt-0.5">Rankings and sources are ready</p>
         </div>
       </div>
     {/if}
@@ -522,6 +592,11 @@
           onclick={() => (activeTab = 'history')}
           class="pb-3 text-sm font-medium cursor-pointer transition-colors border-b-2 {activeTab === 'history' ? 'text-[rgb(var(--color-primary))] border-[rgb(var(--color-primary))]' : 'text-slate-500 border-transparent hover:text-slate-700'}"
         >History</button>
+        <button
+          type="button"
+          onclick={() => (activeTab = 'sources')}
+          class="pb-3 text-sm font-medium cursor-pointer transition-colors border-b-2 {activeTab === 'sources' ? 'text-[rgb(var(--color-primary))] border-[rgb(var(--color-primary))]' : 'text-slate-500 border-transparent hover:text-slate-700'}"
+        >Sources{#if sourceCitations.length > 0}<span class="ml-1.5 inline-flex items-center justify-center w-4 h-4 text-[10px] font-semibold rounded-full bg-[rgb(var(--color-primary))]/10 text-[rgb(var(--color-primary))]">{sourceCitations.length}</span>{/if}</button>
       </nav>
     </div>
 
@@ -739,6 +814,9 @@
           {/if}
         </Card>
       {/if}
+    {:else if activeTab === 'sources'}
+      <!-- Sources Tab: Online citations discovered via Gemini grounding -->
+      <SourceCitationsPanel {sourceCitations} />
     {/if}
   </div>
 </div>

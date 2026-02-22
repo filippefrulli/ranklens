@@ -71,6 +71,10 @@ export const load: PageServerLoad = async ({ locals, params, url, depends }) => 
       }
     }
 
+    const sourceCitations = selectedRunId
+      ? await dbService.getSourceCitationsForRun(selectedRunId, measurementId)
+      : []
+
     // Get ranking history for the History tab
     const rankingHistory = await dbService.getMeasurementRankingHistory(measurementId, 20)
 
@@ -88,6 +92,7 @@ export const load: PageServerLoad = async ({ locals, params, url, depends }) => 
       competitorResults,
       rankingHistory,
       runningAnalysis,
+      sourceCitations,
       user
     }
   } catch (err: any) {

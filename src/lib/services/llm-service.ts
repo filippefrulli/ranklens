@@ -1,8 +1,14 @@
 import type { LLMProvider } from '../types'
 import { env } from '$env/dynamic/private'
 import { GoogleGenAI } from '@google/genai'
-import { buildRankingPrompt, buildStandardizationPrompt } from './prompt-templates'
+import { buildRankingPrompt, buildStandardizationPrompt, buildSourceDiscoveryPrompt } from './prompt-templates'
 import { resolveProviderId, LLMProviderId, DEFAULT_MODELS } from '$lib/constants/llm'
+
+export interface DiscoveredSource {
+  url: string
+  title: string
+  snippet: string
+}
 
 export interface LLMResponse {
   rankedBusinesses: string[]
@@ -360,6 +366,63 @@ export class LLMService {
         error: err instanceof Error ? err.message : String(err),
         totalRequested: requestCount
       }
+    }
+  }
+
+  /**
+   * Fetch online sources for a product using Gemini with Google Search grounding.
+   * Returns up to maxSources real URLs with titles and a brief snippet.
+   * Returns [] on failure (non-blocking by design).
+   */
+  public static async fetchSourcesForProduct(
+    productName: string,
+    query: string,
+    maxSources = 5
+  ): Promise<DiscoveredSource[]> {
+    const apiKey = env.GEMINI_API_KEY
+    if (!apiKey) {
+      console.warn('[LLMService] fetchSourcesForProduct: GEMINI_API_KEY not configured')
+      return []
+    }
+
+    try {
+      const ai = new GoogleGenAI({ apiKey })
+      const prompt = buildSourceDiscoveryPrompt({ productName, query })
+
+      const resp = await withTimeout(
+        ai.models.generateContent({
+          model: 'gemini-2.0-flash',
+          contents: prompt,
+          config: {
+            tools: [{ googleSearch: {} }]
+          }
+        }),
+        30000
+      )
+
+      // Extract grounding chunks (real URLs from Google Search)
+      const chunks: Array<{ web?: { uri?: string; title?: string } }> =
+        (resp as any).candidates?.[0]?.groundingMetadata?.groundingChunks ?? []
+
+      // The response text is a product-level summary, not specific to any individual URL.
+      // Only attach it to the first source so it can be displayed once at the group level.
+      const responseText = (resp.text || '').trim()
+
+      const filteredChunks = chunks.filter((c) => c.web?.uri).slice(0, maxSources)
+      const sources: DiscoveredSource[] = filteredChunks.map((c, i) => ({
+        url: c.web!.uri!,
+        title: c.web!.title || c.web!.uri!,
+        snippet: i === 0 ? responseText : ''
+      }))
+
+      console.log(`[LLMService] fetchSourcesForProduct: "${productName}" → ${sources.length} sources`)
+      return sources
+    } catch (err) {
+      console.warn(
+        `[LLMService] fetchSourcesForProduct failed for "${productName}":`,
+        err instanceof Error ? err.message : err
+      )
+      return []
     }
   }
 

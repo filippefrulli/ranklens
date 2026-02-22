@@ -7,7 +7,8 @@ import type {
   AnalysisRun,
   RankingAttempt,
   CompetitorResult,
-  MeasurementRankingHistory
+  MeasurementRankingHistory,
+  SourceCitation
 } from '../types'
 import { BusinessNameStandardizationService } from './business-name-standardization-service'
 
@@ -789,5 +790,55 @@ export class DatabaseService {
       console.error('[Service] getMeasurementRankingHistory: Error', error)
       return []
     }
+  }
+
+  // ── Competitor Results (lightweight fetch for source collection) ──────────
+
+  async getCompetitorResultsForRun(
+    analysisRunId: string,
+    measurementId: string
+  ): Promise<Array<{ product_name: string; is_target: boolean; average_rank: number | null }>> {
+    const { data, error } = await this.supabase
+      .from('competitor_results')
+      .select('product_name, is_target, average_rank')
+      .eq('analysis_run_id', analysisRunId)
+      .eq('measurement_id', measurementId)
+
+    if (error) {
+      console.error('[Service] getCompetitorResultsForRun: Error', error)
+      return []
+    }
+    return data ?? []
+  }
+
+  // ── Source Citations ──────────────────────────────────────────────────────
+
+  async saveSourceCitations(
+    citations: Omit<SourceCitation, 'id' | 'created_at'>[]
+  ): Promise<void> {
+    if (citations.length === 0) return
+    const { error } = await this.supabase.from('source_citations').insert(citations)
+    if (error) {
+      throw new Error(`Failed to save source citations: ${error.message}`)
+    }
+  }
+
+  async getSourceCitationsForRun(
+    analysisRunId: string,
+    measurementId: string
+  ): Promise<SourceCitation[]> {
+    const { data, error } = await this.supabase
+      .from('source_citations')
+      .select('*')
+      .eq('analysis_run_id', analysisRunId)
+      .eq('measurement_id', measurementId)
+      .order('is_target', { ascending: false })  // target first
+      .order('created_at', { ascending: true })
+
+    if (error) {
+      console.error('[Service] getSourceCitationsForRun: Error', error)
+      return []
+    }
+    return data ?? []
   }
 }

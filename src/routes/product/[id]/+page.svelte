@@ -40,6 +40,8 @@
 
   // Modal states
   let showAddMeasurement = $state(false);
+  let showDeleteProduct = $state(false);
+  let deleteLoading = $state(false);
   let newTitle = $state("");
   let newQuery = $state("");
   let loading = $state(false);
@@ -75,6 +77,17 @@
         {/if}
       </div>
       <div class="flex items-center gap-3">
+        <button
+          type="button"
+          onclick={() => (showDeleteProduct = true)}
+          class="p-2 rounded-lg text-slate-400 hover:text-red-600 hover:bg-red-50 transition-colors cursor-pointer"
+          aria-label="Delete product"
+          title="Delete product"
+        >
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+          </svg>
+        </button>
         <Button variant="primary" size="md" onClick={() => (showAddMeasurement = true)}>+ Add Measurement</Button>
       </div>
     </div>
@@ -155,6 +168,61 @@
     {/if}
   </main>
 </div>
+
+<!-- Delete Product Confirmation Modal -->
+{#if showDeleteProduct}
+  <div class="fixed inset-0 bg-gray-600/50 flex items-center justify-center p-4 z-50">
+    <div class="bg-white rounded-xl shadow-xl max-w-md w-full">
+      <div class="p-6">
+        <div class="flex items-start gap-4 mb-5">
+          <div class="flex-shrink-0 w-10 h-10 rounded-full bg-red-100 flex items-center justify-center">
+            <svg class="w-5 h-5 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
+            </svg>
+          </div>
+          <div>
+            <h3 class="text-lg font-semibold text-slate-900">Delete "{product.name}"?</h3>
+            <p class="text-sm text-slate-500 mt-1">This will permanently delete the product and all associated data:</p>
+          </div>
+        </div>
+
+        <ul class="mb-6 space-y-1.5 text-sm text-slate-600 bg-slate-50 rounded-lg px-4 py-3">
+          <li class="flex items-center gap-2">
+            <svg class="w-3.5 h-3.5 text-slate-400 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd" /></svg>
+            All {measurements.length} measurement{measurements.length !== 1 ? 's' : ''}
+          </li>
+          <li class="flex items-center gap-2">
+            <svg class="w-3.5 h-3.5 text-slate-400 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd" /></svg>
+            All analysis runs, rankings and competitor results
+          </li>
+          <li class="flex items-center gap-2">
+            <svg class="w-3.5 h-3.5 text-slate-400 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd" /></svg>
+            All collected source citations
+          </li>
+        </ul>
+
+        <p class="text-xs text-slate-400 mb-5">This action cannot be undone.</p>
+
+        <form method="POST" action="?/deleteProduct"
+          use:enhance={() => {
+            deleteLoading = true;
+            return async ({ update }) => {
+              deleteLoading = false;
+              await update();
+            };
+          }}
+        >
+          <div class="flex justify-end gap-3">
+            <Button variant="subtle" size="md" onClick={() => (showDeleteProduct = false)} disabled={deleteLoading}>Cancel</Button>
+            <Button type="submit" variant="danger" size="md" disabled={deleteLoading}>
+              {deleteLoading ? 'Deleting…' : 'Delete Product'}
+            </Button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+{/if}
 
 <!-- Add Measurement Modal -->
 {#if showAddMeasurement}

@@ -92,6 +92,29 @@ export const actions: Actions = {
     }
   },
 
+  deleteProduct: async ({ locals, params }) => {
+    if (!locals.user || !locals.supabase) {
+      return fail(401, { error: 'Unauthorized' })
+    }
+
+    const productId = params.id
+
+    try {
+      const dbService = new DatabaseService(locals.supabase, locals.user.id)
+      const isOwner = await dbService.validateProductOwnership(productId)
+      if (!isOwner) {
+        return fail(404, { error: 'Product not found or access denied' })
+      }
+
+      await dbService.deleteProduct(productId)
+      throw redirect(303, '/dashboard')
+    } catch (err: any) {
+      if (err?.status === 303) throw err
+      console.error('[Action] deleteProduct: Error', { error: err?.message })
+      return fail(500, { error: 'Failed to delete product' })
+    }
+  },
+
   deleteMeasurement: async ({ locals, request, params }) => {
     if (!locals.user || !locals.supabase) {
       return fail(401, { error: 'Unauthorized' })
